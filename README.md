@@ -1,3 +1,3 @@
-# zc_bangumi
+# ZcBangumi
 
 A new Flutter project.

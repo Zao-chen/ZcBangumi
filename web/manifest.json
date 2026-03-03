@@ -1,6 +1,6 @@
 {
-    "name": "zc_bangumi",
-    "short_name": "zc_bangumi",
+    "name": "ZcBangumi",
+    "short_name": "ZcBangumi",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
