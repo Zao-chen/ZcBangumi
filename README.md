@@ -128,11 +128,3 @@ lib/
 
 - [Bangumi](https://bangumi.tv/) - 提供 API 支持
 - [Flutter](https://flutter.dev/) - 优秀的跨平台框架
-
-## 📮 联系方式
-
-如有问题或建议，欢迎提交 Issue 或 Pull Request。
-
----
-
-⭐ 如果这个项目对你有帮助，欢迎 Star 支持！
