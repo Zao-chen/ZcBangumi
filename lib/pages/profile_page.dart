@@ -5,9 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../constants.dart';
 import '../models/collection.dart';
 import '../models/user.dart';
+import '../pages/settings_page.dart';
 import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
-import '../providers/collection_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
 
@@ -199,42 +199,21 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('我的'),
         centerTitle: false,
         actions: [
-          if (auth.isLoggedIn)
-            IconButton(
-              icon: const Icon(Icons.logout_rounded),
-              tooltip: '退出登录',
-              onPressed: () => _confirmLogout(context, auth),
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: '设置',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
+              );
+            },
+          ),
         ],
       ),
       body: auth.isLoggedIn
           ? _ProfileContent(user: auth.user!)
           : const _LoginView(),
     );
-  }
-
-  Future<void> _confirmLogout(BuildContext context, AuthProvider auth) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('确定要退出登录吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      context.read<CollectionProvider>().clearAll();
-      await auth.logout();
-    }
   }
 }
 

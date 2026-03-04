@@ -1,14 +1,16 @@
 {
   "configurations": [
     {
-      "name": "windows-gcc-x64",
+      "name": "windows-msvc-x64",
       "includePath": [
-        "${workspaceFolder}/**"
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/windows/flutter/ephemeral",
+        "${workspaceFolder}/windows/flutter/ephemeral/cpp_client_wrapper/include"
       ],
-      "compilerPath": "gcc",
+      "compilerPath": "cl.exe",
       "cStandard": "${default}",
       "cppStandard": "${default}",
-      "intelliSenseMode": "windows-gcc-x64",
+      "intelliSenseMode": "windows-msvc-x64",
       "compilerArgs": [
         ""
       ]
