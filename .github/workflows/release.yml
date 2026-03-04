@@ -1,0 +1,159 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK
+        shell: bash
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk zc_bangumi-${{ github.event.inputs.release_tag }}.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: zc_bangumi-${{ github.event.inputs.release_tag }}.apk
+
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+
+      - name: Create NSIS installer script
+        shell: pwsh
+        run: |
+          $nsisscript = @'
+          !include "MUI2.nsh"
+          
+          Name "ZC Bangumi"
+          OutFile "zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe"
+          InstallDir "$PROGRAMFILES\ZCBangumi"
+          
+          !insertmacro MUI_PAGE_DIRECTORY
+          !insertmacro MUI_PAGE_INSTFILES
+          !insertmacro MUI_LANGUAGE "English"
+          
+          Section "Install"
+            SetOutPath "$INSTDIR"
+            File /r "build\windows\runner\Release\*.*"
+            CreateDirectory "$SMPROGRAMS\ZCBangumi"
+            CreateShortCut "$SMPROGRAMS\ZCBangumi\ZCBangumi.lnk" "$INSTDIR\zc_bangumi.exe"
+            CreateShortCut "$SMPROGRAMS\ZCBangumi\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+          SectionEnd
+          
+          Section "Uninstall"
+            RMDir /r "$INSTDIR"
+            RMDir /r "$SMPROGRAMS\ZCBangumi"
+          SectionEnd
+          '@'
+          $nsisscript | Out-File -FilePath "installer.nsi" -Encoding UTF8
+
+      - name: Build installer
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
+
+  release:
+    needs: [build, build-windows]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate Changelog
+        id: changelog
+        shell: bash
+        run: |
+          # 获取最后一个tag之后的提交信息
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --oneline --format="%H %s" | head -20 | sed 's/^/- /')
+          else
+            CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --oneline --format="%H %s" | sed 's/^/- /')
+          fi
+          
+          # 设置多行输出
+          CHANGELOG="${CHANGELOG//'%'/'%25'}"
+          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: |
+            artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
+            artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
+          body: |
+            ZC Bangumi ${{ github.event.inputs.release_tag }} 正式版本发布
+            
+            ## What's Changed
+            ${{ steps.changelog.outputs.CHANGELOG }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
