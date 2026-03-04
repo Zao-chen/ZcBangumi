@@ -69,30 +69,31 @@ jobs:
       - name: Create NSIS installer script
         shell: pwsh
         run: |
-          $nsisscript = @'
-          !include "MUI2.nsh"
+          $tag = "${{ github.event.inputs.release_tag }}"
+          $nsisscript = @"
+          `!include "MUI2.nsh"
           
           Name "ZC Bangumi"
-          OutFile "zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe"
-          InstallDir "$PROGRAMFILES\ZCBangumi"
+          OutFile "zc_bangumi-$tag-windows.exe"
+          InstallDir "`$PROGRAMFILES\ZCBangumi"
           
-          !insertmacro MUI_PAGE_DIRECTORY
-          !insertmacro MUI_PAGE_INSTFILES
-          !insertmacro MUI_LANGUAGE "English"
+          `!insertmacro MUI_PAGE_DIRECTORY
+          `!insertmacro MUI_PAGE_INSTFILES
+          `!insertmacro MUI_LANGUAGE "English"
           
           Section "Install"
-            SetOutPath "$INSTDIR"
+            SetOutPath "`$INSTDIR"
             File /r "build\windows\runner\Release\*.*"
-            CreateDirectory "$SMPROGRAMS\ZCBangumi"
-            CreateShortCut "$SMPROGRAMS\ZCBangumi\ZCBangumi.lnk" "$INSTDIR\zc_bangumi.exe"
-            CreateShortCut "$SMPROGRAMS\ZCBangumi\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+            CreateDirectory "`$SMPROGRAMS\ZCBangumi"
+            CreateShortCut "`$SMPROGRAMS\ZCBangumi\ZCBangumi.lnk" "`$INSTDIR\zc_bangumi.exe"
+            CreateShortCut "`$SMPROGRAMS\ZCBangumi\Uninstall.lnk" "`$INSTDIR\Uninstall.exe"
           SectionEnd
           
           Section "Uninstall"
-            RMDir /r "$INSTDIR"
-            RMDir /r "$SMPROGRAMS\ZCBangumi"
+            RMDir /r "`$INSTDIR"
+            RMDir /r "`$SMPROGRAMS\ZCBangumi"
           SectionEnd
-          '@'
+          "@
           $nsisscript | Out-File -FilePath "installer.nsi" -Encoding UTF8
 
       - name: Build installer
