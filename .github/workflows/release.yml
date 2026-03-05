@@ -111,6 +111,8 @@ jobs:
     needs: [build, build-windows]
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      contents: write
     
     steps:
       - uses: actions/checkout@v4
@@ -144,6 +146,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ github.event.inputs.release_tag }}
           files: |
             artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
@@ -156,5 +159,3 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
