@@ -57,10 +57,10 @@ class ProgressGrid extends StatelessWidget {
     mainEps.sort((a, b) => a.episode.sort.compareTo(b.episode.sort));
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(top: 4),
       child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
+        spacing: 3,
+        runSpacing: 3,
         children: mainEps.map((ep) {
           return _EpisodeCell(
             episode: ep,
@@ -85,9 +85,21 @@ class _EpisodeCell extends StatelessWidget {
     this.onWatchUpTo,
   });
 
+  /// 判断是否已放送
+  bool _isAired() {
+    if (episode.episode.airdate.isEmpty) return false;
+    try {
+      final airdateTime = DateTime.parse(episode.episode.airdate);
+      return airdateTime.isBefore(DateTime.now());
+    } catch (e) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isAired = _isAired();
 
     Color bgColor;
     Color textColor;
@@ -109,13 +121,18 @@ class _EpisodeCell extends StatelessWidget {
         textColor = colorScheme.onSurfaceVariant;
     }
 
+    // 如果未放送，降低透明度
+    if (!isAired) {
+      bgColor = bgColor.withAlpha((bgColor.alpha * 0.4).toInt());
+    }
+
     return Tooltip(
       message: _tooltipText(),
       child: GestureDetector(
         onTapUp: (details) => _showMenu(context, details.globalPosition),
         child: Container(
-          width: 34,
-          height: 34,
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(5),
@@ -230,7 +247,8 @@ class _EpisodeCell extends StatelessWidget {
       BgmConst.episodeDropped => '抛弃',
       _ => '未收藏',
     };
-    return 'EP.${ep.sortLabel} $name [$status]';
+    final airedStatus = _isAired() ? '已放送' : '未放送';
+    return 'EP.${ep.sortLabel} $name [$status] [$airedStatus]';
   }
 }
 

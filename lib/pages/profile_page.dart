@@ -8,6 +8,7 @@ import '../models/user.dart';
 import '../pages/settings_page.dart';
 import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
+import '../providers/app_state_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
 
@@ -203,9 +204,9 @@ class _ProfilePageState extends State<ProfilePage> {
             icon: const Icon(Icons.settings_outlined),
             tooltip: '设置',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsPage()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
             },
           ),
         ],
@@ -432,6 +433,11 @@ class _ProfileContentState extends State<_ProfileContent> {
   @override
   void initState() {
     super.initState();
+    // 从 AppStateProvider 恢复之前保存的状态
+    final appState = context.read<AppStateProvider>();
+    _subjectType = appState.profileSubjectType;
+    _collectionType = appState.profileCollectionType;
+    _sortMode = _SortMode.values[appState.profileSortMode];
     _loadData();
   }
 
@@ -508,6 +514,8 @@ class _ProfileContentState extends State<_ProfileContent> {
       _items = [];
       _total = 0;
     });
+    // 保存选择到 AppStateProvider
+    context.read<AppStateProvider>().setProfileSubjectType(type);
     _loadData();
   }
 
@@ -518,12 +526,16 @@ class _ProfileContentState extends State<_ProfileContent> {
       _items = [];
       _total = 0;
     });
+    // 保存选择到 AppStateProvider
+    context.read<AppStateProvider>().setProfileCollectionType(type);
     _loadData();
   }
 
   void _switchSort(_SortMode mode) {
     if (_sortMode == mode) return;
     setState(() => _sortMode = mode);
+    // 保存选择到 AppStateProvider
+    context.read<AppStateProvider>().setProfileSortMode(mode.index);
   }
 
   List<UserCollection> get _sortedItems {

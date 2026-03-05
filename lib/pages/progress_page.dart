@@ -58,13 +58,9 @@ class _ProgressPageState extends State<ProgressPage>
 
   /// 显示搜索页面
   void _showSearchPage(BuildContext context) {
-    final currentIndex = _tabController.index;
-    final subjectType = _getSubjectTypeFromIndex(currentIndex);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SearchPage(initialSubjectType: subjectType),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SearchPage()));
   }
 
   int _getSubjectTypeFromIndex(int index) {
@@ -93,9 +89,7 @@ class _ProgressPageState extends State<ProgressPage>
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: _tabs
-              .map((t) => Tab(icon: Icon(t.icon, size: 20), text: t.label))
-              .toList(),
+          tabs: _tabs.map((t) => Tab(text: t.label)).toList(),
           labelPadding: const EdgeInsets.symmetric(horizontal: 8),
           indicatorSize: TabBarIndicatorSize.label,
         ),
@@ -301,8 +295,8 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: SizedBox(
-                      width: 48,
-                      height: 68,
+                      width: 56,
+                      height: 80,
                       child: subject?.images?.grid.isNotEmpty == true
                           ? CachedNetworkImage(
                               imageUrl: subject!.images!.common.isNotEmpty
@@ -324,7 +318,7 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // 标题 + 进度文字
+                  // 标题 + 进度格子
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,14 +339,23 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        else if (total > 0)
-                          Text(
-                            '$watched / $total',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
+                        else if (!episodes.isEmpty)
+                          ProgressGrid(
+                            episodes: episodes,
+                            loading: false,
+                            onSetStatus: (episodeId, newType) {
+                              provider.setEpisodeStatus(
+                                subjectId: widget.collection.subjectId,
+                                episodeId: episodeId,
+                                newType: newType,
+                              );
+                            },
+                            onWatchUpTo: (sort) {
+                              provider.watchUpTo(
+                                subjectId: widget.collection.subjectId,
+                                episodeSort: sort,
+                              );
+                            },
                           )
                         else
                           Text(
@@ -369,27 +372,6 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                   ),
                 ],
               ),
-              // 直接显示进度格子
-              if (!epLoading && episodes.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                ProgressGrid(
-                  episodes: episodes,
-                  loading: false,
-                  onSetStatus: (episodeId, newType) {
-                    provider.setEpisodeStatus(
-                      subjectId: widget.collection.subjectId,
-                      episodeId: episodeId,
-                      newType: newType,
-                    );
-                  },
-                  onWatchUpTo: (sort) {
-                    provider.watchUpTo(
-                      subjectId: widget.collection.subjectId,
-                      episodeSort: sort,
-                    );
-                  },
-                ),
-              ],
             ],
           ),
         ),

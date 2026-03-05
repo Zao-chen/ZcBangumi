@@ -6,6 +6,7 @@ import '../models/timeline.dart';
 import '../constants.dart';
 import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
+import '../providers/app_state_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
 
@@ -49,6 +50,9 @@ class _TimelinePageState extends State<TimelinePage> {
   @override
   void initState() {
     super.initState();
+    // 从 AppStateProvider 恢复之前选中的标签
+    final appState = context.read<AppStateProvider>();
+    _currentTab = _TimelineTab.values[appState.timelineTabIndex];
     _loadGlobal();
   }
 
@@ -274,6 +278,9 @@ class _TimelinePageState extends State<TimelinePage> {
   void _onTabChanged(_TimelineTab tab) {
     if (_currentTab == tab) return;
     setState(() => _currentTab = tab);
+
+    // 保存选择到 AppStateProvider
+    context.read<AppStateProvider>().setTimelineTabIndex(tab.index);
 
     switch (tab) {
       case _TimelineTab.global:

@@ -5,6 +5,7 @@ import 'services/api_client.dart';
 import 'services/storage_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/collection_provider.dart';
+import 'providers/app_state_provider.dart';
 import 'widgets/responsive_scaffold.dart';
 import 'pages/timeline_page.dart';
 import 'pages/progress_page.dart';
@@ -39,6 +40,9 @@ class ZCBangumiApp extends StatelessWidget {
       providers: [
         Provider<ApiClient>.value(value: apiClient),
         Provider<StorageService>.value(value: storage),
+        ChangeNotifierProvider(
+          create: (_) => AppStateProvider(storage: storage),
+        ),
         ChangeNotifierProvider(
           create: (_) =>
               AuthProvider(api: apiClient, storage: storage)
@@ -89,32 +93,32 @@ class _AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<_AppShell> {
-  int _currentIndex = 0;
-
-  static const _navItems = [
-    NavigationItem(
-      icon: Icons.dynamic_feed_outlined,
-      selectedIcon: Icons.dynamic_feed,
-      label: '动态',
-    ),
-    NavigationItem(
-      icon: Icons.grid_view_outlined,
-      selectedIcon: Icons.grid_view_rounded,
-      label: '进度',
-    ),
-    NavigationItem(
-      icon: Icons.person_outline,
-      selectedIcon: Icons.person,
-      label: '我的',
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppStateProvider>();
+
     return ResponsiveScaffold(
-      currentIndex: _currentIndex,
-      onIndexChanged: (i) => setState(() => _currentIndex = i),
-      items: _navItems,
+      currentIndex: appState.currentNavIndex,
+      onIndexChanged: (i) {
+        appState.setCurrentNavIndex(i);
+      },
+      items: const [
+        NavigationItem(
+          icon: Icons.dynamic_feed_outlined,
+          selectedIcon: Icons.dynamic_feed,
+          label: '动态',
+        ),
+        NavigationItem(
+          icon: Icons.grid_view_outlined,
+          selectedIcon: Icons.grid_view_rounded,
+          label: '进度',
+        ),
+        NavigationItem(
+          icon: Icons.person_outline,
+          selectedIcon: Icons.person,
+          label: '我的',
+        ),
+      ],
       pages: const [TimelinePage(), ProgressPage(), ProfilePage()],
     );
   }
