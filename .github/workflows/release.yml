@@ -216,4 +216,4 @@ jobs:
             感谢所有贡献者和用户的支持！💝
           draft: false
           prerelease: false
-          generate_release_notes: false
+          generate_release_notes: true
