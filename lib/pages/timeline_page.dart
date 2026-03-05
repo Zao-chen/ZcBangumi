@@ -430,7 +430,7 @@ class _TimelinePageState extends State<TimelinePage> {
             // 自动加载更多
             if (!loadingMore) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                onLoadMore?.call();
+                onLoadMore.call();
               });
             }
             return Padding(

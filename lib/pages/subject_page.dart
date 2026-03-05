@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/character.dart';
+import '../models/collection.dart';
 import '../models/comment.dart';
 import '../models/episode.dart';
 import '../models/subject.dart';
@@ -10,10 +11,11 @@ import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
+import '../widgets/subject_action_buttons.dart';
 import 'character_page.dart';
 
 /// 条目详情页 - 包含概述、角色、关联条目三个标签页
-/// 头图在身体顶部，TabBar在头图下方，标签页可滚动
+/// 顶部信息支持随滚动折叠，折叠后显示标题到返回按钮右侧
 class SubjectPage extends StatefulWidget {
   final int subjectId;
   final Subject? subject;
@@ -27,19 +29,23 @@ class SubjectPage extends StatefulWidget {
 class _SubjectPageState extends State<SubjectPage>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  final ScrollController _nestedScrollController = ScrollController();
   Subject? _subject;
+  UserCollection? _userCollection;
   List<Character> _characters = [];
   List<RelatedSubject> _relatedSubjects = [];
   List<UserEpisodeCollection> _episodes = [];
   List<Comment> _comments = [];
   bool _loading = true;
   bool _episodesLoading = false;
+  bool _showCollapsedTitle = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _nestedScrollController.addListener(_handleHeaderCollapse);
     if (widget.subject != null) {
       _subject = widget.subject;
       _loading = false;
@@ -49,8 +55,22 @@ class _SubjectPageState extends State<SubjectPage>
 
   @override
   void dispose() {
+    _nestedScrollController
+      ..removeListener(_handleHeaderCollapse)
+      ..dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _handleHeaderCollapse() {
+    if (!_nestedScrollController.hasClients) {
+      return;
+    }
+
+    final shouldShowTitle = _nestedScrollController.offset > 110;
+    if (shouldShowTitle != _showCollapsedTitle && mounted) {
+      setState(() => _showCollapsedTitle = shouldShowTitle);
+    }
   }
 
   String get _cacheName => 'subject_${widget.subjectId}';
@@ -128,7 +148,30 @@ class _SubjectPageState extends State<SubjectPage>
 
     // 请求最新数据
     try {
-      final subjectFuture = api.getSubject(widget.subjectId);
+      // 优先尝试获取subject
+      Subject? subject;
+      try {
+        subject = await api.getSubject(widget.subjectId);
+      } catch (e) {
+        // 如果有缓存则使用缓存，否则记录错误
+        if (_subject == null) {
+          throw Exception('Failed to fetch subject: $e');
+        }
+      }
+
+      // 如果成功获取subject或有缓存，继续获取其他数据
+      if (subject == null && _subject == null) {
+        // 既没有新数据也没有缓存
+        setState(() => _error = '无法获取条目信息');
+        return;
+      }
+
+      // 使用新获取的或已有的subject
+      if (subject != null) {
+        _subject = subject;
+      }
+
+      // 并行获取其他数据
       final charsFuture = api.getSubjectCharacters(widget.subjectId);
       final relatedFuture = api.getSubjectRelations(widget.subjectId);
       final commentsFuture = api.getSubjectComments(
@@ -136,25 +179,29 @@ class _SubjectPageState extends State<SubjectPage>
       );
 
       final results = await Future.wait([
-        subjectFuture,
         charsFuture,
         relatedFuture,
         commentsFuture,
       ], eagerError: false);
 
       setState(() {
-        _subject = results[0] as Subject;
-        _characters = results[1] as List<Character>;
-        _relatedSubjects = results[2] as List<RelatedSubject>;
+        _characters = results[0] is List<Character>
+            ? results[0] as List<Character>
+            : _characters;
+        _relatedSubjects = results[1] is List<RelatedSubject>
+            ? results[1] as List<RelatedSubject>
+            : _relatedSubjects;
         // 吐槽加载可能失败，但不影响其他内容
-        if (results[3] is PagedResult<Comment>) {
-          final commentsResult = results[3] as PagedResult<Comment>;
+        if (results[2] is PagedResult<Comment>) {
+          final commentsResult = results[2] as PagedResult<Comment>;
           _comments = commentsResult.data;
         }
         _error = null;
       });
 
-      storage.setCache(_cacheName, _subject!.toJson());
+      if (_subject != null) {
+        storage.setCache(_cacheName, _subject!.toJson());
+      }
       storage.setCache(
         _charsCacheName,
         _characters.map((c) => c.toJson()).toList(),
@@ -168,8 +215,9 @@ class _SubjectPageState extends State<SubjectPage>
         _comments.map((c) => c.toJson()).toList(),
       );
 
-      // 异步加载章节进度（不阻塞主流程）
+      // 异步加载章节进度和用户收藏（不阻塞主流程）
       _loadEpisodeProgress();
+      _loadUserCollection();
     } catch (e) {
       if (_subject == null) {
         setState(() => _error = '加载失败: $e');
@@ -213,6 +261,35 @@ class _SubjectPageState extends State<SubjectPage>
       if (mounted) {
         setState(() => _episodesLoading = false);
       }
+    }
+  }
+
+  /// 加载用户对该条目的收藏信息
+  Future<void> _loadUserCollection() async {
+    final api = context.read<ApiClient>();
+    final authProvider = context.read<AuthProvider>();
+
+    // 没有登录就不加载
+    if (!authProvider.isLoggedIn) {
+      return;
+    }
+
+    try {
+      final collections = await api.getUserCollections(
+        username: authProvider.user!.username,
+      );
+
+      final index = collections.data.indexWhere(
+        (c) => c.subjectId == widget.subjectId,
+      );
+
+      if (index != -1) {
+        setState(() {
+          _userCollection = collections.data[index];
+        });
+      }
+    } catch (e) {
+      // 收藏加载失败不影响主流程
     }
   }
 
@@ -274,51 +351,83 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     return Scaffold(
-      appBar: AppBar(elevation: 0),
-      body: Column(
-        children: [
-          // 头图卡片
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: OrientationBuilder(
-              builder: (context, orientation) {
-                return _buildHeaderCard(
-                  Theme.of(context).colorScheme,
-                  isLandscape: orientation == Orientation.landscape,
-                );
-              },
-            ),
-          ),
-          // TabBar
-          Container(
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Theme.of(context).dividerColor),
+      body: NestedScrollView(
+        controller: _nestedScrollController,
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          final colorScheme = Theme.of(context).colorScheme;
+          return [
+            SliverAppBar(
+              pinned: true,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              expandedHeight: 200,
+              title: _showCollapsedTitle
+                  ? Text(
+                      _subject!.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.pin,
+                background: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    // 头图区域仅包含卡片本身。
+                    padding: const EdgeInsets.fromLTRB(
+                      12,
+                      kToolbarHeight + 2,
+                      12,
+                      0,
+                    ),
+                    child: OrientationBuilder(
+                      builder: (context, orientation) {
+                        return Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _buildHeaderCard(
+                            colorScheme,
+                            isLandscape: orientation == Orientation.landscape,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             ),
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: '概述'),
-                Tab(text: '角色'),
-                Tab(text: '关联条目'),
-                Tab(text: '吐槽'),
-              ],
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _TabBarHeaderDelegate(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    border: Border(
+                      bottom: BorderSide(color: Theme.of(context).dividerColor),
+                    ),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: '概述'),
+                      Tab(text: '角色'),
+                      Tab(text: '关联条目'),
+                      Tab(text: '吐槽'),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
-          // TabBarView
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewTab(),
-                _buildCharactersTab(),
-                _buildRelatedTab(),
-                _buildCommentsTab(),
-              ],
-            ),
-          ),
-        ],
+          ];
+        },
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildOverviewTab(),
+            _buildCharactersTab(),
+            _buildRelatedTab(),
+            _buildCommentsTab(),
+          ],
+        ),
       ),
     );
   }
@@ -472,7 +581,7 @@ class _SubjectPageState extends State<SubjectPage>
     return RefreshIndicator(
       onRefresh: _loadAllData,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 6),
         itemCount: _characters.length,
         itemBuilder: (context, index) {
           final character = _characters[index];
@@ -481,7 +590,7 @@ class _SubjectPageState extends State<SubjectPage>
               : '';
 
           return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             elevation: 0,
             color: Theme.of(context).colorScheme.surfaceContainerLow,
             child: InkWell(
@@ -493,7 +602,10 @@ class _SubjectPageState extends State<SubjectPage>
                 );
               },
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -504,23 +616,23 @@ class _SubjectPageState extends State<SubjectPage>
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
                               width: 80,
-                              height: 110,
+                              height: 104,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
                                 width: 80,
-                                height: 110,
+                                height: 104,
                                 color: Colors.grey[300],
                               ),
                               errorWidget: (context, url, error) => Container(
                                 width: 80,
-                                height: 110,
+                                height: 104,
                                 color: Colors.grey[300],
                                 child: const Icon(Icons.person),
                               ),
                             )
                           : Container(
                               width: 80,
-                              height: 110,
+                              height: 104,
                               color: Colors.grey[300],
                               child: const Icon(Icons.person),
                             ),
@@ -538,7 +650,7 @@ class _SubjectPageState extends State<SubjectPage>
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           if (character.type.isNotEmpty)
                             Text(
                               character.type,
@@ -547,7 +659,7 @@ class _SubjectPageState extends State<SubjectPage>
                                 fontSize: 12,
                               ),
                             ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           if (character.comment.isNotEmpty)
                             Text(
                               character.comment,
@@ -583,14 +695,14 @@ class _SubjectPageState extends State<SubjectPage>
     return RefreshIndicator(
       onRefresh: _loadAllData,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 6),
         itemCount: _relatedSubjects.length,
         itemBuilder: (context, index) {
           final related = _relatedSubjects[index];
           final imageUrl = related.images['medium'] ?? '';
 
           return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             elevation: 0,
             color: Theme.of(context).colorScheme.surfaceContainerLow,
             child: InkWell(
@@ -602,7 +714,10 @@ class _SubjectPageState extends State<SubjectPage>
                 );
               },
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -613,23 +728,23 @@ class _SubjectPageState extends State<SubjectPage>
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
                               width: 80,
-                              height: 110,
+                              height: 104,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
                                 width: 80,
-                                height: 110,
+                                height: 104,
                                 color: Colors.grey[300],
                               ),
                               errorWidget: (context, url, error) => Container(
                                 width: 80,
-                                height: 110,
+                                height: 104,
                                 color: Colors.grey[300],
                                 child: const Icon(Icons.image),
                               ),
                             )
                           : Container(
                               width: 80,
-                              height: 110,
+                              height: 104,
                               color: Colors.grey[300],
                               child: const Icon(Icons.image),
                             ),
@@ -647,7 +762,7 @@ class _SubjectPageState extends State<SubjectPage>
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             '关系: ${related.relation}',
                             style: TextStyle(
@@ -655,7 +770,7 @@ class _SubjectPageState extends State<SubjectPage>
                               fontSize: 12,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -688,14 +803,15 @@ class _SubjectPageState extends State<SubjectPage>
 
   /// 构建顶部信息卡片（支持横屏和竖屏）
   Widget _buildHeaderCard(ColorScheme colorScheme, {bool isLandscape = false}) {
-    final coverWidth = isLandscape ? 70 : 100;
-    final coverHeight = isLandscape ? 98 : 140;
+    final coverWidth = isLandscape ? 84 : 84;
+    final coverHeight = isLandscape ? 122 : 122;
 
     return Card(
+      margin: EdgeInsets.zero,
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -791,28 +907,47 @@ class _SubjectPageState extends State<SubjectPage>
                   else
                     const SizedBox(height: 8),
                   // 收藏人数
-                  Text(
-                    '${_subject!.collectionTotal} 人',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                  ),
+                  if (_subject!.collectionTotal > 0)
+                    Text(
+                      '${_subject!.collectionTotal} 人',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                    )
+                  else
+                    Text(
+                      '暂无收藏',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                    ),
                   if (isLandscape)
                     const SizedBox(height: 4)
                   else
                     const SizedBox(height: 8),
-                  // 类型标签
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[400]!),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Text(
-                      _getSubjectTypeLabel(_subject!.type),
-                      style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                    ),
+                  // 类型标签和编辑按钮
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[400]!),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          _getSubjectTypeLabel(_subject!.type),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      SubjectActionButtons(
+                        subject: _subject!,
+                        existingCollection: _userCollection,
+                        onCollectionChanged: _loadUserCollection,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1037,5 +1172,31 @@ class _SubjectPageState extends State<SubjectPage>
       default:
         return '未知';
     }
+  }
+}
+
+class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  const _TabBarHeaderDelegate({required this.child});
+
+  @override
+  double get minExtent => kTextTabBarHeight;
+
+  @override
+  double get maxExtent => kTextTabBarHeight;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(covariant _TabBarHeaderDelegate oldDelegate) {
+    return oldDelegate.child != child;
   }
 }

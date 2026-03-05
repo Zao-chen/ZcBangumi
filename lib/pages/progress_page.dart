@@ -63,15 +63,6 @@ class _ProgressPageState extends State<ProgressPage>
     ).push(MaterialPageRoute(builder: (_) => const SearchPage()));
   }
 
-  int _getSubjectTypeFromIndex(int index) {
-    const types = [
-      BgmConst.subjectAnime,
-      BgmConst.subjectGame,
-      BgmConst.subjectBook,
-    ];
-    return types[index];
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -262,11 +253,6 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
     final subject = widget.collection.subject;
     final episodes = provider.getEpisodeProgress(widget.collection.subjectId);
     final epLoading = provider.isEpisodeLoading(widget.collection.subjectId);
-
-    // 统计
-    final mainEps = episodes.where((e) => e.episode.type == 0).toList();
-    final watched = mainEps.where((e) => e.type == BgmConst.episodeDone).length;
-    final total = mainEps.length;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),

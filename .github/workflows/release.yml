@@ -111,6 +111,8 @@ jobs:
     needs: [build, build-windows]
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      contents: write
     
     steps:
       - uses: actions/checkout@v4
@@ -128,10 +130,56 @@ jobs:
         run: |
           # 获取最后一个tag之后的提交信息
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          COMMIT_RANGE=""
           if [ -z "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --oneline --format="%H %s" | head -20 | sed 's/^/- /')
+            COMMIT_RANGE="HEAD"
           else
-            CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --oneline --format="%H %s" | sed 's/^/- /')
+            COMMIT_RANGE="$PREVIOUS_TAG..HEAD"
+          fi
+          
+          # 按类型分类提交
+          FEATURES=$(git log $COMMIT_RANGE --format="%s" --grep="^feat" 2>/dev/null | sed 's/^feat: //' | sed 's/^/- /' || true)
+          FIXES=$(git log $COMMIT_RANGE --format="%s" --grep="^fix" 2>/dev/null | sed 's/^fix: //' | sed 's/^/- /' || true)
+          DOCS=$(git log $COMMIT_RANGE --format="%s" --grep="^docs" 2>/dev/null | sed 's/^docs: //' | sed 's/^/- /' || true)
+          
+          # 获取所有提交（回退）
+          ALL_COMMITS=$(git log $COMMIT_RANGE --oneline --format="%H %s" | sed 's/^/- /' || true)
+          
+          # 统计信息
+          COMMIT_COUNT=$(git log $COMMIT_RANGE --oneline | wc -l)
+          CONTRIBUTOR_COUNT=$(git log $COMMIT_RANGE --format="%an" | sort -u | wc -l)
+          
+          # 构建完整的changelog
+          CHANGELOG="### 📊 发布统计
+  - 📝 提交数: **$COMMIT_COUNT**
+  - 👥 贡献者: **$CONTRIBUTOR_COUNT**
+  
+  "
+          
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG="$CHANGELOG### ✨ 新功能
+  $FEATURES
+  
+  "
+          fi
+          
+          if [ -n "$FIXES" ]; then
+            CHANGELOG="$CHANGELOG### 🐛 Bug修复
+  $FIXES
+  
+  "
+          fi
+          
+          if [ -n "$DOCS" ]; then
+            CHANGELOG="$CHANGELOG### 📚 文档
+  $DOCS
+  
+  "
+          fi
+          
+          if [ -z "$FEATURES" ] && [ -z "$FIXES" ] && [ -z "$DOCS" ]; then
+            CHANGELOG="$CHANGELOG### 📝 更新内容
+  $ALL_COMMITS"
           fi
           
           # 设置多行输出
@@ -144,17 +192,28 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ github.event.inputs.release_tag }}
           files: |
             artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
             artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
           body: |
-            ZC Bangumi ${{ github.event.inputs.release_tag }} 正式版本发布
+            # 🎉 ZC Bangumi ${{ github.event.inputs.release_tag }}
             
-            ## What's Changed
+            欢迎使用 ZC Bangumi ${{ github.event.inputs.release_tag }} 版本！
+            
             ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ## 📥 下载
+            - 🤖 **Android APK**: `zc_bangumi-${{ github.event.inputs.release_tag }}.apk`
+            - 🪟 **Windows EXE**: `zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe`
+            
+            ## 💡 如何安装
+            - **Android**: 下载APK文件后直接安装
+            - **Windows**: 运行EXE文件按照安装向导操作
+            
+            ---
+            感谢所有贡献者和用户的支持！💝
           draft: false
           prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: false

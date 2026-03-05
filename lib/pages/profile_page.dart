@@ -815,11 +815,6 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  /// 排序栏（已合并至_buildCollectionTypeBar）
-  Widget _buildSortBar(ColorScheme colorScheme) {
-    return const SizedBox.shrink();
-  }
-
   /// 收藏列表
   Widget _buildList(ColorScheme colorScheme) {
     if (_loading && _items.isEmpty) {
