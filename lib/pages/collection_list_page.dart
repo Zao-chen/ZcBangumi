@@ -357,20 +357,20 @@ class _CollectionListPageState extends State<CollectionListPage> {
         itemCount: sorted.length + (hasMore ? 1 : 0),
         itemBuilder: (ctx, i) {
           if (i == sorted.length) {
-            // 加载更多
+            // 自动加载更多
+            if (!_loadingMore) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _loadMore();
+              });
+            }
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: _loadingMore
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : TextButton(
-                        onPressed: _loadMore,
-                        child: const Text('加载更多'),
-                      ),
+              child: const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
             );
           }

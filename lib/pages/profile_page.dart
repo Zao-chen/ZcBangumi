@@ -92,6 +92,16 @@ class _CollectionItemCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 4),
+                      // 进度 (动画/书籍)
+                      if (collection.epStatus > 0)
+                        Text(
+                          'EP ${collection.epStatus}${subject != null && subject.eps > 0 ? ' / ${subject.eps}' : ''}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[500],
+                          ),
+                        ),
                       const Spacer(),
                       // 底部信息行
                       _buildBottomRow(context, colorScheme),
@@ -111,12 +121,12 @@ class _CollectionItemCard extends StatelessWidget {
 
     return Row(
       children: [
-        // 用户评分
-        if (collection.rate > 0) ...[
+        // Bangumi 评分（全站）
+        if (subject != null && subject.score > 0) ...[
           Icon(Icons.star_rounded, size: 14, color: Colors.amber[700]),
           const SizedBox(width: 2),
           Text(
-            '${collection.rate}',
+            subject.score.toStringAsFixed(1),
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -125,13 +135,27 @@ class _CollectionItemCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        // Bangumi 评分
-        if (subject != null && subject.score > 0) ...[
-          Icon(Icons.people_outline, size: 13, color: Colors.grey[500]),
+        // 用户评分
+        if (collection.rate > 0) ...[
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(Icons.person, size: 12, color: Colors.blue[600]),
+              Positioned(
+                right: -2,
+                bottom: 0,
+                child: Icon(
+                  Icons.star_rounded,
+                  size: 8,
+                  color: Colors.amber[700],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(width: 2),
           Text(
-            subject.score.toStringAsFixed(1),
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            '${collection.rate}',
+            style: TextStyle(fontSize: 11, color: Colors.blue[600]),
           ),
           const SizedBox(width: 10),
         ],
@@ -148,25 +172,11 @@ class _CollectionItemCard extends StatelessWidget {
           const SizedBox(width: 10),
         ],
         const Spacer(),
-        // 进度 (动画/书籍)
-        if (collection.epStatus > 0) ...[
-          Text(
-            'EP ${collection.epStatus}',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-          ),
-          if (subject != null && subject.eps > 0)
-            Text(
-              ' / ${subject.eps}',
-              style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-            ),
-        ],
-        // 更新日期
-        if (collection.epStatus == 0) ...[
-          Text(
-            _formatDate(collection.updatedAt),
-            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-          ),
-        ],
+        // 完成日期
+        Text(
+          _formatDate(collection.updatedAt),
+          style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+        ),
       ],
     );
   }
@@ -413,10 +423,10 @@ class _ProfileContentState extends State<_ProfileContent> {
     (type: BgmConst.subjectReal, label: '三次元', icon: Icons.live_tv_outlined),
   ];
   static const _collectionTypes = [
-    BgmConst.collectionDoing,
     BgmConst.collectionWish,
-    BgmConst.collectionDone,
     BgmConst.collectionOnHold,
+    BgmConst.collectionDoing,
+    BgmConst.collectionDone,
     BgmConst.collectionDropped,
   ];
   int _subjectType = BgmConst.subjectAnime;
@@ -536,6 +546,47 @@ class _ProfileContentState extends State<_ProfileContent> {
     setState(() => _sortMode = mode);
     // 保存选择到 AppStateProvider
     context.read<AppStateProvider>().setProfileSortMode(mode.index);
+
+    // 如果不是"最近"排序，则加载所有项目
+    if (mode != _SortMode.updatedAt && _items.length < _total) {
+      _loadAllRemaining();
+    }
+  }
+
+  /// 加载所有剩余项目
+  Future<void> _loadAllRemaining() async {
+    if (_loadingMore || _items.length >= _total) return;
+    setState(() => _loadingMore = true);
+
+    final api = context.read<ApiClient>();
+    try {
+      while (_items.length < _total) {
+        final offset = _items.length;
+        final result = await api.getUserCollections(
+          username: widget.user.username,
+          subjectType: _subjectType,
+          collectionType: _collectionType,
+          limit: _pageSize,
+          offset: offset,
+        );
+
+        if (result.data.isEmpty) break;
+
+        setState(() {
+          _items = [..._items, ...result.data];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMore = false);
+      }
+    }
   }
 
   List<UserCollection> get _sortedItems {
@@ -591,7 +642,6 @@ class _ProfileContentState extends State<_ProfileContent> {
           const SizedBox(height: 12),
           _buildSubjectTypeBar(colorScheme),
           _buildCollectionTypeBar(colorScheme),
-          _buildSortBar(colorScheme),
           const SizedBox(height: 8),
           _buildList(colorScheme),
         ],
@@ -605,35 +655,35 @@ class _ProfileContentState extends State<_ProfileContent> {
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             // 头像
             ClipRRect(
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(24),
               child: SizedBox(
-                width: 72,
-                height: 72,
+                width: 48,
+                height: 48,
                 child: widget.user.avatar.large.isNotEmpty
                     ? CachedNetworkImage(
                         imageUrl: widget.user.avatar.large,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
                           color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.person, size: 36),
+                          child: const Icon(Icons.person, size: 24),
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.person, size: 36),
+                          child: const Icon(Icons.person, size: 24),
                         ),
                       )
                     : Container(
                         color: colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.person, size: 36),
+                        child: const Icon(Icons.person, size: 24),
                       ),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             // 用户信息
             Expanded(
               child: Column(
@@ -642,8 +692,8 @@ class _ProfileContentState extends State<_ProfileContent> {
                   Text(
                     widget.user.nickname,
                     style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -651,23 +701,14 @@ class _ProfileContentState extends State<_ProfileContent> {
                   const SizedBox(height: 2),
                   Text(
                     '@${widget.user.username}',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                   ),
-                  if (widget.user.sign.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.user.sign,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
                 ],
               ),
             ),
             // 打开网页版
             IconButton(
-              icon: const Icon(Icons.open_in_new, size: 20),
+              icon: const Icon(Icons.open_in_new, size: 18),
               tooltip: '在浏览器中查看',
               onPressed: () async {
                 final uri = Uri.parse(
@@ -677,6 +718,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 }
               },
+              padding: const EdgeInsets.all(8),
             ),
           ],
         ),
@@ -709,60 +751,73 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  /// 收藏类型横向切换栏
+  /// 收藏类型横向切换栏（包含排序按钮）
   Widget _buildCollectionTypeBar(ColorScheme colorScheme) {
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-        itemCount: _collectionTypes.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 6),
-        itemBuilder: (ctx, i) {
-          final ct = _collectionTypes[i];
-          final label = BgmConst.collectionLabel(ct, subjectType: _subjectType);
-          final selected = _collectionType == ct;
-          return FilterChip(
-            label: Text(label, style: const TextStyle(fontSize: 13)),
-            selected: selected,
-            onSelected: (_) => _switchCollectionType(ct),
-            visualDensity: VisualDensity.compact,
-            showCheckmark: false,
-          );
-        },
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 0),
+                itemCount: _collectionTypes.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 6),
+                itemBuilder: (ctx, i) {
+                  final ct = _collectionTypes[i];
+                  final label = BgmConst.collectionLabel(
+                    ct,
+                    subjectType: _subjectType,
+                  );
+                  final selected = _collectionType == ct;
+                  return FilterChip(
+                    label: Text(label, style: const TextStyle(fontSize: 13)),
+                    selected: selected,
+                    onSelected: (_) => _switchCollectionType(ct),
+                    visualDensity: VisualDensity.compact,
+                    showCheckmark: false,
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          PopupMenuButton<_SortMode>(
+            icon: const Icon(Icons.sort, size: 20),
+            tooltip: '排序',
+            onSelected: _switchSort,
+            itemBuilder: (ctx) => _SortMode.values
+                .map(
+                  (m) => PopupMenuItem(
+                    value: m,
+                    child: Row(
+                      children: [
+                        if (_sortMode == m)
+                          Icon(
+                            Icons.check,
+                            size: 18,
+                            color: colorScheme.primary,
+                          )
+                        else
+                          const SizedBox(width: 18),
+                        const SizedBox(width: 8),
+                        Text(m.label),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
       ),
     );
   }
 
-  /// 排序栏
+  /// 排序栏（已合并至_buildCollectionTypeBar）
   Widget _buildSortBar(ColorScheme colorScheme) {
-    return Row(
-      children: [
-        const Spacer(),
-        PopupMenuButton<_SortMode>(
-          icon: const Icon(Icons.sort),
-          tooltip: '排序',
-          onSelected: _switchSort,
-          itemBuilder: (ctx) => _SortMode.values
-              .map(
-                (m) => PopupMenuItem(
-                  value: m,
-                  child: Row(
-                    children: [
-                      if (_sortMode == m)
-                        Icon(Icons.check, size: 18, color: colorScheme.primary)
-                      else
-                        const SizedBox(width: 18),
-                      const SizedBox(width: 8),
-                      Text(m.label),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 
   /// 收藏列表
@@ -815,17 +870,20 @@ class _ProfileContentState extends State<_ProfileContent> {
       itemCount: sorted.length + (hasMore ? 1 : 0),
       itemBuilder: (ctx, i) {
         if (i == sorted.length) {
-          // 加载更多
+          // 自动加载更多
+          if (!_loadingMore) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _loadMore();
+            });
+          }
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: _loadingMore
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : TextButton(onPressed: _loadMore, child: const Text('加载更多')),
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           );
         }

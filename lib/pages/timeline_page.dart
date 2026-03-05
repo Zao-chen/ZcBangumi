@@ -427,19 +427,20 @@ class _TimelinePageState extends State<TimelinePage> {
         itemCount: items.length + (hasLoadMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (hasLoadMore && index == items.length) {
+            // 自动加载更多
+            if (!loadingMore) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                onLoadMore?.call();
+              });
+            }
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: loadingMore
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : TextButton(
-                        onPressed: onLoadMore,
-                        child: const Text('加载更多'),
-                      ),
+              child: const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
             );
           }
