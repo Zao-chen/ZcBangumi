@@ -66,6 +66,8 @@ class _ProgressPageState extends State<ProgressPage>
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       appBar: AppBar(
@@ -78,21 +80,58 @@ class _ProgressPageState extends State<ProgressPage>
             onPressed: () => _showSearchPage(context),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: _tabs.map((t) => Tab(text: t.label)).toList(),
-          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-          indicatorSize: TabBarIndicatorSize.label,
-        ),
+        bottom: isLandscape
+            ? null
+            : TabBar(
+                controller: _tabController,
+                tabs: _tabs.map((t) => Tab(text: t.label)).toList(),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                indicatorSize: TabBarIndicatorSize.label,
+              ),
       ),
       body: auth.isLoggedIn
-          ? TabBarView(
-              controller: _tabController,
-              children: _tabs
-                  .map((t) => _ProgressTabView(subjectType: t.type))
-                  .toList(),
-            )
+          ? isLandscape
+                ? _buildLandscapeLayout()
+                : TabBarView(
+                    controller: _tabController,
+                    children: _tabs
+                        .map((t) => _ProgressTabView(subjectType: t.type))
+                        .toList(),
+                  )
           : _buildNotLoggedIn(),
+    );
+  }
+
+  Widget _buildLandscapeLayout() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        NavigationRail(
+          selectedIndex: _tabController.index,
+          onDestinationSelected: _tabController.animateTo,
+          backgroundColor: colorScheme.surface,
+          indicatorColor: colorScheme.primaryContainer,
+          labelType: NavigationRailLabelType.all,
+          destinations: _tabs
+              .map(
+                (tab) => NavigationRailDestination(
+                  icon: Icon(tab.icon),
+                  label: Text(tab.label),
+                ),
+              )
+              .toList(),
+        ),
+        const VerticalDivider(thickness: 1, width: 1),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: _tabs
+                .map((t) => _ProgressTabView(subjectType: t.type))
+                .toList(),
+          ),
+        ),
+      ],
     );
   }
 
