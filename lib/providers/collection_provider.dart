@@ -217,6 +217,87 @@ class CollectionProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> setCollectionEpStatus({
+    required int subjectId,
+    required int epStatus,
+  }) async {
+    if (epStatus <= 0) return;
+
+    _updateCollectionEpStatusLocal(subjectId, epStatus);
+    notifyListeners();
+
+    try {
+      await api.patchCollection(subjectId: subjectId, epStatus: epStatus);
+    } catch (e) {
+      debugPrint('更新条目进度失败: $e');
+    }
+  }
+
+  Future<void> setCollectionType({
+    required int subjectId,
+    required int subjectType,
+    required int newType,
+  }) async {
+    final list = _collections[subjectType];
+    if (list == null || list.isEmpty) return;
+    final oldList = List<UserCollection>.from(list);
+    final idx = list.indexWhere((c) => c.subjectId == subjectId);
+    if (idx == -1) return;
+
+    final current = list[idx];
+    if (current.type == newType) return;
+
+    if (newType == BgmConst.collectionDoing) {
+      list[idx] = UserCollection(
+        subjectId: current.subjectId,
+        subjectType: current.subjectType,
+        rate: current.rate,
+        type: newType,
+        comment: current.comment,
+        tags: current.tags,
+        epStatus: current.epStatus,
+        volStatus: current.volStatus,
+        updatedAt: current.updatedAt,
+        private_: current.private_,
+        subject: current.subject,
+      );
+    } else {
+      list.removeAt(idx);
+    }
+    notifyListeners();
+
+    try {
+      await api.patchCollection(subjectId: subjectId, type: newType);
+    } catch (e) {
+      _collections[subjectType] = oldList;
+      notifyListeners();
+      debugPrint('更新收藏状态失败: $e');
+    }
+  }
+
+  void _updateCollectionEpStatusLocal(int subjectId, int epStatus) {
+    for (final type in _collections.keys) {
+      final list = _collections[type];
+      if (list == null || list.isEmpty) continue;
+      final idx = list.indexWhere((c) => c.subjectId == subjectId);
+      if (idx == -1) continue;
+      final c = list[idx];
+      list[idx] = UserCollection(
+        subjectId: c.subjectId,
+        subjectType: c.subjectType,
+        rate: c.rate,
+        type: c.type,
+        comment: c.comment,
+        tags: c.tags,
+        epStatus: epStatus,
+        volStatus: c.volStatus,
+        updatedAt: c.updatedAt,
+        private_: c.private_,
+        subject: c.subject,
+      );
+    }
+  }
+
   /// 将章节进度写入本地缓存
   void _saveEpisodeCache(int subjectId) {
     final eps = _episodeProgress[subjectId];

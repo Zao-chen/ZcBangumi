@@ -335,6 +335,85 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
+  Future<void> _watchUpTo(int episodeSort) async {
+    final api = context.read<ApiClient>();
+    final storage = context.read<StorageService>();
+    final toWatch = _episodes
+        .where(
+          (e) =>
+              e.episode.type == 0 &&
+              e.episode.sort <= episodeSort &&
+              e.type != BgmConst.episodeDone,
+        )
+        .map((e) => e.episode.id)
+        .toList();
+    if (toWatch.isEmpty) {
+      if (_subject?.type == BgmConst.subjectBook) {
+        try {
+          await api.patchCollection(
+            subjectId: widget.subjectId,
+            epStatus: episodeSort,
+          );
+          if (_userCollection != null) {
+            setState(() {
+              _userCollection = UserCollection(
+                subjectId: _userCollection!.subjectId,
+                subjectType: _userCollection!.subjectType,
+                rate: _userCollection!.rate,
+                type: _userCollection!.type,
+                comment: _userCollection!.comment,
+                tags: _userCollection!.tags,
+                epStatus: episodeSort,
+                volStatus: _userCollection!.volStatus,
+                updatedAt: _userCollection!.updatedAt,
+                private_: _userCollection!.private_,
+                subject: _userCollection!.subject,
+              );
+            });
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('更新阅读进度失败: $e')));
+          }
+        }
+      }
+      return;
+    }
+
+    final toWatchSet = toWatch.toSet();
+    setState(() {
+      for (var i = 0; i < _episodes.length; i++) {
+        if (toWatchSet.contains(_episodes[i].episode.id)) {
+          _episodes[i] = UserEpisodeCollection(
+            episode: _episodes[i].episode,
+            type: BgmConst.episodeDone,
+          );
+        }
+      }
+    });
+
+    try {
+      await api.patchEpisodeCollections(
+        subjectId: widget.subjectId,
+        episodeIds: toWatch,
+        type: BgmConst.episodeDone,
+      );
+      storage.setCache(
+        _episodesCacheName,
+        _episodes.map((e) => e.toJson()).toList(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('批量更新章节失败: $e')));
+      }
+      await _loadEpisodeProgress();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLandscape =
@@ -498,7 +577,10 @@ class _SubjectPageState extends State<SubjectPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 绔犺妭杩涘害缃戞牸
-            if (_episodes.isNotEmpty || _episodesLoading)
+            if (_episodes.isNotEmpty ||
+                _episodesLoading ||
+                _subject!.type == BgmConst.subjectBook ||
+                _subject!.type == BgmConst.subjectGame)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -508,6 +590,30 @@ class _SubjectPageState extends State<SubjectPage>
                   episodes: _episodes,
                   loading: _episodesLoading,
                   onSetStatus: _setEpisodeStatus,
+                  onWatchUpTo: _watchUpTo,
+                  useNumberPicker: _subject!.type == BgmConst.subjectBook,
+                  useCollectionTypePicker:
+                      _subject!.type == BgmConst.subjectGame,
+                  bookCurrentProgress: _userCollection?.epStatus ?? 0,
+                  bookMaxProgress: _subject!.eps > 0 ? _subject!.eps : null,
+                  collectionSubjectType: _subject!.type,
+                  collectionType: _userCollection?.type,
+                  onSetCollectionType: (newType) async {
+                    final api = context.read<ApiClient>();
+                    try {
+                      await api.patchCollection(
+                        subjectId: widget.subjectId,
+                        type: newType,
+                      );
+                      await _loadUserCollection();
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('更新收藏状态失败: $e')),
+                        );
+                      }
+                    }
+                  },
                 ),
               ),
             // 鎽樿

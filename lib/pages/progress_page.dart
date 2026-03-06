@@ -364,10 +364,26 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        else if (!episodes.isEmpty)
+                        else if (episodes.isNotEmpty ||
+                            widget.collection.subjectType ==
+                                BgmConst.subjectBook ||
+                            widget.collection.subjectType ==
+                                BgmConst.subjectGame)
                           ProgressGrid(
                             episodes: episodes,
                             loading: false,
+                            useNumberPicker:
+                                widget.collection.subjectType ==
+                                BgmConst.subjectBook,
+                            useCollectionTypePicker:
+                                widget.collection.subjectType ==
+                                BgmConst.subjectGame,
+                            bookCurrentProgress: widget.collection.epStatus,
+                            bookMaxProgress:
+                                (subject?.eps ?? 0) > 0 ? subject!.eps : null,
+                            collectionSubjectType:
+                                widget.collection.subjectType,
+                            collectionType: widget.collection.type,
                             onSetStatus: (episodeId, newType) {
                               provider.setEpisodeStatus(
                                 subjectId: widget.collection.subjectId,
@@ -376,9 +392,23 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                               );
                             },
                             onWatchUpTo: (sort) {
-                              provider.watchUpTo(
+                              if (episodes.isNotEmpty) {
+                                provider.watchUpTo(
+                                  subjectId: widget.collection.subjectId,
+                                  episodeSort: sort,
+                                );
+                              } else {
+                                provider.setCollectionEpStatus(
+                                  subjectId: widget.collection.subjectId,
+                                  epStatus: sort,
+                                );
+                              }
+                            },
+                            onSetCollectionType: (newType) {
+                              provider.setCollectionType(
                                 subjectId: widget.collection.subjectId,
-                                episodeSort: sort,
+                                subjectType: widget.collection.subjectType,
+                                newType: newType,
                               );
                             },
                           )
