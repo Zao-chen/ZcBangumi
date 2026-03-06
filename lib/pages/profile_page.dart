@@ -216,7 +216,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-
 class _LoginView extends StatefulWidget {
   const _LoginView();
 
@@ -248,16 +247,17 @@ class _LoginViewState extends State<_LoginView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 80,
-                height: 80,
+                width: 100,
+                height: 100,
                 decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Icon(
-                  Icons.movie_filter_rounded,
-                  size: 40,
-                  color: colorScheme.primary,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset(
+                    'assets/images/bangumi_icon.png',
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -380,7 +380,6 @@ class _LoginViewState extends State<_LoginView> {
     }
   }
 }
-
 
 class _ProfileContent extends StatefulWidget {
   final BangumiUser user;
@@ -702,6 +701,7 @@ class _ProfileContentState extends State<_ProfileContent> {
       ),
     );
   }
+
   Widget _buildUserCard(ColorScheme colorScheme) {
     return Card(
       elevation: 0,

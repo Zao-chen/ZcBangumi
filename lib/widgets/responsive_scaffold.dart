@@ -71,11 +71,14 @@ class ResponsiveScaffold extends StatelessWidget {
             indicatorColor: colorScheme.primaryContainer,
             labelType: NavigationRailLabelType.all,
             leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Icon(
-                Icons.movie_filter_rounded,
-                color: colorScheme.primary,
-                size: 32,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Image.asset(
+                  'assets/images/bangumi_icon.png',
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             destinations: items
