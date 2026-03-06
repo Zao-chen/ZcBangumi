@@ -23,10 +23,12 @@ class TimelinePage extends StatefulWidget {
 
 class _TimelinePageState extends State<TimelinePage> {
   _TimelineTab _currentTab = _TimelineTab.global;
+  AuthProvider? _authProvider;
+  bool _wasLoggedIn = false;
 
   // ==================== 全站动态 ====================
   List<TimelineItem> _globalItems = [];
-  bool _globalLoading = true;
+  bool _globalLoading = false;
   String? _globalError;
   int _globalPage = 1;
   bool _globalLoadingMore = false;
@@ -53,7 +55,62 @@ class _TimelinePageState extends State<TimelinePage> {
     // 从 AppStateProvider 恢复之前选中的标签
     final appState = context.read<AppStateProvider>();
     _currentTab = _TimelineTab.values[appState.timelineTabIndex];
-    _loadGlobal();
+    _ensureLoadedForTab(_currentTab);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.read<AuthProvider>();
+    if (!identical(_authProvider, auth)) {
+      _authProvider?.removeListener(_handleAuthChanged);
+      _authProvider = auth;
+      _wasLoggedIn = auth.isLoggedIn;
+      _authProvider?.addListener(_handleAuthChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _authProvider?.removeListener(_handleAuthChanged);
+    super.dispose();
+  }
+
+  void _handleAuthChanged() {
+    final auth = _authProvider;
+    if (auth == null) return;
+
+    final isLoggedIn = auth.isLoggedIn;
+    final becameLoggedIn = !_wasLoggedIn && isLoggedIn;
+    _wasLoggedIn = isLoggedIn;
+
+    if (!becameLoggedIn || !mounted) return;
+    _ensureLoadedForTab(_currentTab);
+  }
+
+  void _ensureLoadedForTab(_TimelineTab tab) {
+    switch (tab) {
+      case _TimelineTab.global:
+        if (_globalItems.isEmpty && !_globalLoading) {
+          _loadGlobal();
+        }
+        break;
+      case _TimelineTab.friends:
+        final auth = context.read<AuthProvider>();
+        if (auth.isLoggedIn && _friendItems.isEmpty && !_friendLoading) {
+          _loadFriends();
+        }
+        break;
+      case _TimelineTab.mine:
+        final auth = context.read<AuthProvider>();
+        if (auth.isLoggedIn &&
+            auth.username != null &&
+            _myItems.isEmpty &&
+            !_myLoading) {
+          _loadMine();
+        }
+        break;
+    }
   }
 
   // ========== 全站动态 加载 ==========
@@ -282,17 +339,7 @@ class _TimelinePageState extends State<TimelinePage> {
     // 保存选择到 AppStateProvider
     context.read<AppStateProvider>().setTimelineTabIndex(tab.index);
 
-    switch (tab) {
-      case _TimelineTab.global:
-        if (_globalItems.isEmpty && !_globalLoading) _loadGlobal();
-        break;
-      case _TimelineTab.friends:
-        if (_friendItems.isEmpty && !_friendLoading) _loadFriends();
-        break;
-      case _TimelineTab.mine:
-        if (_myItems.isEmpty && !_myLoading) _loadMine();
-        break;
-    }
+    _ensureLoadedForTab(tab);
   }
 
   @override
