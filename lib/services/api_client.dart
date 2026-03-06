@@ -15,6 +15,9 @@ class ApiClient {
   late final Dio _dio;
   String? _accessToken;
 
+  /// 公开 Dio 实例供其他服务使用
+  Dio get dio => _dio;
+
   ApiClient() {
     _dio = Dio(
       BaseOptions(

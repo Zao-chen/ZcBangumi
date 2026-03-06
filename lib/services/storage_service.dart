@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StorageService {
   static const String _keyAccessToken = 'access_token';
   static const String _keyUsername = 'username';
+  static const String _keyLastUpdateCheck = 'last_update_check';
+  static const String _keyIgnoredVersion = 'ignored_version';
 
   late final SharedPreferences _prefs;
 
@@ -72,10 +74,38 @@ class StorageService {
 
   /// 清除所有缓存
   Future<void> clearAllCache() async {
-    final keys =
-        _prefs.getKeys().where((k) => k.startsWith('cache_')).toList();
+    final keys = _prefs.getKeys().where((k) => k.startsWith('cache_')).toList();
     for (final key in keys) {
       await _prefs.remove(key);
     }
+  }
+
+  // ==================== 更新管理 ====================
+
+  /// 获取最后检查更新的时间
+  DateTime? getLastUpdateCheckTime() {
+    final timestamp = _prefs.getInt(_keyLastUpdateCheck);
+    if (timestamp == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(timestamp);
+  }
+
+  /// 保存最后检查更新的时间
+  Future<void> setLastUpdateCheckTime(DateTime time) async {
+    await _prefs.setInt(_keyLastUpdateCheck, time.millisecondsSinceEpoch);
+  }
+
+  /// 获取忽略的版本号
+  String? getIgnoredVersion() {
+    return _prefs.getString(_keyIgnoredVersion);
+  }
+
+  /// 设置忽略的版本号
+  Future<void> setIgnoredVersion(String version) async {
+    await _prefs.setString(_keyIgnoredVersion, version);
+  }
+
+  /// 清除忽略的版本号
+  Future<void> clearIgnoredVersion() async {
+    await _prefs.remove(_keyIgnoredVersion);
   }
 }

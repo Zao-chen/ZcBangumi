@@ -1,11 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
+import '../widgets/update_dialog.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    setState(() {
+      _version = 'v${packageInfo.version}';
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +81,7 @@ class SettingsPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'v0.1.0',
+                          _version,
                           style: TextStyle(
                             fontSize: 11,
                             color: colorScheme.outline,
@@ -69,6 +91,9 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                // 检查更新
+                const Card(child: CheckUpdateButton()),
                 const SizedBox(height: 16),
                 Card(
                   child: ListTile(
