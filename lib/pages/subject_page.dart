@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -35,6 +37,16 @@ class _SubjectPageState extends State<SubjectPage>
 
   late TabController _tabController;
   final ScrollController _nestedScrollController = ScrollController();
+  final TransformationController _mindMapTransformController =
+      TransformationController();
+  static const double _mindMapMinScale = 0.2;
+  static const double _mindMapMaxScale = 2.2;
+  static const double _mindMapFitPadding = 16;
+  final Set<int> _expandedRelatedNodes = <int>{};
+  final Set<int> _expandingRelatedNodes = <int>{};
+  final Map<int, List<RelatedSubject>> _expandedRelatedChildren =
+      <int, List<RelatedSubject>>{};
+  final Set<String> _collapsedRelationGroups = <String>{};
   Subject? _subject;
   UserCollection? _userCollection;
   List<Character> _characters = [];
@@ -45,6 +57,7 @@ class _SubjectPageState extends State<SubjectPage>
   bool _episodesLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
+  _RelatedViewMode _relatedViewMode = _RelatedViewMode.list;
   String? _error;
 
   @override
@@ -53,6 +66,7 @@ class _SubjectPageState extends State<SubjectPage>
     _tabController = TabController(length: _tabItems.length, vsync: this);
     _tabController.addListener(_handleTabChanged);
     _nestedScrollController.addListener(_handleHeaderCollapse);
+    _restoreRelatedViewMode();
     if (widget.subject != null) {
       _subject = widget.subject;
       _loading = false;
@@ -65,6 +79,7 @@ class _SubjectPageState extends State<SubjectPage>
     _nestedScrollController
       ..removeListener(_handleHeaderCollapse)
       ..dispose();
+    _mindMapTransformController.dispose();
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
     super.dispose();
@@ -90,11 +105,37 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
+  void _restoreRelatedViewMode() {
+    final storage = context.read<StorageService>();
+    final cached = storage.getCache(_relatedViewModeCacheName);
+    if (cached is String) {
+      if (cached == 'mind_map') {
+        _relatedViewMode = _RelatedViewMode.mindMap;
+      } else if (cached == 'list') {
+        _relatedViewMode = _RelatedViewMode.list;
+      }
+    }
+  }
+
+  void _setRelatedViewMode(_RelatedViewMode mode) {
+    if (_relatedViewMode == mode) {
+      return;
+    }
+    _mindMapTransformController.value = Matrix4.identity();
+    setState(() => _relatedViewMode = mode);
+    final storage = context.read<StorageService>();
+    storage.setCache(
+      _relatedViewModeCacheName,
+      mode == _RelatedViewMode.mindMap ? 'mind_map' : 'list',
+    );
+  }
+
   String get _cacheName => 'subject_${widget.subjectId}';
   String get _charsCacheName => 'subject_chars_${widget.subjectId}';
   String get _relatedCacheName => 'subject_related_${widget.subjectId}';
   String get _episodesCacheName => 'subject_episodes_${widget.subjectId}';
   String get _commentsCacheName => 'subject_comments_${widget.subjectId}';
+  String get _relatedViewModeCacheName => 'subject_related_view_mode';
 
   Future<void> _loadAllData() async {
     final storage = context.read<StorageService>();
@@ -825,111 +866,1120 @@ class _SubjectPageState extends State<SubjectPage>
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadAllData,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        itemCount: _relatedSubjects.length,
-        itemBuilder: (context, index) {
-          final related = _relatedSubjects[index];
-          final imageUrl = related.images['medium'] ?? '';
+    if (_relatedViewMode == _RelatedViewMode.list) {
+      return RefreshIndicator(
+        onRefresh: _loadAllData,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          children: [
+            _buildRelatedViewModeSwitch(),
+            const SizedBox(height: 8),
+            ..._buildRelatedListItems(),
+          ],
+        ),
+      );
+    }
 
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => SubjectPage(subjectId: related.id),
-                  ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildRelatedViewModeSwitch(),
+          const SizedBox(height: 8),
+          Expanded(child: _buildRelatedMindMapView()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRelatedViewModeSwitch() {
+    return Row(
+      children: [
+        Text(
+          '展示方式',
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(width: 8),
+        ChoiceChip(
+          label: const Text('列表'),
+          selected: _relatedViewMode == _RelatedViewMode.list,
+          onSelected: (_) => _setRelatedViewMode(_RelatedViewMode.list),
+        ),
+        const SizedBox(width: 8),
+        ChoiceChip(
+          label: const Text('脑图'),
+          selected: _relatedViewMode == _RelatedViewMode.mindMap,
+          onSelected: (_) => _setRelatedViewMode(_RelatedViewMode.mindMap),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildRelatedListItems() {
+    return _relatedSubjects.map((related) {
+      final imageUrl = related.images['medium'] ?? '';
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        child: InkWell(
+          onTap: () => _openSubjectPage(related.id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: imageUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          width: 80,
+                          height: 104,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            width: 80,
+                            height: 104,
+                            color: Colors.grey[300],
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: 80,
+                            height: 104,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image),
+                          ),
+                        )
+                      : Container(
+                          width: 80,
+                          height: 104,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image),
+                        ),
                 ),
-                child: Row(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        related.displayName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '关系: ${related.relation}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[400]!),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _getSubjectTypeLabel(related.type),
+                          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  void _handleMindMapPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      (PointerSignalEvent signal) {
+        final scrollEvent = signal as PointerScrollEvent;
+        final currentScale = _mindMapTransformController.value
+            .getMaxScaleOnAxis();
+        final targetScale = (currentScale *
+                math.exp(-scrollEvent.scrollDelta.dy / 220))
+            .clamp(_mindMapMinScale, _mindMapMaxScale)
+            .toDouble();
+        final scaleChange = targetScale / currentScale;
+        if ((scaleChange - 1).abs() < 0.0001) {
+          return;
+        }
+
+        final focalScenePoint = _mindMapTransformController.toScene(
+          scrollEvent.localPosition,
+        );
+        final nextMatrix = Matrix4.copy(_mindMapTransformController.value)
+          ..translate(focalScenePoint.dx, focalScenePoint.dy)
+          ..scale(scaleChange)
+          ..translate(-focalScenePoint.dx, -focalScenePoint.dy);
+        _mindMapTransformController.value = nextMatrix;
+      },
+    );
+  }
+
+  bool _isIdentityMatrix(Matrix4 matrix) {
+    return matrix.storage[0] == 1.0 &&
+        matrix.storage[5] == 1.0 &&
+        matrix.storage[10] == 1.0 &&
+        matrix.storage[15] == 1.0 &&
+        matrix.storage[1] == 0.0 &&
+        matrix.storage[2] == 0.0 &&
+        matrix.storage[3] == 0.0 &&
+        matrix.storage[4] == 0.0 &&
+        matrix.storage[6] == 0.0 &&
+        matrix.storage[7] == 0.0 &&
+        matrix.storage[8] == 0.0 &&
+        matrix.storage[9] == 0.0 &&
+        matrix.storage[11] == 0.0 &&
+        matrix.storage[12] == 0.0 &&
+        matrix.storage[13] == 0.0 &&
+        matrix.storage[14] == 0.0;
+  }
+
+  void _fitMindMapToViewport(Size viewportSize, _MindMapLayout layout) {
+    if (!_isIdentityMatrix(_mindMapTransformController.value)) {
+      return;
+    }
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) {
+      return;
+    }
+
+    final availableWidth =
+        math.max(1.0, viewportSize.width - _mindMapFitPadding * 2);
+    final availableHeight =
+        math.max(1.0, viewportSize.height - _mindMapFitPadding * 2);
+    final scaleX = availableWidth / layout.width;
+    final scaleY = availableHeight / layout.height;
+    final fitScale =
+        math.min(scaleX, scaleY).clamp(0.1, _mindMapMaxScale).toDouble();
+    final tx = (viewportSize.width - layout.width * fitScale) / 2;
+    final ty = (viewportSize.height - layout.height * fitScale) / 2;
+
+    final matrix = Matrix4.identity()
+      ..translate(tx, ty)
+      ..scale(fitScale);
+    _mindMapTransformController.value = matrix;
+  }
+
+  Widget _buildRelatedMindMapView() {
+    final layout = _buildMindMapLayout();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final viewportSize = Size(
+              constraints.maxWidth,
+              constraints.maxHeight,
+            );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _fitMindMapToViewport(viewportSize, layout);
+            });
+
+            return Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerSignal: _handleMindMapPointerSignal,
+              child: InteractiveViewer(
+                transformationController: _mindMapTransformController,
+                minScale: _mindMapMinScale,
+                maxScale: _mindMapMaxScale,
+                constrained: false,
+                boundaryMargin: const EdgeInsets.all(120),
+                child: SizedBox(
+                  width: layout.width,
+                  height: layout.height,
+                  child: Stack(
+                    children: [
+                      CustomPaint(
+                        size: Size(layout.width, layout.height),
+                        painter: _MindMapLinePainter(
+                          edges: layout.edges,
+                          lineColor: colorScheme.outlineVariant,
+                          highlightColor: colorScheme.primary.withOpacity(0.8),
+                        ),
+                      ),
+                      ...layout.nodes.map((node) {
+                        return Positioned(
+                          left: node.rect.left,
+                          top: node.rect.top,
+                          width: node.rect.width,
+                          height: node.rect.height,
+                          child: _buildMindMapNode(node),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleRelatedNodeExpansion(RelatedSubject related) async {
+    if (_expandedRelatedNodes.contains(related.id)) {
+      setState(() => _expandedRelatedNodes.remove(related.id));
+      return;
+    }
+
+    final cachedChildren = _expandedRelatedChildren[related.id];
+    if (cachedChildren != null) {
+      setState(() => _expandedRelatedNodes.add(related.id));
+      return;
+    }
+
+    if (_expandingRelatedNodes.contains(related.id)) {
+      return;
+    }
+
+    setState(() => _expandingRelatedNodes.add(related.id));
+    try {
+      final api = context.read<ApiClient>();
+      final children = await api.getSubjectRelations(related.id);
+      final seen = <int>{};
+      final filtered = children.where((item) {
+        if (item.id == widget.subjectId || item.id == related.id) {
+          return false;
+        }
+        if (seen.contains(item.id)) {
+          return false;
+        }
+        seen.add(item.id);
+        return true;
+      }).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _expandedRelatedChildren[related.id] = filtered;
+        if (filtered.isNotEmpty) {
+          _expandedRelatedNodes.add(related.id);
+        } else {
+          _expandedRelatedNodes.remove(related.id);
+        }
+        final relationSet = <String>{};
+        for (final child in filtered) {
+          final relation = child.relation.isNotEmpty ? child.relation : '其他';
+          relationSet.add(relation);
+        }
+        for (final relation in relationSet) {
+          _collapsedRelationGroups.add(_relationGroupKey(related.id, relation));
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('加载下一级关联条目失败')));
+    } finally {
+      if (mounted) {
+        setState(() => _expandingRelatedNodes.remove(related.id));
+      }
+    }
+  }
+
+  String _relationGroupKey(int parentId, String relation) {
+    return '$parentId::$relation';
+  }
+
+  void _toggleRelationGroup(String groupKey) {
+    setState(() {
+      if (_collapsedRelationGroups.contains(groupKey)) {
+        _collapsedRelationGroups.remove(groupKey);
+      } else {
+        _collapsedRelationGroups.add(groupKey);
+      }
+    });
+  }
+
+  Widget _buildMindMapNode(_MindMapNode node) {
+    final colorScheme = Theme.of(context).colorScheme;
+    if (node.kind == _MindMapNodeKind.center) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.primary.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _subject?.displayName ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '关联条目 ${_relatedSubjects.length}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onPrimaryContainer.withOpacity(0.85),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (node.kind == _MindMapNodeKind.relation) {
+      final hasToggle = node.relationGroupKey != null;
+      final isOuterLeft = node.side == _MindMapSide.left;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colorScheme.secondary.withOpacity(0.28)),
+        ),
+        child: Row(
+          children: [
+            if (hasToggle && isOuterLeft) ...[
+              _buildMindMapExpandControl(
+                isExpanding: false,
+                isExpanded: node.relationGroupExpanded,
+                canExpand: true,
+                onTap: () => _toggleRelationGroup(node.relationGroupKey!),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: Text(
+                node.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSecondaryContainer,
+                ),
+              ),
+            ),
+            if (hasToggle && !isOuterLeft) ...[
+              const SizedBox(width: 4),
+              _buildMindMapExpandControl(
+                isExpanding: false,
+                isExpanded: node.relationGroupExpanded,
+                canExpand: true,
+                onTap: () => _toggleRelationGroup(node.relationGroupKey!),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final related = node.subject!;
+    final isExpandableNode =
+        node.kind == _MindMapNodeKind.subject ||
+        node.kind == _MindMapNodeKind.childSubject;
+    final isChildNode = node.kind == _MindMapNodeKind.childSubject;
+    final isOuterLeft = node.side == _MindMapSide.left;
+    final isExpanded = _expandedRelatedNodes.contains(related.id);
+    final isExpanding = _expandingRelatedNodes.contains(related.id);
+    final cachedChildren = _expandedRelatedChildren[related.id];
+    final hasKnownChildren = cachedChildren?.isNotEmpty == true;
+    final knownNoChildren = cachedChildren != null && cachedChildren.isEmpty;
+    final showExpandControl = !knownNoChildren || isExpanded;
+    final canExpandOrCollapse = isExpanded || cachedChildren == null || hasKnownChildren;
+    final thumbWidth = isChildNode ? 26.0 : 34.0;
+    final thumbHeight = isChildNode ? 36.0 : 46.0;
+    final titleStyle = isChildNode
+        ? Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)
+        : Theme.of(context).textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          );
+    final imageUrl = related.images['small'] ?? related.images['grid'] ?? '';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openSubjectPage(related.id),
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: isChildNode ? 4 : 6,
+          ),
+          child: Row(
+            children: [
+              if (isExpandableNode && isOuterLeft && showExpandControl) ...[
+                _buildMindMapExpandControl(
+                  isExpanding: isExpanding,
+                  isExpanded: isExpanded,
+                  canExpand: canExpandOrCollapse,
+                  onTap: () => _toggleRelatedNodeExpansion(related),
+                ),
+                const SizedBox(width: 4),
+              ],
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        width: thumbWidth,
+                        height: thumbHeight,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: thumbWidth,
+                          height: thumbHeight,
+                          color: colorScheme.surfaceContainerHighest,
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: thumbWidth,
+                          height: thumbHeight,
+                          color: colorScheme.surfaceContainerHighest,
+                          child: const Icon(Icons.image_not_supported, size: 16),
+                        ),
+                      )
+                    : Container(
+                        width: thumbWidth,
+                        height: thumbHeight,
+                        color: colorScheme.surfaceContainerHighest,
+                        child: const Icon(Icons.image, size: 16),
+                      ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: imageUrl.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              width: 80,
-                              height: 104,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                width: 80,
-                                height: 104,
-                                color: Colors.grey[300],
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                width: 80,
-                                height: 104,
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.image),
-                              ),
-                            )
-                          : Container(
-                              width: 80,
-                              height: 104,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.image),
-                            ),
+                    Text(
+                      related.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            related.displayName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '关系: ${related.relation}',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[400]!),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _getSubjectTypeLabel(related.type),
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 2),
+                    Text(
+                      _getSubjectTypeLabel(related.type),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          );
-        },
+              if (isExpandableNode && !isOuterLeft && showExpandControl) ...[
+                const SizedBox(width: 4),
+                _buildMindMapExpandControl(
+                  isExpanding: isExpanding,
+                  isExpanded: isExpanded,
+                  canExpand: canExpandOrCollapse,
+                  onTap: () => _toggleRelatedNodeExpansion(related),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  Widget _buildMindMapExpandControl({
+    required bool isExpanding,
+    required bool isExpanded,
+    required bool canExpand,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canExpand ? onTap : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: isExpanding
+              ? SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.primary,
+                  ),
+                )
+              : Text(
+                  isExpanded ? '-' : '+',
+                  style: TextStyle(
+                    color: canExpand ? colorScheme.primary : colorScheme.outline,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    height: 1.0,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  _MindMapLayout _buildMindMapLayout() {
+    final grouped = <String, List<RelatedSubject>>{};
+    for (final related in _relatedSubjects) {
+      final relation = related.relation.isNotEmpty ? related.relation : '其他';
+      grouped.putIfAbsent(relation, () => []).add(related);
+    }
+
+    final entries = grouped.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    final left = <MapEntry<String, List<RelatedSubject>>>[];
+    final right = <MapEntry<String, List<RelatedSubject>>>[];
+    var leftWeight = 0;
+    var rightWeight = 0;
+    for (final entry in entries) {
+      final weight = math.max(1, entry.value.length);
+      if (leftWeight <= rightWeight) {
+        left.add(entry);
+        leftWeight += weight;
+      } else {
+        right.add(entry);
+        rightWeight += weight;
+      }
+    }
+
+    const padding = 32.0;
+    const centerW = 220.0;
+    const centerH = 72.0;
+    const relationW = 120.0;
+    const relationH = 40.0;
+    const subjectW = 220.0;
+    const subjectH = 66.0;
+    const outerSubjectW = 204.0;
+    const outerSubjectH = 52.0;
+    const subjectToRelationGap = 54.0;
+    const relationToSubjectGap = 56.0;
+    const subtreeRowGap = 8.0;
+    const subtreeGroupGap = 16.0;
+    const rowGap = 12.0;
+    const groupGap = 24.0;
+    const relationToCenterGap = 90.0;
+    const topRelationToSubjectGap = 84.0;
+
+    Size nodeSizeForDepth(int depth) {
+      if (depth <= 1) {
+        return const Size(subjectW, subjectH);
+      }
+      return const Size(outerSubjectW, outerSubjectH);
+    }
+
+    List<MapEntry<String, List<RelatedSubject>>> groupedChildrenFor(
+      RelatedSubject subject,
+    ) {
+      if (!_expandedRelatedNodes.contains(subject.id)) {
+        return const [];
+      }
+      final children = _expandedRelatedChildren[subject.id] ?? const <RelatedSubject>[];
+      if (children.isEmpty) {
+        return const [];
+      }
+      final map = <String, List<RelatedSubject>>{};
+      for (final child in children) {
+        final relation = child.relation.isNotEmpty ? child.relation : '其他';
+        map.putIfAbsent(relation, () => []).add(child);
+      }
+      final groups = map.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      return groups;
+    }
+
+    double subtreeHeightFor(
+      RelatedSubject subject, {
+      required int depth,
+      required Set<int> visited,
+    }) {
+      final nodeH = nodeSizeForDepth(depth).height;
+      if (visited.contains(subject.id)) {
+        return nodeH;
+      }
+      final nextVisited = {...visited, subject.id};
+      final groups = groupedChildrenFor(subject);
+      if (groups.isEmpty) {
+        return nodeH;
+      }
+
+      double groupsTotalH = 0;
+      for (var g = 0; g < groups.length; g++) {
+        final relation = groups[g].key;
+        final groupKey = _relationGroupKey(subject.id, relation);
+        final collapsed = _collapsedRelationGroups.contains(groupKey);
+        if (collapsed) {
+          groupsTotalH += relationH;
+          if (g != groups.length - 1) {
+            groupsTotalH += subtreeGroupGap;
+          }
+          continue;
+        }
+        final children = groups[g].value;
+        double childStackH = 0;
+        for (var i = 0; i < children.length; i++) {
+          childStackH += subtreeHeightFor(
+            children[i],
+            depth: depth + 1,
+            visited: nextVisited,
+          );
+          if (i != children.length - 1) {
+            childStackH += subtreeRowGap;
+          }
+        }
+        groupsTotalH += math.max(relationH, childStackH);
+        if (g != groups.length - 1) {
+          groupsTotalH += subtreeGroupGap;
+        }
+      }
+      return math.max(nodeH, groupsTotalH);
+    }
+
+    double outwardWidthFor(
+      RelatedSubject subject, {
+      required int depth,
+      required Set<int> visited,
+    }) {
+      if (visited.contains(subject.id)) {
+        return 0;
+      }
+      final nextVisited = {...visited, subject.id};
+      final groups = groupedChildrenFor(subject);
+      if (groups.isEmpty) {
+        return 0;
+      }
+
+      double maxGroupWidth = 0;
+      for (final group in groups) {
+        final groupKey = _relationGroupKey(subject.id, group.key);
+        final collapsed = _collapsedRelationGroups.contains(groupKey);
+        if (collapsed) {
+          final groupWidth = subjectToRelationGap + relationW;
+          if (groupWidth > maxGroupWidth) {
+            maxGroupWidth = groupWidth;
+          }
+          continue;
+        }
+        double maxChildWidth = 0;
+        for (final child in group.value) {
+          final childNodeW = nodeSizeForDepth(depth + 1).width;
+          final childWidth =
+              childNodeW +
+              outwardWidthFor(child, depth: depth + 1, visited: nextVisited);
+          if (childWidth > maxChildWidth) {
+            maxChildWidth = childWidth;
+          }
+        }
+        final groupWidth =
+            subjectToRelationGap + relationW + relationToSubjectGap + maxChildWidth;
+        if (groupWidth > maxGroupWidth) {
+          maxGroupWidth = groupWidth;
+        }
+      }
+      return maxGroupWidth;
+    }
+
+    double groupHeight(List<RelatedSubject> subjects) {
+      if (subjects.isEmpty) {
+        return 0;
+      }
+      var total = 0.0;
+      for (var i = 0; i < subjects.length; i++) {
+        total += subtreeHeightFor(subjects[i], depth: 1, visited: <int>{});
+        if (i != subjects.length - 1) {
+          total += rowGap;
+        }
+      }
+      return total;
+    }
+
+    double sideContentHeight(List<MapEntry<String, List<RelatedSubject>>> side) {
+      if (side.isEmpty) {
+        return centerH;
+      }
+      var total = 0.0;
+      for (var i = 0; i < side.length; i++) {
+        final groupKey = _relationGroupKey(widget.subjectId, side[i].key);
+        final collapsed = _collapsedRelationGroups.contains(groupKey);
+        total += collapsed ? relationH : groupHeight(side[i].value);
+        if (i != side.length - 1) {
+          total += groupGap;
+        }
+      }
+      return total;
+    }
+
+    final contentH = math.max(
+      centerH,
+      math.max(sideContentHeight(left), sideContentHeight(right)),
+    );
+    final canvasHeight = contentH + padding * 2;
+
+    double maxLeftOutwardW = 0;
+    for (final entry in left) {
+      for (final subject in entry.value) {
+        final w = outwardWidthFor(subject, depth: 1, visited: <int>{});
+        if (w > maxLeftOutwardW) {
+          maxLeftOutwardW = w;
+        }
+      }
+    }
+    double maxRightOutwardW = 0;
+    for (final entry in right) {
+      for (final subject in entry.value) {
+        final w = outwardWidthFor(subject, depth: 1, visited: <int>{});
+        if (w > maxRightOutwardW) {
+          maxRightOutwardW = w;
+        }
+      }
+    }
+
+    final leftOutwardSpace = math.max(outerSubjectW / 2, maxLeftOutwardW);
+    final rightOutwardSpace = math.max(outerSubjectW / 2, maxRightOutwardW);
+
+    final leftMostX = padding + leftOutwardSpace;
+    final leftSubjectX = leftMostX + subjectW / 2;
+    final leftRelationX =
+        leftSubjectX + subjectW / 2 + topRelationToSubjectGap + relationW / 2;
+    final centerX =
+        leftRelationX + relationW / 2 + relationToCenterGap + centerW / 2;
+    final rightRelationX =
+        centerX + centerW / 2 + relationToCenterGap + relationW / 2;
+    final rightSubjectX =
+        rightRelationX + relationW / 2 + topRelationToSubjectGap + subjectW / 2;
+    final rightMostX = rightSubjectX + subjectW / 2 + rightOutwardSpace;
+    final canvasWidth = rightMostX + padding;
+    final centerY = canvasHeight / 2;
+
+    final nodes = <_MindMapNode>[];
+    final edges = <_MindMapEdge>[];
+
+    final centerNode = _MindMapNode(
+      kind: _MindMapNodeKind.center,
+      label: _subject?.displayName ?? '',
+      rect: Rect.fromCenter(
+        center: Offset(centerX, centerY),
+        width: centerW,
+        height: centerH,
+      ),
+    );
+    nodes.add(centerNode);
+
+    void placeExpandedSubtree(
+      RelatedSubject parentSubject,
+      Rect parentRect, {
+      required int depth,
+      required bool sideLeft,
+      required double top,
+      required Set<int> visited,
+    }) {
+      if (visited.contains(parentSubject.id)) {
+        return;
+      }
+      final nextVisited = {...visited, parentSubject.id};
+      final groups = groupedChildrenFor(parentSubject);
+      if (groups.isEmpty) {
+        return;
+      }
+
+      final parentNodeSize = nodeSizeForDepth(depth);
+      final childNodeSize = nodeSizeForDepth(depth + 1);
+      final parentTreeH = subtreeHeightFor(
+        parentSubject,
+        depth: depth,
+        visited: visited,
+      );
+
+      final groupHeights = <double>[];
+      var groupsContentH = 0.0;
+      for (var g = 0; g < groups.length; g++) {
+        final relation = groups[g].key;
+        final groupKey = _relationGroupKey(parentSubject.id, relation);
+        final collapsed = _collapsedRelationGroups.contains(groupKey);
+        if (collapsed) {
+          groupHeights.add(relationH);
+          groupsContentH += relationH;
+          if (g != groups.length - 1) {
+            groupsContentH += subtreeGroupGap;
+          }
+          continue;
+        }
+        final children = groups[g].value;
+        double childStackH = 0;
+        for (var i = 0; i < children.length; i++) {
+          childStackH += subtreeHeightFor(
+            children[i],
+            depth: depth + 1,
+            visited: nextVisited,
+          );
+          if (i != children.length - 1) {
+            childStackH += subtreeRowGap;
+          }
+        }
+        final h = math.max(relationH, childStackH);
+        groupHeights.add(h);
+        groupsContentH += h;
+        if (g != groups.length - 1) {
+          groupsContentH += subtreeGroupGap;
+        }
+      }
+
+      var y = top + (parentTreeH - groupsContentH) / 2;
+
+      for (var g = 0; g < groups.length; g++) {
+        final relation = groups[g].key;
+        final children = groups[g].value;
+        final groupKey = _relationGroupKey(parentSubject.id, relation);
+        final collapsed = _collapsedRelationGroups.contains(groupKey);
+        final groupH = groupHeights[g];
+        final relationY = y + groupH / 2;
+        final direction = sideLeft ? -1.0 : 1.0;
+        final relationX =
+            parentRect.center.dx +
+            direction *
+                (parentNodeSize.width / 2 +
+                    subjectToRelationGap +
+                    relationW / 2);
+        final relationRect = Rect.fromCenter(
+          center: Offset(relationX, relationY),
+          width: relationW,
+          height: relationH,
+        );
+        final relationNode = _MindMapNode(
+          kind: _MindMapNodeKind.relation,
+          label: relation,
+          rect: relationRect,
+          side: sideLeft ? _MindMapSide.left : _MindMapSide.right,
+          relationGroupKey: groupKey,
+          relationGroupExpanded: !collapsed,
+        );
+        nodes.add(relationNode);
+        edges.add(
+          _MindMapEdge(
+            fromRect: parentRect,
+            toRect: relationRect,
+            highlight: false,
+          ),
+        );
+
+        if (collapsed) {
+          y += groupH;
+          if (g != groups.length - 1) {
+            y += subtreeGroupGap;
+          }
+          continue;
+        }
+
+        double childStackH = 0;
+        final childHeights = <double>[];
+        for (var i = 0; i < children.length; i++) {
+          final h = subtreeHeightFor(
+            children[i],
+            depth: depth + 1,
+            visited: nextVisited,
+          );
+          childHeights.add(h);
+          childStackH += h;
+          if (i != children.length - 1) {
+            childStackH += subtreeRowGap;
+          }
+        }
+        var childTop = y + (groupH - childStackH) / 2;
+
+        for (var i = 0; i < children.length; i++) {
+          final child = children[i];
+          final childBlockH = childHeights[i];
+          final childNodeY =
+              childTop + (childBlockH - childNodeSize.height) / 2;
+          final childX =
+              relationRect.center.dx +
+              direction *
+                  (relationW / 2 +
+                      relationToSubjectGap +
+                      childNodeSize.width / 2);
+          final childRect = Rect.fromLTWH(
+            childX - childNodeSize.width / 2,
+            childNodeY,
+            childNodeSize.width,
+            childNodeSize.height,
+          );
+          final childNode = _MindMapNode(
+            kind: _MindMapNodeKind.childSubject,
+            label: child.displayName,
+            subject: child,
+            rect: childRect,
+            side: sideLeft ? _MindMapSide.left : _MindMapSide.right,
+            depth: depth + 1,
+          );
+          nodes.add(childNode);
+          edges.add(
+            _MindMapEdge(
+              fromRect: relationRect,
+              toRect: childRect,
+              highlight: false,
+            ),
+          );
+
+          placeExpandedSubtree(
+            child,
+            childRect,
+            depth: depth + 1,
+            sideLeft: sideLeft,
+            top: childTop,
+            visited: nextVisited,
+          );
+          childTop += childBlockH;
+          if (i != children.length - 1) {
+            childTop += subtreeRowGap;
+          }
+        }
+
+        y += groupH;
+        if (g != groups.length - 1) {
+          y += subtreeGroupGap;
+        }
+      }
+    }
+
+    void placeSide(
+      List<MapEntry<String, List<RelatedSubject>>> sideEntries,
+      bool isLeft,
+    ) {
+      if (sideEntries.isEmpty) return;
+      final totalH = sideContentHeight(sideEntries);
+      var cursorY = (canvasHeight - totalH) / 2;
+      final relationX = isLeft ? leftRelationX : rightRelationX;
+      final subjectX = isLeft ? leftSubjectX : rightSubjectX;
+
+      for (final entry in sideEntries) {
+        final subjects = entry.value;
+        final groupKey = _relationGroupKey(widget.subjectId, entry.key);
+        final collapsed = _collapsedRelationGroups.contains(groupKey);
+        final blockH = collapsed ? relationH : groupHeight(subjects);
+        final relationY = cursorY + blockH / 2;
+
+        final relationNode = _MindMapNode(
+          kind: _MindMapNodeKind.relation,
+          label: entry.key,
+          rect: Rect.fromCenter(
+            center: Offset(relationX, relationY),
+            width: relationW,
+            height: relationH,
+          ),
+          side: isLeft ? _MindMapSide.left : _MindMapSide.right,
+          relationGroupKey: groupKey,
+          relationGroupExpanded: !collapsed,
+        );
+        nodes.add(relationNode);
+        edges.add(
+          _MindMapEdge(
+            fromRect: centerNode.rect,
+            toRect: relationNode.rect,
+            highlight: true,
+          ),
+        );
+
+        if (!collapsed) {
+          for (var i = 0; i < subjects.length; i++) {
+            final subject = subjects[i];
+            final blockTop = cursorY;
+            final subjectTreeH =
+                subtreeHeightFor(subject, depth: 1, visited: <int>{});
+            final subjectTop = blockTop + (subjectTreeH - subjectH) / 2;
+            final subjectNode = _MindMapNode(
+              kind: _MindMapNodeKind.subject,
+              label: subject.displayName,
+              subject: subject,
+              rect: Rect.fromLTWH(
+                subjectX - subjectW / 2,
+                subjectTop,
+                subjectW,
+                subjectH,
+              ),
+              side: isLeft ? _MindMapSide.left : _MindMapSide.right,
+              depth: 1,
+            );
+            nodes.add(subjectNode);
+            edges.add(
+              _MindMapEdge(
+                fromRect: relationNode.rect,
+                toRect: subjectNode.rect,
+                highlight: false,
+              ),
+            );
+
+            placeExpandedSubtree(
+              subject,
+              subjectNode.rect,
+              depth: 1,
+              sideLeft: isLeft,
+              top: blockTop,
+              visited: <int>{},
+            );
+
+            cursorY += subjectTreeH;
+            if (i != subjects.length - 1) {
+              cursorY += rowGap;
+            }
+          }
+        } else {
+          cursorY += blockH;
+        }
+
+        cursorY += groupGap;
+      }
+    }
+
+    placeSide(left, true);
+    placeSide(right, false);
+
+    return _MindMapLayout(
+      width: canvasWidth,
+      height: canvasHeight,
+      nodes: nodes,
+      edges: edges,
+    );
+  }
+
+  void _openSubjectPage(int subjectId) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)));
   }
 
   Widget _buildHeaderCard(ColorScheme colorScheme, {bool isLandscape = false}) {
@@ -1291,6 +2341,122 @@ class _SubjectPageState extends State<SubjectPage>
   }
 }
 
+enum _RelatedViewMode { list, mindMap }
+
+enum _MindMapSide { none, left, right }
+
+enum _MindMapNodeKind { center, relation, subject, childSubject }
+
+class _MindMapNode {
+  final _MindMapNodeKind kind;
+  final String label;
+  final Rect rect;
+  final RelatedSubject? subject;
+  final _MindMapSide side;
+  final int depth;
+  final String? relationGroupKey;
+  final bool relationGroupExpanded;
+
+  const _MindMapNode({
+    required this.kind,
+    required this.label,
+    required this.rect,
+    this.subject,
+    this.side = _MindMapSide.none,
+    this.depth = 0,
+    this.relationGroupKey,
+    this.relationGroupExpanded = true,
+  });
+}
+
+class _MindMapEdge {
+  final Rect fromRect;
+  final Rect toRect;
+  final bool highlight;
+  final bool vertical;
+
+  const _MindMapEdge({
+    required this.fromRect,
+    required this.toRect,
+    required this.highlight,
+    this.vertical = false,
+  });
+}
+
+class _MindMapLayout {
+  final double width;
+  final double height;
+  final List<_MindMapNode> nodes;
+  final List<_MindMapEdge> edges;
+
+  const _MindMapLayout({
+    required this.width,
+    required this.height,
+    required this.nodes,
+    required this.edges,
+  });
+}
+
+class _MindMapLinePainter extends CustomPainter {
+  final List<_MindMapEdge> edges;
+  final Color lineColor;
+  final Color highlightColor;
+
+  const _MindMapLinePainter({
+    required this.edges,
+    required this.lineColor,
+    required this.highlightColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final normalPaint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke;
+    final highlightPaint = Paint()
+      ..color = highlightColor
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke;
+
+    for (final edge in edges) {
+      late final Offset start;
+      late final Offset end;
+      late final Path path;
+      if (edge.vertical) {
+        start = Offset(edge.fromRect.center.dx, edge.fromRect.bottom);
+        end = Offset(edge.toRect.center.dx, edge.toRect.top);
+        final midY = (start.dy + end.dy) / 2;
+        path = Path()
+          ..moveTo(start.dx, start.dy)
+          ..cubicTo(start.dx, midY, end.dx, midY, end.dx, end.dy);
+      } else {
+        final startOnRight = edge.fromRect.center.dx <= edge.toRect.center.dx;
+        start = Offset(
+          startOnRight ? edge.fromRect.right : edge.fromRect.left,
+          edge.fromRect.center.dy,
+        );
+        end = Offset(
+          startOnRight ? edge.toRect.left : edge.toRect.right,
+          edge.toRect.center.dy,
+        );
+        final midX = (start.dx + end.dx) / 2;
+        path = Path()
+          ..moveTo(start.dx, start.dy)
+          ..cubicTo(midX, start.dy, midX, end.dy, end.dx, end.dy);
+      }
+      canvas.drawPath(path, edge.highlight ? highlightPaint : normalPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MindMapLinePainter oldDelegate) {
+    return oldDelegate.edges != edges ||
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.highlightColor != highlightColor;
+  }
+}
+
 class _SubjectTabItem {
   final String label;
   final IconData icon;
@@ -1323,3 +2489,4 @@ class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
     return oldDelegate.child != child;
   }
 }
+
