@@ -14,8 +14,6 @@ import '../widgets/progress_grid.dart';
 import '../widgets/subject_action_buttons.dart';
 import 'character_page.dart';
 
-/// 鏉＄洰璇︽儏椤?- 鍖呭惈姒傝堪銆佽鑹层€佸叧鑱旀潯鐩笁涓爣绛鹃〉
-/// 椤堕儴淇℃伅鏀寔闅忔粴鍔ㄦ姌鍙狅紝鎶樺彔鍚庢樉绀烘爣棰樺埌杩斿洖鎸夐挳鍙充晶
 class SubjectPage extends StatefulWidget {
   final int subjectId;
   final Subject? subject;
@@ -102,7 +100,6 @@ class _SubjectPageState extends State<SubjectPage>
     final storage = context.read<StorageService>();
     final api = context.read<ApiClient>();
 
-    // 鍏堜粠缂撳瓨鎭㈠
     if (_subject == null) {
       final cached = storage.getCache(_cacheName);
       if (cached is Map<String, dynamic>) {
@@ -165,32 +162,25 @@ class _SubjectPageState extends State<SubjectPage>
       _error = null;
     });
 
-    // 璇锋眰鏈€鏂版暟鎹?
     try {
-      // 浼樺厛灏濊瘯鑾峰彇subject
       Subject? subject;
       try {
         subject = await api.getSubject(widget.subjectId);
       } catch (e) {
-        // 濡傛灉鏈夌紦瀛樺垯浣跨敤缂撳瓨锛屽惁鍒欒褰曢敊璇?
         if (_subject == null) {
           throw Exception('Failed to fetch subject: $e');
         }
       }
 
-      // 濡傛灉鎴愬姛鑾峰彇subject鎴栨湁缂撳瓨锛岀户缁幏鍙栧叾浠栨暟鎹?
       if (subject == null && _subject == null) {
-        // 鏃㈡病鏈夋柊鏁版嵁涔熸病鏈夌紦瀛?
         setState(() => _error = '无法获取条目信息');
         return;
       }
 
-      // 浣跨敤鏂拌幏鍙栫殑鎴栧凡鏈夌殑subject
       if (subject != null) {
         _subject = subject;
       }
 
-      // 骞惰鑾峰彇鍏朵粬鏁版嵁
       final charsFuture = api.getSubjectCharacters(widget.subjectId);
       final relatedFuture = api.getSubjectRelations(widget.subjectId);
       final commentsFuture = api.getSubjectComments(
@@ -210,7 +200,6 @@ class _SubjectPageState extends State<SubjectPage>
         _relatedSubjects = results[1] is List<RelatedSubject>
             ? results[1] as List<RelatedSubject>
             : _relatedSubjects;
-        // 鍚愭Ы鍔犺浇鍙兘澶辫触锛屼絾涓嶅奖鍝嶅叾浠栧唴瀹?
         if (results[2] is PagedResult<Comment>) {
           final commentsResult = results[2] as PagedResult<Comment>;
           _comments = commentsResult.data;
@@ -234,7 +223,6 @@ class _SubjectPageState extends State<SubjectPage>
         _comments.map((c) => c.toJson()).toList(),
       );
 
-      // 寮傛鍔犺浇绔犺妭杩涘害鍜岀敤鎴锋敹钘忥紙涓嶉樆濉炰富娴佺▼锛?
       _loadEpisodeProgress();
       _loadUserCollection();
     } catch (e) {
@@ -248,13 +236,11 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
-  /// 鍔犺浇鐢ㄦ埛鐨勭珷鑺傝繘搴?
   Future<void> _loadEpisodeProgress() async {
     final storage = context.read<StorageService>();
     final api = context.read<ApiClient>();
     final authProvider = context.read<AuthProvider>();
 
-    // 娌℃湁鐧诲綍灏变笉鍔犺浇
     if (!authProvider.isLoggedIn) {
       return;
     }
@@ -275,7 +261,6 @@ class _SubjectPageState extends State<SubjectPage>
         _episodes.map((e) => e.toJson()).toList(),
       );
     } catch (e) {
-      // 绔犺妭鍔犺浇澶辫触涓嶅奖鍝嶄富娴佺▼
     } finally {
       if (mounted) {
         setState(() => _episodesLoading = false);
@@ -283,12 +268,10 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
-  /// 鍔犺浇鐢ㄦ埛瀵硅鏉＄洰鐨勬敹钘忎俊鎭?
   Future<void> _loadUserCollection() async {
     final api = context.read<ApiClient>();
     final authProvider = context.read<AuthProvider>();
 
-    // 娌℃湁鐧诲綍灏变笉鍔犺浇
     if (!authProvider.isLoggedIn) {
       return;
     }
@@ -308,7 +291,6 @@ class _SubjectPageState extends State<SubjectPage>
         });
       }
     } catch (e) {
-      // 鏀惰棌鍔犺浇澶辫触涓嶅奖鍝嶄富娴佺▼
     }
   }
 
@@ -565,7 +547,6 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 姒傝堪鏍囩椤?
   Widget _buildOverviewTab() {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -576,7 +557,6 @@ class _SubjectPageState extends State<SubjectPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 绔犺妭杩涘害缃戞牸
             if (_episodes.isNotEmpty ||
                 _episodesLoading ||
                 _subject!.type == BgmConst.subjectBook ||
@@ -616,7 +596,6 @@ class _SubjectPageState extends State<SubjectPage>
                   },
                 ),
               ),
-            // 鎽樿
             if (_subject!.summary.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -640,7 +619,6 @@ class _SubjectPageState extends State<SubjectPage>
                   ],
                 ),
               ),
-            // 鏍囩
             if (_subject!.tags.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -673,7 +651,6 @@ class _SubjectPageState extends State<SubjectPage>
                   ],
                 ),
               ),
-            // 淇℃伅妗?
             if (_subject!.infobox.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -729,7 +706,6 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 瑙掕壊鏍囩椤?
   Widget _buildCharactersTab() {
     if (_characters.isEmpty) {
       return RefreshIndicator(
@@ -769,7 +745,6 @@ class _SubjectPageState extends State<SubjectPage>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 瑙掕壊鍥剧墖
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: imageUrl.isNotEmpty
@@ -798,7 +773,6 @@ class _SubjectPageState extends State<SubjectPage>
                             ),
                     ),
                     const SizedBox(width: 12),
-                    // 鍙充晶淇℃伅
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -843,7 +817,6 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 鍏宠仈鏉＄洰鏍囩椤?
   Widget _buildRelatedTab() {
     if (_relatedSubjects.isEmpty) {
       return RefreshIndicator(
@@ -881,7 +854,6 @@ class _SubjectPageState extends State<SubjectPage>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 鏉＄洰鍥剧墖
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: imageUrl.isNotEmpty
@@ -910,7 +882,6 @@ class _SubjectPageState extends State<SubjectPage>
                             ),
                     ),
                     const SizedBox(width: 12),
-                    // 鍙充晶淇℃伅
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -924,7 +895,7 @@ class _SubjectPageState extends State<SubjectPage>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '鍏崇郴: ${related.relation}',
+                            '关系: ${related.relation}',
                             style: TextStyle(
                               color: Colors.grey[600],
                               fontSize: 12,
@@ -961,7 +932,6 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 鏋勫缓椤堕儴淇℃伅鍗＄墖锛堟敮鎸佹í灞忓拰绔栧睆锛?
   Widget _buildHeaderCard(ColorScheme colorScheme, {bool isLandscape = false}) {
     final coverWidth = isLandscape ? 84 : 84;
     final coverHeight = isLandscape ? 122 : 122;
@@ -975,7 +945,6 @@ class _SubjectPageState extends State<SubjectPage>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 灏侀潰
             if (_subject!.images?.medium.isNotEmpty ?? false)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -1008,12 +977,10 @@ class _SubjectPageState extends State<SubjectPage>
                 child: const Icon(Icons.image),
               ),
             const SizedBox(width: 16),
-            // 鍙充晶淇℃伅
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 鍚嶇О
                   Text(
                     _subject!.displayName,
                     maxLines: 2,
@@ -1023,7 +990,6 @@ class _SubjectPageState extends State<SubjectPage>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  // 鍘熷悕
                   if (_subject!.name != _subject!.nameCn &&
                       _subject!.name.isNotEmpty)
                     Text(
@@ -1036,7 +1002,6 @@ class _SubjectPageState extends State<SubjectPage>
                     const SizedBox(height: 4)
                   else
                     const SizedBox(height: 8),
-                  // 璇勫垎
                   Row(
                     children: [
                       const Icon(Icons.star, color: Colors.yellow, size: 14),
@@ -1066,7 +1031,6 @@ class _SubjectPageState extends State<SubjectPage>
                     const SizedBox(height: 4)
                   else
                     const SizedBox(height: 8),
-                  // 鏀惰棌浜烘暟
                   if (_subject!.collectionTotal > 0)
                     Text(
                       '${_subject!.collectionTotal} 人',
@@ -1081,7 +1045,6 @@ class _SubjectPageState extends State<SubjectPage>
                     const SizedBox(height: 4)
                   else
                     const SizedBox(height: 8),
-                  // 绫诲瀷鏍囩鍜岀紪杈戞寜閽?
                   Row(
                     children: [
                       Container(
@@ -1118,7 +1081,6 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 鍚愭Ы鏍囩椤?
   Widget _buildCommentsTab() {
     if (_comments.isEmpty) {
       return RefreshIndicator(
@@ -1171,7 +1133,6 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 鏋勫缓鍗曟潯鍚愭Ы
   Widget _buildCommentItem(Comment comment, ColorScheme colorScheme) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1182,10 +1143,8 @@ class _SubjectPageState extends State<SubjectPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 鐢ㄦ埛淇℃伅
             Row(
               children: [
-                // 鐢ㄦ埛澶村儚
                 if (comment.userAvatar.isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
@@ -1272,13 +1231,11 @@ class _SubjectPageState extends State<SubjectPage>
               ],
             ),
             const SizedBox(height: 12),
-            // 鍐呭
             Text(
               comment.content,
               style: TextStyle(color: Colors.grey[700], fontSize: 14),
             ),
             const SizedBox(height: 8),
-            // 鏃堕棿鍜屽洖澶?
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1299,19 +1256,18 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  /// 鏍煎紡鍖栨椂闂?
   String _formatTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
 
     if (difference.inMinutes < 1) {
-      return '鍒氬垰';
+      return '刚刚';
     } else if (difference.inMinutes < 60) {
       return '${difference.inMinutes}分钟前';
     } else if (difference.inHours < 24) {
       return '${difference.inHours}小时前';
     } else if (difference.inDays < 7) {
-      return '${difference.inDays}澶╁墠';
+      return '${difference.inDays}天前';
     } else {
       return '${dateTime.month}月${dateTime.day}日';
     }
