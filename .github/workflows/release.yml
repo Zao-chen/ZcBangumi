@@ -136,12 +136,12 @@ jobs:
             CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --oneline --format="%H %s" | sed 's/^/- /')
           fi
           
-          # 设置多行输出
-          CHANGELOG="${CHANGELOG//'%'/'%25'}"
-          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # 设置多行输出（使用 EOF delimiter 可直接保留换行符）
+          {
+            echo "CHANGELOG<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
