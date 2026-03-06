@@ -12,7 +12,7 @@ import '../providers/app_state_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
 
-/// 排序方式
+/// 鎺掑簭鏂瑰紡
 enum _SortMode {
   updatedAt('最近操作'),
   rateDesc('评分从高到低'),
@@ -23,7 +23,7 @@ enum _SortMode {
   const _SortMode(this.label);
 }
 
-/// 收藏条目卡片（从 collection_list_page.dart 移植）
+/// 鏀惰棌鏉＄洰鍗＄墖锛堜粠 collection_list_page.dart 绉绘锛?
 class _CollectionItemCard extends StatelessWidget {
   final UserCollection collection;
   final int subjectType;
@@ -50,7 +50,7 @@ class _CollectionItemCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 封面
+              // 灏侀潰
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: SizedBox(
@@ -75,14 +75,14 @@ class _CollectionItemCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // 信息
+              // 淇℃伅
               Expanded(
                 child: SizedBox(
                   height: 80,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 标题
+                      // 鏍囬
                       Text(
                         subject?.displayName ?? 'ID: ${collection.subjectId}',
                         style: const TextStyle(
@@ -93,7 +93,7 @@ class _CollectionItemCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      // 进度 (动画/书籍)
+                      // 杩涘害 (鍔ㄧ敾/涔︾睄)
                       if (collection.epStatus > 0)
                         Text(
                           'EP ${collection.epStatus}${subject != null && subject.eps > 0 ? ' / ${subject.eps}' : ''}',
@@ -103,7 +103,7 @@ class _CollectionItemCard extends StatelessWidget {
                           ),
                         ),
                       const Spacer(),
-                      // 底部信息行
+                      // 搴曢儴淇℃伅琛?
                       _buildBottomRow(context, colorScheme),
                     ],
                   ),
@@ -121,7 +121,7 @@ class _CollectionItemCard extends StatelessWidget {
 
     return Row(
       children: [
-        // Bangumi 评分（全站）
+        // Bangumi 璇勫垎锛堝叏绔欙級
         if (subject != null && subject.score > 0) ...[
           Icon(Icons.star_rounded, size: 14, color: Colors.amber[700]),
           const SizedBox(width: 2),
@@ -135,7 +135,7 @@ class _CollectionItemCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        // 用户评分
+        // 鐢ㄦ埛璇勫垎
         if (collection.rate > 0) ...[
           Stack(
             alignment: Alignment.center,
@@ -159,7 +159,7 @@ class _CollectionItemCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        // 排名
+        // 鎺掑悕
         if (subject != null && subject.rank > 0) ...[
           Text(
             '#${subject.rank}',
@@ -172,7 +172,7 @@ class _CollectionItemCard extends StatelessWidget {
           const SizedBox(width: 10),
         ],
         const Spacer(),
-        // 完成日期
+        // 瀹屾垚鏃ユ湡
         Text(
           _formatDate(collection.updatedAt),
           style: TextStyle(fontSize: 11, color: Colors.grey[400]),
@@ -192,7 +192,7 @@ class _CollectionItemCard extends StatelessWidget {
   }
 }
 
-/// 我的页面 - 登录/用户信息/收藏
+/// 鎴戠殑椤甸潰 - 鐧诲綍/鐢ㄦ埛淇℃伅/鏀惰棌
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -228,7 +228,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-// ==================== 登录视图 ====================
+// ==================== 鐧诲綍瑙嗗浘 ====================
 
 class _LoginView extends StatefulWidget {
   const _LoginView();
@@ -290,7 +290,7 @@ class _LoginViewState extends State<_LoginView> {
               ),
               const SizedBox(height: 32),
 
-              // Token 输入框
+              // Token 杈撳叆妗?
               TextField(
                 controller: _tokenController,
                 obscureText: _obscureToken,
@@ -313,7 +313,7 @@ class _LoginViewState extends State<_LoginView> {
               ),
               const SizedBox(height: 16),
 
-              // 登录按钮
+              // 鐧诲綍鎸夐挳
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -333,14 +333,14 @@ class _LoginViewState extends State<_LoginView> {
               ),
               const SizedBox(height: 12),
 
-              // 获取 Token 链接
+              // 鑾峰彇 Token 閾炬帴
               TextButton.icon(
                 onPressed: () => _openTokenPage(),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('获取 Access Token'),
               ),
 
-              // 错误信息
+              // 閿欒淇℃伅
               if (auth.error != null) ...[
                 const SizedBox(height: 16),
                 Container(
@@ -399,7 +399,7 @@ class _LoginViewState extends State<_LoginView> {
   }
 }
 
-// ==================== 用户资料内容 ====================
+// ==================== 鐢ㄦ埛璧勬枡鍐呭 ====================
 
 class _ProfileContent extends StatefulWidget {
   final BangumiUser user;
@@ -410,7 +410,7 @@ class _ProfileContent extends StatefulWidget {
 }
 
 class _ProfileContentState extends State<_ProfileContent> {
-  // 收藏列表筛选与数据
+  // 鏀惰棌鍒楄〃绛涢€変笌鏁版嵁
   static const _subjectTypes = [
     (type: BgmConst.subjectAnime, label: '动画', icon: Icons.movie_outlined),
     (
@@ -443,7 +443,7 @@ class _ProfileContentState extends State<_ProfileContent> {
   @override
   void initState() {
     super.initState();
-    // 从 AppStateProvider 恢复之前保存的状态
+    // 浠?AppStateProvider 鎭㈠涔嬪墠淇濆瓨鐨勭姸鎬?
     final appState = context.read<AppStateProvider>();
     _subjectType = appState.profileSubjectType;
     _collectionType = appState.profileCollectionType;
@@ -457,7 +457,7 @@ class _ProfileContentState extends State<_ProfileContent> {
   Future<void> _loadData({bool refresh = true}) async {
     final storage = context.read<StorageService>();
     if (refresh) {
-      // 先从缓存恢复
+      // 鍏堜粠缂撳瓨鎭㈠
       if (_items.isEmpty) {
         final cached = storage.getCache(_cacheKey);
         if (cached is List && cached.isNotEmpty) {
@@ -524,7 +524,7 @@ class _ProfileContentState extends State<_ProfileContent> {
       _items = [];
       _total = 0;
     });
-    // 保存选择到 AppStateProvider
+    // 淇濆瓨閫夋嫨鍒?AppStateProvider
     context.read<AppStateProvider>().setProfileSubjectType(type);
     _loadData();
   }
@@ -536,7 +536,7 @@ class _ProfileContentState extends State<_ProfileContent> {
       _items = [];
       _total = 0;
     });
-    // 保存选择到 AppStateProvider
+    // 淇濆瓨閫夋嫨鍒?AppStateProvider
     context.read<AppStateProvider>().setProfileCollectionType(type);
     _loadData();
   }
@@ -544,16 +544,16 @@ class _ProfileContentState extends State<_ProfileContent> {
   void _switchSort(_SortMode mode) {
     if (_sortMode == mode) return;
     setState(() => _sortMode = mode);
-    // 保存选择到 AppStateProvider
+    // 淇濆瓨閫夋嫨鍒?AppStateProvider
     context.read<AppStateProvider>().setProfileSortMode(mode.index);
 
-    // 如果不是"最近"排序，则加载所有项目
+    // 濡傛灉涓嶆槸"鏈€杩?鎺掑簭锛屽垯鍔犺浇鎵€鏈夐」鐩?
     if (mode != _SortMode.updatedAt && _items.length < _total) {
       _loadAllRemaining();
     }
   }
 
-  /// 加载所有剩余项目
+  /// 鍔犺浇鎵€鏈夊墿浣欓」鐩?
   Future<void> _loadAllRemaining() async {
     if (_loadingMore || _items.length >= _total) return;
     setState(() => _loadingMore = true);
@@ -621,16 +621,64 @@ class _ProfileContentState extends State<_ProfileContent> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
+    if (!isLandscape) {
+      return _buildCollectionsContent(colorScheme, showSubjectTypeBar: true);
+    }
+
+    return Row(
+      children: [
+        SafeArea(
+          right: false,
+          child: NavigationRail(
+            selectedIndex: _selectedSubjectIndex,
+            onDestinationSelected: (index) {
+              _switchSubjectType(_subjectTypes[index].type);
+            },
+            labelType: NavigationRailLabelType.all,
+            backgroundColor: colorScheme.surface,
+            indicatorColor: colorScheme.primaryContainer,
+            destinations: _subjectTypes
+                .map(
+                  (t) => NavigationRailDestination(
+                    icon: Icon(t.icon),
+                    label: Text(t.label),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const VerticalDivider(thickness: 1, width: 1),
+        Expanded(
+          child: _buildCollectionsContent(
+            colorScheme,
+            showSubjectTypeBar: false,
+          ),
+        ),
+      ],
+    );
+  }
+
+  int get _selectedSubjectIndex {
+    final index = _subjectTypes.indexWhere((t) => t.type == _subjectType);
+    return index >= 0 ? index : 0;
+  }
+
+  Widget _buildCollectionsContent(
+    ColorScheme colorScheme, {
+    required bool showSubjectTypeBar,
+  }) {
     return RefreshIndicator(
       onRefresh: () => _loadData(),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 用户卡片
+          // 鐢ㄦ埛鍗＄墖
           _buildUserCard(colorScheme),
           const SizedBox(height: 20),
-          // 收藏列表筛选栏
+          // 鏀惰棌鍒楄〃绛涢€夋爮
           Text(
             '我的收藏',
             style: TextStyle(
@@ -640,7 +688,7 @@ class _ProfileContentState extends State<_ProfileContent> {
             ),
           ),
           const SizedBox(height: 12),
-          _buildSubjectTypeBar(colorScheme),
+          if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
           _buildCollectionTypeBar(colorScheme),
           const SizedBox(height: 8),
           _buildList(colorScheme),
@@ -648,8 +696,7 @@ class _ProfileContentState extends State<_ProfileContent> {
       ),
     );
   }
-
-  /// 用户信息卡片
+  /// 鐢ㄦ埛淇℃伅鍗＄墖
   Widget _buildUserCard(ColorScheme colorScheme) {
     return Card(
       elevation: 0,
@@ -658,7 +705,7 @@ class _ProfileContentState extends State<_ProfileContent> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            // 头像
+            // 澶村儚
             ClipRRect(
               borderRadius: BorderRadius.circular(24),
               child: SizedBox(
@@ -684,7 +731,7 @@ class _ProfileContentState extends State<_ProfileContent> {
               ),
             ),
             const SizedBox(width: 12),
-            // 用户信息
+            // 鐢ㄦ埛淇℃伅
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -706,7 +753,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                 ],
               ),
             ),
-            // 打开网页版
+            // 鎵撳紑缃戦〉鐗?
             IconButton(
               icon: const Icon(Icons.open_in_new, size: 18),
               tooltip: '在浏览器中查看',
@@ -726,7 +773,7 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  /// 条目类型横向切换栏
+  /// 鏉＄洰绫诲瀷妯悜鍒囨崲鏍?
   Widget _buildSubjectTypeBar(ColorScheme colorScheme) {
     return SizedBox(
       height: 44,
@@ -751,7 +798,7 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  /// 收藏类型横向切换栏（包含排序按钮）
+  /// 鏀惰棌绫诲瀷妯悜鍒囨崲鏍忥紙鍖呭惈鎺掑簭鎸夐挳锛?
   Widget _buildCollectionTypeBar(ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -815,7 +862,7 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  /// 收藏列表
+  /// 鏀惰棌鍒楄〃
   Widget _buildList(ColorScheme colorScheme) {
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -865,7 +912,7 @@ class _ProfileContentState extends State<_ProfileContent> {
       itemCount: sorted.length + (hasMore ? 1 : 0),
       itemBuilder: (ctx, i) {
         if (i == sorted.length) {
-          // 自动加载更多
+          // 鑷姩鍔犺浇鏇村
           if (!_loadingMore) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _loadMore();

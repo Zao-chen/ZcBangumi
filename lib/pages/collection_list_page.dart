@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+
 import '../constants.dart';
 import '../models/collection.dart';
 import '../pages/subject_page.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
 
-/// 排序方式
 enum _SortMode {
   updatedAt('最近操作'),
   rateDesc('评分从高到低'),
@@ -18,7 +18,6 @@ enum _SortMode {
   const _SortMode(this.label);
 }
 
-/// 收藏列表页 — 支持切换条目类型、收藏类型、排序
 class CollectionListPage extends StatefulWidget {
   final String username;
   final int initialSubjectType;
@@ -36,12 +35,10 @@ class CollectionListPage extends StatefulWidget {
 }
 
 class _CollectionListPageState extends State<CollectionListPage> {
-  // 当前选中的类型
   late int _subjectType;
   late int _collectionType;
   _SortMode _sortMode = _SortMode.updatedAt;
 
-  // 数据
   List<UserCollection> _items = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -50,7 +47,6 @@ class _CollectionListPageState extends State<CollectionListPage> {
   int _offset = 0;
   static const _pageSize = 30;
 
-  // 条目类型配置
   static const _subjectTypes = [
     (type: BgmConst.subjectAnime, label: '动画', icon: Icons.movie_outlined),
     (
@@ -63,7 +59,6 @@ class _CollectionListPageState extends State<CollectionListPage> {
     (type: BgmConst.subjectReal, label: '三次元', icon: Icons.live_tv_outlined),
   ];
 
-  // 收藏类型配置
   static const _collectionTypes = [
     BgmConst.collectionDoing,
     BgmConst.collectionWish,
@@ -84,10 +79,8 @@ class _CollectionListPageState extends State<CollectionListPage> {
     _loadData();
   }
 
-  /// 从缓存恢复并请求最新数据
   Future<void> _loadData({bool refresh = true}) async {
     if (refresh) {
-      // 先从缓存恢复
       if (_items.isEmpty) {
         final cached = _storage.getCache(_cacheKey);
         if (cached is List && cached.isNotEmpty) {
@@ -141,14 +134,18 @@ class _CollectionListPageState extends State<CollectionListPage> {
   }
 
   Future<void> _loadMore() async {
-    if (_loadingMore || _items.length >= _total) return;
+    if (_loadingMore || _items.length >= _total) {
+      return;
+    }
     setState(() => _loadingMore = true);
     _offset = _items.length;
     await _loadData(refresh: false);
   }
 
   void _switchSubjectType(int type) {
-    if (_subjectType == type) return;
+    if (_subjectType == type) {
+      return;
+    }
     setState(() {
       _subjectType = type;
       _items = [];
@@ -158,7 +155,9 @@ class _CollectionListPageState extends State<CollectionListPage> {
   }
 
   void _switchCollectionType(int type) {
-    if (_collectionType == type) return;
+    if (_collectionType == type) {
+      return;
+    }
     setState(() {
       _collectionType = type;
       _items = [];
@@ -168,11 +167,17 @@ class _CollectionListPageState extends State<CollectionListPage> {
   }
 
   void _switchSort(_SortMode mode) {
-    if (_sortMode == mode) return;
+    if (_sortMode == mode) {
+      return;
+    }
     setState(() => _sortMode = mode);
   }
 
-  /// 按当前排序规则排序
+  int get _selectedSubjectIndex {
+    final index = _subjectTypes.indexWhere((t) => t.type == _subjectType);
+    return index >= 0 ? index : 0;
+  }
+
   List<UserCollection> get _sortedItems {
     final list = List<UserCollection>.from(_items);
     switch (_sortMode) {
@@ -205,6 +210,8 @@ class _CollectionListPageState extends State<CollectionListPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final collectionLabel = BgmConst.collectionLabel(
       _collectionType,
       subjectType: _subjectType,
@@ -215,7 +222,6 @@ class _CollectionListPageState extends State<CollectionListPage> {
         title: Text(collectionLabel),
         centerTitle: false,
         actions: [
-          // 排序按钮
           PopupMenuButton<_SortMode>(
             icon: const Icon(Icons.sort),
             tooltip: '排序',
@@ -244,20 +250,55 @@ class _CollectionListPageState extends State<CollectionListPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 条目类型切换
-          _buildSubjectTypeBar(colorScheme),
-          // 收藏类型切换
-          _buildCollectionTypeBar(colorScheme),
-          // 列表
-          Expanded(child: _buildList(colorScheme)),
-        ],
-      ),
+      body: isLandscape
+          ? Row(
+              children: [
+                SafeArea(
+                  right: false,
+                  child: NavigationRail(
+                    selectedIndex: _selectedSubjectIndex,
+                    onDestinationSelected: (index) {
+                      _switchSubjectType(_subjectTypes[index].type);
+                    },
+                    labelType: NavigationRailLabelType.all,
+                    backgroundColor: colorScheme.surface,
+                    indicatorColor: colorScheme.primaryContainer,
+                    destinations: _subjectTypes
+                        .map(
+                          (t) => NavigationRailDestination(
+                            icon: Icon(t.icon),
+                            label: Text(t.label),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(
+                  child: _buildPageContent(
+                    colorScheme,
+                    showSubjectTypeBar: false,
+                  ),
+                ),
+              ],
+            )
+          : _buildPageContent(colorScheme, showSubjectTypeBar: true),
     );
   }
 
-  /// 条目类型横向切换栏
+  Widget _buildPageContent(
+    ColorScheme colorScheme, {
+    required bool showSubjectTypeBar,
+  }) {
+    return Column(
+      children: [
+        if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
+        _buildCollectionTypeBar(colorScheme),
+        Expanded(child: _buildList(colorScheme)),
+      ],
+    );
+  }
+
   Widget _buildSubjectTypeBar(ColorScheme colorScheme) {
     return SizedBox(
       height: 44,
@@ -282,7 +323,6 @@ class _CollectionListPageState extends State<CollectionListPage> {
     );
   }
 
-  /// 收藏类型横向切换栏
   Widget _buildCollectionTypeBar(ColorScheme colorScheme) {
     return SizedBox(
       height: 40,
@@ -307,7 +347,6 @@ class _CollectionListPageState extends State<CollectionListPage> {
     );
   }
 
-  /// 收藏列表
   Widget _buildList(ColorScheme colorScheme) {
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -323,7 +362,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
             Text(_error!, style: TextStyle(color: Colors.grey[600])),
             const SizedBox(height: 16),
             FilledButton.tonal(
-              onPressed: () => _loadData(),
+              onPressed: _loadData,
               child: const Text('重试'),
             ),
           ],
@@ -351,21 +390,20 @@ class _CollectionListPageState extends State<CollectionListPage> {
     final hasMore = _items.length < _total;
 
     return RefreshIndicator(
-      onRefresh: () => _loadData(),
+      onRefresh: _loadData,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: sorted.length + (hasMore ? 1 : 0),
         itemBuilder: (ctx, i) {
           if (i == sorted.length) {
-            // 自动加载更多
             if (!_loadingMore) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _loadMore();
               });
             }
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: const Center(
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
                 child: SizedBox(
                   width: 24,
                   height: 24,
@@ -383,8 +421,6 @@ class _CollectionListPageState extends State<CollectionListPage> {
     );
   }
 }
-
-// ==================== 收藏条目卡片 ====================
 
 class _CollectionItemCard extends StatelessWidget {
   final UserCollection collection;
@@ -412,7 +448,6 @@ class _CollectionItemCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 封面
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: SizedBox(
@@ -437,14 +472,12 @@ class _CollectionItemCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // 信息
               Expanded(
                 child: SizedBox(
                   height: 80,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 标题
                       Text(
                         subject?.displayName ?? 'ID: ${collection.subjectId}',
                         style: const TextStyle(
@@ -455,7 +488,6 @@ class _CollectionItemCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const Spacer(),
-                      // 底部信息行
                       _buildBottomRow(context, colorScheme),
                     ],
                   ),
@@ -473,7 +505,6 @@ class _CollectionItemCard extends StatelessWidget {
 
     return Row(
       children: [
-        // 用户评分
         if (collection.rate > 0) ...[
           Icon(Icons.star_rounded, size: 14, color: Colors.amber[700]),
           const SizedBox(width: 2),
@@ -487,7 +518,6 @@ class _CollectionItemCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        // Bangumi 评分
         if (subject != null && subject.score > 0) ...[
           Icon(Icons.people_outline, size: 13, color: Colors.grey[500]),
           const SizedBox(width: 2),
@@ -497,7 +527,6 @@ class _CollectionItemCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        // 排名
         if (subject != null && subject.rank > 0) ...[
           Text(
             '#${subject.rank}',
@@ -510,7 +539,6 @@ class _CollectionItemCard extends StatelessWidget {
           const SizedBox(width: 10),
         ],
         const Spacer(),
-        // 进度 (动画/书籍)
         if (collection.epStatus > 0) ...[
           Text(
             'EP ${collection.epStatus}',
@@ -522,13 +550,11 @@ class _CollectionItemCard extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: Colors.grey[400]),
             ),
         ],
-        // 更新日期
-        if (collection.epStatus == 0) ...[
+        if (collection.epStatus == 0)
           Text(
             _formatDate(collection.updatedAt),
             style: TextStyle(fontSize: 11, color: Colors.grey[400]),
           ),
-        ],
       ],
     );
   }

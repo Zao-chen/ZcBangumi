@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
@@ -181,7 +181,7 @@ class _SubjectPageState extends State<SubjectPage>
       // 濡傛灉鎴愬姛鑾峰彇subject鎴栨湁缂撳瓨锛岀户缁幏鍙栧叾浠栨暟鎹?
       if (subject == null && _subject == null) {
         // 鏃㈡病鏈夋柊鏁版嵁涔熸病鏈夌紦瀛?
-        setState(() => _error = '鏃犳硶鑾峰彇鏉＄洰淇℃伅');
+        setState(() => _error = '无法获取条目信息');
         return;
       }
 
@@ -239,7 +239,7 @@ class _SubjectPageState extends State<SubjectPage>
       _loadUserCollection();
     } catch (e) {
       if (_subject == null) {
-        setState(() => _error = '鍔犺浇澶辫触: $e');
+        setState(() => _error = '加载失败: $e');
       }
     } finally {
       if (mounted) {
@@ -330,7 +330,7 @@ class _SubjectPageState extends State<SubjectPage>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('璁剧疆鐘舵€佸け璐? $e')));
+        ).showSnackBar(SnackBar(content: Text('设置状态失败: $e')));
       }
     }
   }
@@ -358,7 +358,7 @@ class _SubjectPageState extends State<SubjectPage>
               const SizedBox(height: 8),
               Text(_error!, style: TextStyle(color: Colors.grey[600])),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadAllData, child: const Text('閲嶈瘯')),
+              ElevatedButton(onPressed: _loadAllData, child: const Text('重试')),
             ],
           ),
         ),
@@ -368,7 +368,7 @@ class _SubjectPageState extends State<SubjectPage>
     if (_subject == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: Text('鏆傛棤鏁版嵁')),
+        body: const Center(child: Text('暂无数据')),
       );
     }
 
@@ -444,22 +444,29 @@ class _SubjectPageState extends State<SubjectPage>
 
   Widget _buildLandscapeTabs() {
     final colorScheme = Theme.of(context).colorScheme;
+    final topInset = _showCollapsedTitle ? (kToolbarHeight + 8) : 0.0;
+
     return Row(
       children: [
-        NavigationRail(
-          selectedIndex: _selectedTabIndex,
-          onDestinationSelected: _tabController.animateTo,
-          backgroundColor: colorScheme.surface,
-          indicatorColor: colorScheme.primaryContainer,
-          labelType: NavigationRailLabelType.all,
-          destinations: _tabItems
-              .map(
-                (tab) => NavigationRailDestination(
-                  icon: Icon(tab.icon),
-                  label: Text(tab.label),
-                ),
-              )
-              .toList(),
+        AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(top: topInset),
+          child: NavigationRail(
+            selectedIndex: _selectedTabIndex,
+            onDestinationSelected: _tabController.animateTo,
+            backgroundColor: colorScheme.surface,
+            indicatorColor: colorScheme.primaryContainer,
+            labelType: NavigationRailLabelType.all,
+            destinations: _tabItems
+                .map(
+                  (tab) => NavigationRailDestination(
+                    icon: Icon(tab.icon),
+                    label: Text(tab.label),
+                  ),
+                )
+                .toList(),
+          ),
         ),
         const VerticalDivider(thickness: 1, width: 1),
         Expanded(child: _buildTabView()),
@@ -538,7 +545,7 @@ class _SubjectPageState extends State<SubjectPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '鏍囩',
+                      '标签',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -571,7 +578,7 @@ class _SubjectPageState extends State<SubjectPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '璇︽儏',
+                      '详情',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -621,7 +628,7 @@ class _SubjectPageState extends State<SubjectPage>
     if (_characters.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadAllData,
-        child: const Center(child: Text('鏆傛棤瑙掕壊淇℃伅')),
+        child: const Center(child: Text('暂无角色信息')),
       );
     }
 
@@ -735,7 +742,7 @@ class _SubjectPageState extends State<SubjectPage>
     if (_relatedSubjects.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadAllData,
-        child: const Center(child: Text('鏆傛棤鍏宠仈鏉＄洰')),
+        child: const Center(child: Text('暂无关联条目')),
       );
     }
 
@@ -961,7 +968,7 @@ class _SubjectPageState extends State<SubjectPage>
                     )
                   else
                     Text(
-                      '鏆傛棤鏀惰棌',
+                      '暂无收藏',
                       style: TextStyle(color: Colors.grey[500], fontSize: 11),
                     ),
                   if (isLandscape)
@@ -1025,7 +1032,7 @@ class _SubjectPageState extends State<SubjectPage>
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    '鏆傛棤鍚愭Ы',
+                    '暂无吐槽',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1207,17 +1214,17 @@ class _SubjectPageState extends State<SubjectPage>
   String _getSubjectTypeLabel(int type) {
     switch (type) {
       case BgmConst.subjectBook:
-        return '涔︾睄';
+        return '书籍';
       case BgmConst.subjectAnime:
-        return '鍔ㄧ敾';
+        return '动画';
       case BgmConst.subjectMusic:
-        return '闊充箰';
+        return '音乐';
       case BgmConst.subjectGame:
-        return '娓告垙';
+        return '游戏';
       case BgmConst.subjectReal:
         return '三次元';
       default:
-        return '鏈煡';
+        return '未知';
     }
   }
 }
