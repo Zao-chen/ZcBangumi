@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/update_provider.dart';
 
 /// 更新检查对话框
@@ -51,11 +53,19 @@ class UpdateDialog extends StatelessWidget {
                       ).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
+                    child: MarkdownBody(
+                      data:
                       updateInfo.changelog.isEmpty
                           ? '暂无更新说明'
                           : updateInfo.changelog,
-                      style: const TextStyle(fontSize: 14),
+                      selectable: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(
+                        Theme.of(context),
+                      ).copyWith(
+                        p: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(fontSize: 14),
+                      ),
                     ),
                   ),
 
@@ -217,10 +227,14 @@ class _CheckUpdateButtonState extends State<CheckUpdateButton> {
         return ListTile(
           leading: const Icon(Icons.system_update),
           title: const Text('检查更新'),
-          subtitle: updateProvider.errorMessage != null
+          subtitle: updateProvider.lastCheckMessage != null
               ? Text(
-                  updateProvider.errorMessage!,
-                  style: const TextStyle(color: Colors.red),
+                  updateProvider.lastCheckMessage!,
+                  style: TextStyle(
+                    color: updateProvider.lastCheckIsError
+                        ? Colors.red
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 )
               : null,
           trailing: isChecking
@@ -243,10 +257,12 @@ class _CheckUpdateButtonState extends State<CheckUpdateButton> {
                       forceUpdate:
                           updateProvider.updateInfo?.forceUpdate ?? false,
                     );
-                  } else if (updateProvider.state == UpdateState.idle) {
+                  } else if (updateProvider.state == UpdateState.idle ||
+                      updateProvider.state == UpdateState.error) {
+                    final message = updateProvider.lastCheckMessage ?? '检查更新完成';
                     ScaffoldMessenger.of(
                       context,
-                    ).showSnackBar(const SnackBar(content: Text('已是最新版本')));
+                    ).showSnackBar(SnackBar(content: Text(message)));
                   }
                 },
         );

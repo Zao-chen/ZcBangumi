@@ -8,6 +8,42 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/update_info.dart';
 import 'storage_service.dart';
 
+enum UpdateCheckStatus {
+  unsupportedPlatform,
+  upToDate,
+  updateAvailable,
+  currentVersionHigher,
+  ignoredVersion,
+  noReleaseFound,
+  noInstallableAsset,
+  invalidReleaseData,
+  networkError,
+}
+
+class UpdateCheckResult {
+  final UpdateCheckStatus status;
+  final String message;
+  final UpdateInfo? updateInfo;
+  final String? currentVersion;
+  final String? latestVersion;
+
+  const UpdateCheckResult({
+    required this.status,
+    required this.message,
+    this.updateInfo,
+    this.currentVersion,
+    this.latestVersion,
+  });
+
+  bool get hasUpdate => status == UpdateCheckStatus.updateAvailable;
+
+  bool get isFailure =>
+      status == UpdateCheckStatus.networkError ||
+      status == UpdateCheckStatus.noReleaseFound ||
+      status == UpdateCheckStatus.noInstallableAsset ||
+      status == UpdateCheckStatus.invalidReleaseData;
+}
+
 class UpdateService {
   final Dio _dio;
   final StorageService _storage;
@@ -29,48 +65,78 @@ class UpdateService {
 
   /// 检查是否有新版本
   Future<UpdateInfo?> checkForUpdate() async {
+    final result = await checkForUpdateDetailed();
+    return result.updateInfo;
+  }
+
+  /// 检查更新（返回详细结果）
+  Future<UpdateCheckResult> checkForUpdateDetailed() async {
     try {
       if (!Platform.isAndroid && !Platform.isWindows) {
-        return null;
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.unsupportedPlatform,
+          message: '当前平台暂不支持应用内更新',
+        );
       }
 
       final packageInfo = await getCurrentVersion();
-      final apiUrl =
-          'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
-
-      final response = await _dio.get(
-        apiUrl,
-        options: Options(
-          headers: {
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-        ),
-      );
+      final currentVersion = packageInfo.version;
+      final response = await _fetchLatestRelease();
 
       if (response.statusCode != 200 || response.data == null) {
-        return null;
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.invalidReleaseData,
+          message: '获取更新信息失败：服务返回异常',
+        );
       }
 
       final release = response.data as Map<String, dynamic>;
       final isPrerelease = (release['prerelease'] as bool?) ?? false;
       if (!allowPrerelease && isPrerelease) {
-        return null;
+        return UpdateCheckResult(
+          status: UpdateCheckStatus.upToDate,
+          message: '已是最新稳定版本',
+          currentVersion: currentVersion,
+        );
       }
 
       final tagName = (release['tag_name'] as String?)?.trim() ?? '';
-      final latestVersion = tagName.startsWith('v')
-          ? tagName.substring(1)
-          : tagName;
+      final latestVersion = tagName.replaceFirst(RegExp(r'^[vV]'), '');
 
-      if (latestVersion.isEmpty ||
-          !isNewerVersion(packageInfo.version, latestVersion)) {
-        return null;
+      if (latestVersion.isEmpty) {
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.invalidReleaseData,
+          message: '获取更新信息失败：版本号为空',
+        );
+      }
+
+      final versionCompare = compareVersion(currentVersion, latestVersion);
+      if (versionCompare > 0) {
+        return UpdateCheckResult(
+          status: UpdateCheckStatus.currentVersionHigher,
+          message: '当前版本($currentVersion)高于线上最新版($latestVersion)',
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+        );
+      }
+
+      if (versionCompare == 0) {
+        return UpdateCheckResult(
+          status: UpdateCheckStatus.upToDate,
+          message: '已是最新版本 ($currentVersion)',
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+        );
       }
 
       final ignoredVersion = _storage.getIgnoredVersion();
       if (ignoredVersion != null && ignoredVersion == latestVersion) {
-        return null;
+        return UpdateCheckResult(
+          status: UpdateCheckStatus.ignoredVersion,
+          message: '该版本($latestVersion)已被忽略',
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+        );
       }
 
       final assets = (release['assets'] as List<dynamic>? ?? [])
@@ -79,16 +145,26 @@ class UpdateService {
 
       final packageAsset = _findPlatformAsset(assets);
       if (packageAsset == null) {
-        return null;
+        return UpdateCheckResult(
+          status: UpdateCheckStatus.noInstallableAsset,
+          message: '发现新版本($latestVersion)，但未找到可下载安装包',
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+        );
       }
 
       final downloadUrl =
           (packageAsset['browser_download_url'] as String?)?.trim() ?? '';
       if (downloadUrl.isEmpty) {
-        return null;
+        return UpdateCheckResult(
+          status: UpdateCheckStatus.noInstallableAsset,
+          message: '发现新版本($latestVersion)，但下载地址为空',
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+        );
       }
 
-      return UpdateInfo(
+      final updateInfo = UpdateInfo(
         version: latestVersion,
         versionCode: '',
         downloadUrl: downloadUrl,
@@ -96,22 +172,105 @@ class UpdateService {
         forceUpdate: false,
         fileSize: (packageAsset['size'] as num?)?.toInt() ?? 0,
       );
-    } catch (_) {
-      return null;
+
+      return UpdateCheckResult(
+        status: UpdateCheckStatus.updateAvailable,
+        message: '发现新版本 $latestVersion',
+        updateInfo: updateInfo,
+        currentVersion: currentVersion,
+        latestVersion: latestVersion,
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.networkError,
+          message: '获取更新失败：GitHub 返回 401（认证失败）',
+        );
+      }
+      if (e.response?.statusCode == 404) {
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.noReleaseFound,
+          message: '未找到可用 Release（仅有 Tag 时无法检查更新）',
+        );
+      }
+      return UpdateCheckResult(
+        status: UpdateCheckStatus.networkError,
+        message: '获取更新失败：${e.message ?? '网络异常'}',
+      );
+    } catch (e) {
+      return UpdateCheckResult(
+        status: UpdateCheckStatus.networkError,
+        message: '获取更新失败：$e',
+      );
     }
+  }
+
+  Future<Response<dynamic>> _fetchLatestRelease() async {
+    final apiUrl =
+        'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
+
+    // 使用独立 Dio，避免复用业务 API 的 Authorization 头导致 GitHub 401。
+    final githubDio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'ZCBangumi Update Checker',
+        },
+      ),
+    );
+
+    return githubDio.get(apiUrl);
   }
 
   /// 比较版本号
   bool isNewerVersion(String currentVersion, String newVersion) {
-    final current = currentVersion.split('.').map(int.parse).toList();
-    final newer = newVersion.split('.').map(int.parse).toList();
+    return compareVersion(currentVersion, newVersion) < 0;
+  }
 
-    for (int i = 0; i < current.length && i < newer.length; i++) {
-      if (newer[i] > current[i]) return true;
-      if (newer[i] < current[i]) return false;
+  /// 版本比较：current<target 返回 -1，= 返回 0，> 返回 1。
+  int compareVersion(String currentVersion, String targetVersion) {
+    final current = _parseVersion(currentVersion);
+    final target = _parseVersion(targetVersion);
+
+    if (current.isEmpty || target.isEmpty) {
+      return 0;
     }
 
-    return newer.length > current.length;
+    final maxLength = current.length > target.length
+        ? current.length
+        : target.length;
+
+    for (int i = 0; i < maxLength; i++) {
+      final currentPart = i < current.length ? current[i] : 0;
+      final targetPart = i < target.length ? target[i] : 0;
+
+      if (currentPart < targetPart) return -1;
+      if (currentPart > targetPart) return 1;
+    }
+
+    return 0;
+  }
+
+  List<int> _parseVersion(String version) {
+    final normalized = version.trim().replaceFirst(RegExp(r'^[vV]'), '');
+    if (normalized.isEmpty) return const [];
+
+    final parts = normalized.split('.');
+    final result = <int>[];
+
+    for (final part in parts) {
+      final match = RegExp(r'\d+').firstMatch(part);
+      if (match == null) {
+        result.add(0);
+        continue;
+      }
+      result.add(int.tryParse(match.group(0)!) ?? 0);
+    }
+
+    return result;
   }
 
   /// 请求安装权限
@@ -128,14 +287,22 @@ class UpdateService {
 
   Map<String, dynamic>? _findPlatformAsset(List<Map<String, dynamic>> assets) {
     if (Platform.isAndroid) {
-      for (final asset in assets) {
+      final apks = assets.where((asset) {
         final name = (asset['name'] as String?)?.toLowerCase() ?? '';
-        if (name.endsWith('.apk') &&
-            name.contains(apkAssetNameKeyword.toLowerCase())) {
+        return name.endsWith('.apk');
+      }).toList();
+
+      if (apks.isEmpty) return null;
+
+      for (final asset in apks) {
+        final name = (asset['name'] as String?)?.toLowerCase() ?? '';
+        if (name.contains(apkAssetNameKeyword.toLowerCase())) {
           return asset;
         }
       }
-      return null;
+
+      // 未命中关键词时兜底使用第一个 APK，避免误判无更新。
+      return apks.first;
     }
 
     if (Platform.isWindows) {

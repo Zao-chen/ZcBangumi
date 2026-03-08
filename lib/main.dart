@@ -59,9 +59,7 @@ class ZCBangumiApp extends StatelessWidget {
           create: (_) => AppStateProvider(storage: storage),
         ),
         ChangeNotifierProvider(
-          create: (_) =>
-              AuthProvider(api: apiClient, storage: storage)
-                ..tryRestoreSession(),
+          create: (_) => AuthProvider(api: apiClient, storage: storage),
         ),
         ChangeNotifierProvider(
           create: (_) => CollectionProvider(api: apiClient, storage: storage),
@@ -115,10 +113,32 @@ class _AppShellState extends State<_AppShell> {
   @override
   void initState() {
     super.initState();
-    // 应用启动时自动检查更新
+    // 后台初始化：恢复登录状态 + 检查更新（不阻塞 UI）
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkForUpdateOnStartup();
+      _backgroundInit();
     });
+  }
+
+  /// 后台初始化（无感执行）
+  Future<void> _backgroundInit() async {
+    try {
+      // 0. 预加载所有缓存数据（立刻替换骨架屏）
+      if (mounted) {
+        final collectionProvider = context.read<CollectionProvider>();
+        collectionProvider.preloadCachesIfAvailable();
+      }
+
+      // 1. 尝试恢复登录状态
+      final authProvider = context.read<AuthProvider>();
+      await authProvider.tryRestoreSession();
+
+      // 2. 检查更新
+      if (mounted) {
+        await _checkForUpdateOnStartup();
+      }
+    } catch (e) {
+      debugPrint('后台初始化失败: $e');
+    }
   }
 
   /// 启动时检查更新

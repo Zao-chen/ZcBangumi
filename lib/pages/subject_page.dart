@@ -331,8 +331,7 @@ class _SubjectPageState extends State<SubjectPage>
           _userCollection = collections.data[index];
         });
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _setEpisodeStatus(int episodeId, int newType) async {
@@ -526,13 +525,16 @@ class _SubjectPageState extends State<SubjectPage>
                     decoration: BoxDecoration(
                       color: Theme.of(context).scaffoldBackgroundColor,
                       border: Border(
-                        bottom:
-                            BorderSide(color: Theme.of(context).dividerColor),
+                        bottom: BorderSide(
+                          color: Theme.of(context).dividerColor,
+                        ),
                       ),
                     ),
                     child: TabBar(
                       controller: _tabController,
-                      tabs: _tabItems.map((tab) => Tab(text: tab.label)).toList(),
+                      tabs: _tabItems
+                          .map((tab) => Tab(text: tab.label))
+                          .toList(),
                     ),
                   ),
                 ),
@@ -629,9 +631,9 @@ class _SubjectPageState extends State<SubjectPage>
                       await _loadUserCollection();
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('更新收藏状态失败: $e')),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('更新收藏状态失败: $e')));
                       }
                     }
                   },
@@ -990,7 +992,10 @@ class _SubjectPageState extends State<SubjectPage>
                         ),
                         child: Text(
                           _getSubjectTypeLabel(related.type),
-                          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     ],
@@ -1008,31 +1013,30 @@ class _SubjectPageState extends State<SubjectPage>
     if (event is! PointerScrollEvent) {
       return;
     }
-    GestureBinding.instance.pointerSignalResolver.register(
-      event,
-      (PointerSignalEvent signal) {
-        final scrollEvent = signal as PointerScrollEvent;
-        final currentScale = _mindMapTransformController.value
-            .getMaxScaleOnAxis();
-        final targetScale = (currentScale *
-                math.exp(-scrollEvent.scrollDelta.dy / 220))
-            .clamp(_mindMapMinScale, _mindMapMaxScale)
-            .toDouble();
-        final scaleChange = targetScale / currentScale;
-        if ((scaleChange - 1).abs() < 0.0001) {
-          return;
-        }
+    GestureBinding.instance.pointerSignalResolver.register(event, (
+      PointerSignalEvent signal,
+    ) {
+      final scrollEvent = signal as PointerScrollEvent;
+      final currentScale = _mindMapTransformController.value
+          .getMaxScaleOnAxis();
+      final targetScale =
+          (currentScale * math.exp(-scrollEvent.scrollDelta.dy / 220))
+              .clamp(_mindMapMinScale, _mindMapMaxScale)
+              .toDouble();
+      final scaleChange = targetScale / currentScale;
+      if ((scaleChange - 1).abs() < 0.0001) {
+        return;
+      }
 
-        final focalScenePoint = _mindMapTransformController.toScene(
-          scrollEvent.localPosition,
-        );
-        final nextMatrix = Matrix4.copy(_mindMapTransformController.value)
-          ..translate(focalScenePoint.dx, focalScenePoint.dy)
-          ..scale(scaleChange)
-          ..translate(-focalScenePoint.dx, -focalScenePoint.dy);
-        _mindMapTransformController.value = nextMatrix;
-      },
-    );
+      final focalScenePoint = _mindMapTransformController.toScene(
+        scrollEvent.localPosition,
+      );
+      final nextMatrix = Matrix4.copy(_mindMapTransformController.value)
+        ..translate(focalScenePoint.dx, focalScenePoint.dy)
+        ..scale(scaleChange)
+        ..translate(-focalScenePoint.dx, -focalScenePoint.dy);
+      _mindMapTransformController.value = nextMatrix;
+    });
   }
 
   bool _isIdentityMatrix(Matrix4 matrix) {
@@ -1062,14 +1066,20 @@ class _SubjectPageState extends State<SubjectPage>
       return;
     }
 
-    final availableWidth =
-        math.max(1.0, viewportSize.width - _mindMapFitPadding * 2);
-    final availableHeight =
-        math.max(1.0, viewportSize.height - _mindMapFitPadding * 2);
+    final availableWidth = math.max(
+      1.0,
+      viewportSize.width - _mindMapFitPadding * 2,
+    );
+    final availableHeight = math.max(
+      1.0,
+      viewportSize.height - _mindMapFitPadding * 2,
+    );
     final scaleX = availableWidth / layout.width;
     final scaleY = availableHeight / layout.height;
-    final fitScale =
-        math.min(scaleX, scaleY).clamp(0.1, _mindMapMaxScale).toDouble();
+    final fitScale = math
+        .min(scaleX, scaleY)
+        .clamp(0.1, _mindMapMaxScale)
+        .toDouble();
     final tx = (viewportSize.width - layout.width * fitScale) / 2;
     final ty = (viewportSize.height - layout.height * fitScale) / 2;
 
@@ -1312,16 +1322,17 @@ class _SubjectPageState extends State<SubjectPage>
     final hasKnownChildren = cachedChildren?.isNotEmpty == true;
     final knownNoChildren = cachedChildren != null && cachedChildren.isEmpty;
     final showExpandControl = !knownNoChildren || isExpanded;
-    final canExpandOrCollapse = isExpanded || cachedChildren == null || hasKnownChildren;
+    final canExpandOrCollapse =
+        isExpanded || cachedChildren == null || hasKnownChildren;
     final thumbWidth = isChildNode ? 26.0 : 34.0;
     final thumbHeight = isChildNode ? 36.0 : 46.0;
     final titleStyle = isChildNode
         ? Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)
-        : Theme.of(context).textTheme.labelLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          );
+        : Theme.of(
+            context,
+          ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600);
     final imageUrl = related.images['small'] ?? related.images['grid'] ?? '';
     return Material(
       color: Colors.transparent,
@@ -1366,7 +1377,10 @@ class _SubjectPageState extends State<SubjectPage>
                           width: thumbWidth,
                           height: thumbHeight,
                           color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.image_not_supported, size: 16),
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            size: 16,
+                          ),
                         ),
                       )
                     : Container(
@@ -1442,7 +1456,9 @@ class _SubjectPageState extends State<SubjectPage>
               : Text(
                   isExpanded ? '-' : '+',
                   style: TextStyle(
-                    color: canExpand ? colorScheme.primary : colorScheme.outline,
+                    color: canExpand
+                        ? colorScheme.primary
+                        : colorScheme.outline,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     height: 1.0,
@@ -1509,7 +1525,8 @@ class _SubjectPageState extends State<SubjectPage>
       if (!_expandedRelatedNodes.contains(subject.id)) {
         return const [];
       }
-      final children = _expandedRelatedChildren[subject.id] ?? const <RelatedSubject>[];
+      final children =
+          _expandedRelatedChildren[subject.id] ?? const <RelatedSubject>[];
       if (children.isEmpty) {
         return const [];
       }
@@ -1606,7 +1623,10 @@ class _SubjectPageState extends State<SubjectPage>
           }
         }
         final groupWidth =
-            subjectToRelationGap + relationW + relationToSubjectGap + maxChildWidth;
+            subjectToRelationGap +
+            relationW +
+            relationToSubjectGap +
+            maxChildWidth;
         if (groupWidth > maxGroupWidth) {
           maxGroupWidth = groupWidth;
         }
@@ -1628,7 +1648,9 @@ class _SubjectPageState extends State<SubjectPage>
       return total;
     }
 
-    double sideContentHeight(List<MapEntry<String, List<RelatedSubject>>> side) {
+    double sideContentHeight(
+      List<MapEntry<String, List<RelatedSubject>>> side,
+    ) {
       if (side.isEmpty) {
         return centerH;
       }
@@ -1918,8 +1940,11 @@ class _SubjectPageState extends State<SubjectPage>
           for (var i = 0; i < subjects.length; i++) {
             final subject = subjects[i];
             final blockTop = cursorY;
-            final subjectTreeH =
-                subtreeHeightFor(subject, depth: 1, visited: <int>{});
+            final subjectTreeH = subtreeHeightFor(
+              subject,
+              depth: 1,
+              visited: <int>{},
+            );
             final subjectTop = blockTop + (subjectTreeH - subjectH) / 2;
             final subjectNode = _MindMapNode(
               kind: _MindMapNodeKind.subject,
@@ -1977,9 +2002,9 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   void _openSubjectPage(int subjectId) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)),
+    );
   }
 
   Widget _buildHeaderCard(ColorScheme colorScheme, {bool isLandscape = false}) {
@@ -2373,13 +2398,11 @@ class _MindMapEdge {
   final Rect fromRect;
   final Rect toRect;
   final bool highlight;
-  final bool vertical;
 
   const _MindMapEdge({
     required this.fromRect,
     required this.toRect,
     required this.highlight,
-    this.vertical = false,
   });
 }
 
@@ -2423,28 +2446,19 @@ class _MindMapLinePainter extends CustomPainter {
       late final Offset start;
       late final Offset end;
       late final Path path;
-      if (edge.vertical) {
-        start = Offset(edge.fromRect.center.dx, edge.fromRect.bottom);
-        end = Offset(edge.toRect.center.dx, edge.toRect.top);
-        final midY = (start.dy + end.dy) / 2;
-        path = Path()
-          ..moveTo(start.dx, start.dy)
-          ..cubicTo(start.dx, midY, end.dx, midY, end.dx, end.dy);
-      } else {
-        final startOnRight = edge.fromRect.center.dx <= edge.toRect.center.dx;
-        start = Offset(
-          startOnRight ? edge.fromRect.right : edge.fromRect.left,
-          edge.fromRect.center.dy,
-        );
-        end = Offset(
-          startOnRight ? edge.toRect.left : edge.toRect.right,
-          edge.toRect.center.dy,
-        );
-        final midX = (start.dx + end.dx) / 2;
-        path = Path()
-          ..moveTo(start.dx, start.dy)
-          ..cubicTo(midX, start.dy, midX, end.dy, end.dx, end.dy);
-      }
+      final startOnRight = edge.fromRect.center.dx <= edge.toRect.center.dx;
+      start = Offset(
+        startOnRight ? edge.fromRect.right : edge.fromRect.left,
+        edge.fromRect.center.dy,
+      );
+      end = Offset(
+        startOnRight ? edge.toRect.left : edge.toRect.right,
+        edge.toRect.center.dy,
+      );
+      final midX = (start.dx + end.dx) / 2;
+      path = Path()
+        ..moveTo(start.dx, start.dy)
+        ..cubicTo(midX, start.dy, midX, end.dy, end.dx, end.dy);
       canvas.drawPath(path, edge.highlight ? highlightPaint : normalPaint);
     }
   }
@@ -2489,4 +2503,3 @@ class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
     return oldDelegate.child != child;
   }
 }
-

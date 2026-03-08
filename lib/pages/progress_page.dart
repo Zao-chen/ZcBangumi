@@ -69,6 +69,23 @@ class _ProgressPageState extends State<ProgressPage>
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
+    // 初始化中显示骨架屏，避免显示登陆提示
+    final isInitializing = !auth.initialized;
+    final bodyWidget = isInitializing
+        ? (isLandscape
+              ? _buildLandscapeInitializingLayout()
+              : _buildProgressPageSkeletonList())
+        : auth.isLoggedIn
+        ? isLandscape
+              ? _buildLandscapeLayout()
+              : TabBarView(
+                  controller: _tabController,
+                  children: _tabs
+                      .map((t) => _ProgressTabView(subjectType: t.type))
+                      .toList(),
+                )
+        : _buildNotLoggedIn();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('进度'),
@@ -80,25 +97,17 @@ class _ProgressPageState extends State<ProgressPage>
             onPressed: () => _showSearchPage(context),
           ),
         ],
-        bottom: isLandscape
-            ? null
-            : TabBar(
+        // TabBar 属于固定元素，初始化阶段也直接显示
+        bottom: (!isLandscape)
+            ? TabBar(
                 controller: _tabController,
                 tabs: _tabs.map((t) => Tab(text: t.label)).toList(),
                 labelPadding: const EdgeInsets.symmetric(horizontal: 8),
                 indicatorSize: TabBarIndicatorSize.label,
-              ),
+              )
+            : null,
       ),
-      body: auth.isLoggedIn
-          ? isLandscape
-                ? _buildLandscapeLayout()
-                : TabBarView(
-                    controller: _tabController,
-                    children: _tabs
-                        .map((t) => _ProgressTabView(subjectType: t.type))
-                        .toList(),
-                  )
-          : _buildNotLoggedIn(),
+      body: bodyWidget,
     );
   }
 
@@ -135,6 +144,33 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
+  /// 横屏初始化布局：固定 NavigationRail 保持不变，仅内容区骨架化
+  Widget _buildLandscapeInitializingLayout() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        NavigationRail(
+          selectedIndex: _tabController.index,
+          onDestinationSelected: _tabController.animateTo,
+          backgroundColor: colorScheme.surface,
+          indicatorColor: colorScheme.primaryContainer,
+          labelType: NavigationRailLabelType.all,
+          destinations: _tabs
+              .map(
+                (tab) => NavigationRailDestination(
+                  icon: Icon(tab.icon),
+                  label: Text(tab.label),
+                ),
+              )
+              .toList(),
+        ),
+        const VerticalDivider(thickness: 1, width: 1),
+        Expanded(child: _buildProgressPageSkeletonList()),
+      ],
+    );
+  }
+
   Widget _buildNotLoggedIn() {
     return Center(
       child: Column(
@@ -148,6 +184,82 @@ class _ProgressPageState extends State<ProgressPage>
           ),
         ],
       ),
+    );
+  }
+
+  /// ProgressPage 初始化时的骨架屏（顶层页面级别）
+  Widget _buildProgressPageSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 3, // 显示3个骨架项
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 左侧图片骨架
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 56,
+                    height: 80,
+                    color: colorScheme.surfaceContainerHighest,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 右侧信息骨架
+                Expanded(
+                  child: SizedBox(
+                    height: 80,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 标题行
+                        Container(
+                          width: 150,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // 副标题行
+                        Container(
+                          width: 100,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const Spacer(),
+                        // 底部信息行
+                        Container(
+                          width: 80,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -174,6 +286,9 @@ class _ProgressTabView extends StatefulWidget {
 
 class _ProgressTabViewState extends State<_ProgressTabView>
     with AutomaticKeepAliveClientMixin {
+  String? _lastUsername;
+  AuthProvider? _lastAuthProvider;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -183,13 +298,57 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.read<AuthProvider>();
+
+    // 监听登陆状态变化，如果用户刚登陆就重新加载
+    if (auth.isLoggedIn &&
+        auth.username != null &&
+        _lastUsername != auth.username) {
+      _lastUsername = auth.username;
+      _loadData();
+    }
+
+    // 监听初始化完成，立刻加载最新数据
+    if (auth.initialized && !identical(_lastAuthProvider, auth)) {
+      _lastAuthProvider = auth;
+      if (auth.isLoggedIn && auth.username != null) {
+        _loadDataIfNeeded();
+      }
+    }
+  }
+
   void _loadData() {
     final auth = context.read<AuthProvider>();
+    final collectionProvider = context.read<CollectionProvider>();
+
+    // 已登陆：从API加载（自动会先尝试缓存）
     if (auth.isLoggedIn && auth.username != null) {
-      context.read<CollectionProvider>().loadDoingCollections(
+      collectionProvider.loadDoingCollections(
         username: auth.username!,
         subjectType: widget.subjectType,
       );
+    }
+  }
+
+  /// 仅在需要时加载（初始化完成但还没加载过）
+  void _loadDataIfNeeded() {
+    final auth = context.read<AuthProvider>();
+    final collectionProvider = context.read<CollectionProvider>();
+
+    if (auth.isLoggedIn && auth.username != null) {
+      final collections = collectionProvider.getCollections(widget.subjectType);
+      final isLoading = collectionProvider.isLoading(widget.subjectType);
+
+      // 如果还没加载过（集合为空且不在加载中），立刻加载
+      if (collections.isEmpty && !isLoading) {
+        collectionProvider.loadDoingCollections(
+          username: auth.username!,
+          subjectType: widget.subjectType,
+        );
+      }
     }
   }
 
@@ -201,6 +360,15 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     final collections = provider.getCollections(widget.subjectType);
     final isLoading = provider.isLoading(widget.subjectType);
     final error = provider.getError(widget.subjectType);
+
+    // 逻辑：有缓存数据 -> 显示缓存；无缓存且初始化中 -> 显示骨架屏
+    final hasCache = collections.isNotEmpty;
+    final isInitializing = !auth.initialized;
+
+    // 显示骨架屏的条件：初始化中 且 无缓存
+    if (isInitializing && !hasCache) {
+      return _buildProgressSkeletonList();
+    }
 
     if (isLoading && collections.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -227,6 +395,24 @@ class _ProgressTabViewState extends State<_ProgressTabView>
         BgmConst.collectionDoing,
         subjectType: widget.subjectType,
       );
+
+      // 已初始化但未登陆 -> 显示登陆提示
+      if (!auth.isLoggedIn) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline, size: 64, color: Colors.grey[300]),
+              const SizedBox(height: 12),
+              Text(
+                '登录后查看进度',
+                style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+        );
+      }
+
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -244,7 +430,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
 
     return RefreshIndicator(
       onRefresh: () async {
-        if (auth.username != null) {
+        if (auth.isLoggedIn && auth.username != null) {
           await provider.loadDoingCollections(
             username: auth.username!,
             subjectType: widget.subjectType,
@@ -259,6 +445,82 @@ class _ProgressTabViewState extends State<_ProgressTabView>
           return _CollectionProgressCard(collection: collections[index]);
         },
       ),
+    );
+  }
+
+  /// 进度列表的骨架屏
+  Widget _buildProgressSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 3, // 显示3个骨架项
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 左侧图片骨架
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 56,
+                    height: 80,
+                    color: colorScheme.surfaceContainerHighest,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // 右侧信息骨架
+                Expanded(
+                  child: SizedBox(
+                    height: 80,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 标题行
+                        Container(
+                          width: 150,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // 副标题行
+                        Container(
+                          width: 100,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const Spacer(),
+                        // 底部信息行
+                        Container(
+                          width: 80,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -379,8 +641,9 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                                 widget.collection.subjectType ==
                                 BgmConst.subjectGame,
                             bookCurrentProgress: widget.collection.epStatus,
-                            bookMaxProgress:
-                                (subject?.eps ?? 0) > 0 ? subject!.eps : null,
+                            bookMaxProgress: (subject?.eps ?? 0) > 0
+                                ? subject!.eps
+                                : null,
                             collectionSubjectType:
                                 widget.collection.subjectType,
                             collectionType: widget.collection.type,

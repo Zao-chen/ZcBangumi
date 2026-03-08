@@ -21,6 +21,8 @@ class UpdateProvider extends ChangeNotifier {
   UpdateState _state = UpdateState.idle;
   UpdateInfo? _updateInfo;
   String? _errorMessage;
+  String? _lastCheckMessage;
+  bool _lastCheckIsError = false;
   double _downloadProgress = 0.0;
   CancelToken? _cancelToken;
 
@@ -33,6 +35,8 @@ class UpdateProvider extends ChangeNotifier {
   UpdateState get state => _state;
   UpdateInfo? get updateInfo => _updateInfo;
   String? get errorMessage => _errorMessage;
+  String? get lastCheckMessage => _lastCheckMessage;
+  bool get lastCheckIsError => _lastCheckIsError;
   double get downloadProgress => _downloadProgress;
   bool get isDownloading => _state == UpdateState.downloading;
 
@@ -41,24 +45,40 @@ class UpdateProvider extends ChangeNotifier {
     if (_state == UpdateState.checking) return;
 
     _state = UpdateState.checking;
+    _updateInfo = null;
     _errorMessage = null;
+    _lastCheckMessage = null;
+    _lastCheckIsError = false;
     if (!silent) notifyListeners();
 
     try {
-      final updateInfo = await _updateService.checkForUpdate();
+      final result = await _updateService.checkForUpdateDetailed();
 
-      if (updateInfo != null) {
-        _updateInfo = updateInfo;
+      if (result.hasUpdate && result.updateInfo != null) {
+        _updateInfo = result.updateInfo;
         _state = UpdateState.available;
+        _lastCheckMessage = result.message;
+        _lastCheckIsError = false;
 
         // 保存最后检查时间
         await _storage.setLastUpdateCheckTime(DateTime.now());
       } else {
         _state = UpdateState.idle;
+
+        // 静默检查只在有更新时处理 UI 信息，避免启动时显示错误提示。
+        if (!silent) {
+          _lastCheckMessage = result.message;
+          _lastCheckIsError = result.isFailure;
+          if (result.isFailure) {
+            _errorMessage = result.message;
+          }
+        }
       }
     } catch (e) {
       _state = UpdateState.error;
       _errorMessage = '检查更新失败: $e';
+      _lastCheckMessage = _errorMessage;
+      _lastCheckIsError = true;
     }
 
     notifyListeners();
@@ -71,6 +91,8 @@ class UpdateProvider extends ChangeNotifier {
     _state = UpdateState.downloading;
     _downloadProgress = 0.0;
     _errorMessage = null;
+    _lastCheckMessage = null;
+    _lastCheckIsError = false;
     _cancelToken = CancelToken();
     notifyListeners();
 
@@ -170,6 +192,8 @@ class UpdateProvider extends ChangeNotifier {
     _state = UpdateState.idle;
     _updateInfo = null;
     _errorMessage = null;
+    _lastCheckMessage = null;
+    _lastCheckIsError = false;
     _downloadProgress = 0.0;
     notifyListeners();
   }

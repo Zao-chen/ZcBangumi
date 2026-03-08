@@ -192,6 +192,21 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final appState = context.watch<AppStateProvider>();
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
+    // 初始化中显示骨架屏
+    final isInitializing = !auth.initialized;
+    final bodyWidget = isInitializing
+        ? _buildProfileInitializingContent(
+            selectedSubjectType: appState.profileSubjectType,
+            selectedCollectionType: appState.profileCollectionType,
+            isLandscape: isLandscape,
+          )
+        : auth.isLoggedIn
+        ? _ProfileContent(user: auth.user!)
+        : const _LoginView();
 
     return Scaffold(
       appBar: AppBar(
@@ -209,10 +224,321 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
-      body: auth.isLoggedIn
-          ? _ProfileContent(user: auth.user!)
-          : const _LoginView(),
+      body: bodyWidget,
     );
+  }
+
+  /// 我的页面初始化布局：固定元素保持真实位置，仅列表内容骨架化
+  Widget _buildProfileInitializingContent({
+    required int selectedSubjectType,
+    required int selectedCollectionType,
+    required bool isLandscape,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (!isLandscape) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildInitializingUserCard(colorScheme),
+          const SizedBox(height: 20),
+          Text(
+            '我的收藏',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildInitializingSubjectTypeBar(selectedSubjectType),
+          _buildInitializingCollectionTypeBar(
+            selectedSubjectType,
+            selectedCollectionType,
+          ),
+          const SizedBox(height: 8),
+          ..._buildSkeletonItems(colorScheme),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInitializingUserCard(colorScheme),
+              const SizedBox(height: 20),
+              Text(
+                '我的收藏',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              SafeArea(
+                top: false,
+                right: false,
+                child: NavigationRail(
+                  selectedIndex: _initializingSelectedSubjectIndex(
+                    selectedSubjectType,
+                  ),
+                  onDestinationSelected: (_) {},
+                  labelType: NavigationRailLabelType.all,
+                  backgroundColor: colorScheme.surface,
+                  indicatorColor: colorScheme.primaryContainer,
+                  destinations: _initializingSubjectTypes
+                      .map(
+                        (t) => NavigationRailDestination(
+                          icon: Icon(t.icon),
+                          label: Text(t.label),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              const VerticalDivider(thickness: 1, width: 1),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    _buildInitializingCollectionTypeBar(
+                      selectedSubjectType,
+                      selectedCollectionType,
+                    ),
+                    const SizedBox(height: 8),
+                    ..._buildSkeletonItems(colorScheme),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static const _initializingSubjectTypes = [
+    (type: BgmConst.subjectAnime, label: '动画', icon: Icons.movie_outlined),
+    (
+      type: BgmConst.subjectGame,
+      label: '游戏',
+      icon: Icons.sports_esports_outlined,
+    ),
+    (type: BgmConst.subjectBook, label: '书籍', icon: Icons.menu_book_outlined),
+    (type: BgmConst.subjectMusic, label: '音乐', icon: Icons.music_note_outlined),
+    (type: BgmConst.subjectReal, label: '三次元', icon: Icons.live_tv_outlined),
+  ];
+
+  Widget _buildInitializingUserCard(ColorScheme colorScheme) {
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 80,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _initializingSelectedSubjectIndex(int selectedSubjectType) {
+    final index = _initializingSubjectTypes.indexWhere(
+      (t) => t.type == selectedSubjectType,
+    );
+    return index >= 0 ? index : 0;
+  }
+
+  Widget _buildInitializingSubjectTypeBar(int selectedSubjectType) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+        itemCount: _initializingSubjectTypes.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (context, index) {
+          final t = _initializingSubjectTypes[index];
+          return ChoiceChip(
+            label: Text(t.label),
+            avatar: Icon(t.icon, size: 16),
+            selected: t.type == selectedSubjectType,
+            onSelected: (_) {},
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildInitializingCollectionTypeBar(
+    int selectedSubjectType,
+    int selectedCollectionType,
+  ) {
+    const collectionTypes = [
+      BgmConst.collectionWish,
+      BgmConst.collectionOnHold,
+      BgmConst.collectionDoing,
+      BgmConst.collectionDone,
+      BgmConst.collectionDropped,
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 0),
+                itemCount: collectionTypes.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                itemBuilder: (context, index) {
+                  final ct = collectionTypes[index];
+                  return FilterChip(
+                    label: Text(
+                      BgmConst.collectionLabel(
+                        ct,
+                        subjectType: selectedSubjectType,
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    selected: ct == selectedCollectionType,
+                    onSelected: (_) {},
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.sort, size: 20),
+        ],
+      ),
+    );
+  }
+
+  /// 生成骨架屏的条目列表
+  List<Widget> _buildSkeletonItems(ColorScheme colorScheme) {
+    return List.generate(3, (index) {
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        elevation: 0,
+        color: colorScheme.surfaceContainerLow,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 图片骨架
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  width: 56,
+                  height: 80,
+                  color: colorScheme.surfaceContainerHighest,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 信息骨架
+              Expanded(
+                child: SizedBox(
+                  height: 80,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 150,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 100,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        width: 80,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 }
 

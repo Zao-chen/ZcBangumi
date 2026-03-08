@@ -423,9 +423,17 @@ class _TimelinePageState extends State<TimelinePage> {
     required bool requireLogin,
     String emptyText = '暂无动态',
   }) {
+    // 需要登陆的页面，检查初始化状态
     if (requireLogin) {
       final auth = context.watch<AuthProvider>();
-      if (!auth.isLoggedIn) {
+
+      // 还在初始化中 -> 显示骨架屏
+      if (!auth.initialized) {
+        return _buildTimelineSkeletonList();
+      }
+
+      // 已初始化但未登陆，且无缓存数据 -> 显示登陆提示
+      if (!auth.isLoggedIn && items.isEmpty) {
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -433,7 +441,7 @@ class _TimelinePageState extends State<TimelinePage> {
               Icon(Icons.person_outline, size: 64, color: Colors.grey[300]),
               const SizedBox(height: 12),
               Text(
-                '请先登录以查看动态',
+                '登录后查看动态',
                 style: TextStyle(fontSize: 16, color: Colors.grey[500]),
               ),
             ],
@@ -496,9 +504,74 @@ class _TimelinePageState extends State<TimelinePage> {
       ),
     );
   }
-}
 
-// ==================== 动态信息流卡片 ====================
+  /// 动态列表的骨架屏
+  Widget _buildTimelineSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 3, // 显示3个骨架项
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 左侧头像骨架
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 右侧内容骨架
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 用户名行
+                    Container(
+                      width: 120,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 动作描述行
+                    Container(
+                      width: 200,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 时间行
+                    Container(
+                      width: 80,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
 
 /// 单条"谁做了什么"动态卡片
 class _TimelineFeedItem extends StatelessWidget {

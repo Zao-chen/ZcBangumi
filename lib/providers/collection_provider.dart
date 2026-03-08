@@ -22,6 +22,35 @@ class CollectionProvider extends ChangeNotifier {
 
   CollectionProvider({required this.api, required this.storage});
 
+  /// 预加载缓存数据（应用启动时调用）
+  void preloadCachesIfAvailable() {
+    // 从缓存读取所有已保存的收藏数据
+    const types = [
+      BgmConst.subjectAnime,
+      BgmConst.subjectGame,
+      BgmConst.subjectBook,
+    ];
+
+    // 获取上次保存的用户名
+    final savedUsername = storage.username;
+    if (savedUsername == null || savedUsername.isEmpty) return;
+
+    for (final type in types) {
+      final cacheKey = 'collections_${type}_$savedUsername';
+      final cached = storage.getCache(cacheKey);
+      if (cached is List && cached.isNotEmpty) {
+        try {
+          _collections[type] = cached
+              .map((e) => UserCollection.fromJson(e as Map<String, dynamic>))
+              .toList();
+        } catch (_) {}
+      }
+    }
+
+    // 预加载完成后需要通知 UI 更新
+    notifyListeners();
+  }
+
   /// 获取某类型的收藏列表
   List<UserCollection> getCollections(int subjectType) =>
       _collections[subjectType] ?? [];
@@ -52,8 +81,7 @@ class CollectionProvider extends ChangeNotifier {
       if (cached is List && cached.isNotEmpty) {
         try {
           _collections[subjectType] = cached
-              .map((e) =>
-                  UserCollection.fromJson(e as Map<String, dynamic>))
+              .map((e) => UserCollection.fromJson(e as Map<String, dynamic>))
               .toList();
         } catch (_) {}
       }
@@ -75,8 +103,7 @@ class CollectionProvider extends ChangeNotifier {
       _totalMap[subjectType] = result.total;
       _errorMap[subjectType] = null;
       // 写入缓存
-      storage.setCache(
-          cacheKey, result.data.map((e) => e.toJson()).toList());
+      storage.setCache(cacheKey, result.data.map((e) => e.toJson()).toList());
     } catch (e) {
       // 有缓存时静默失败
       if ((_collections[subjectType] ?? []).isEmpty) {
@@ -99,24 +126,23 @@ class CollectionProvider extends ChangeNotifier {
       if (cached is List && cached.isNotEmpty) {
         try {
           _episodeProgress[subjectId] = cached
-              .map((e) =>
-                  UserEpisodeCollection.fromJson(e as Map<String, dynamic>))
+              .map(
+                (e) =>
+                    UserEpisodeCollection.fromJson(e as Map<String, dynamic>),
+              )
               .toList();
         } catch (_) {}
       }
     }
 
-    _episodeLoadingMap[subjectId] =
-        (_episodeProgress[subjectId] ?? []).isEmpty;
+    _episodeLoadingMap[subjectId] = (_episodeProgress[subjectId] ?? []).isEmpty;
     notifyListeners();
 
     try {
-      final result =
-          await api.getUserEpisodeCollections(subjectId: subjectId);
+      final result = await api.getUserEpisodeCollections(subjectId: subjectId);
       _episodeProgress[subjectId] = result.data;
       // 写入缓存
-      storage.setCache(
-          cacheKey, result.data.map((e) => e.toJson()).toList());
+      storage.setCache(cacheKey, result.data.map((e) => e.toJson()).toList());
     } catch (e) {
       debugPrint('加载章节进度失败: $e');
     } finally {
@@ -153,10 +179,7 @@ class CollectionProvider extends ChangeNotifier {
           type: BgmConst.episodeNotCollected,
         );
       } else {
-        await api.putEpisodeCollection(
-          episodeId: episodeId,
-          type: newType,
-        );
+        await api.putEpisodeCollection(episodeId: episodeId, type: newType);
       }
       // 更新缓存
       _saveEpisodeCache(subjectId);
@@ -182,10 +205,12 @@ class CollectionProvider extends ChangeNotifier {
     if (episodes == null) return;
 
     final toWatch = episodes
-        .where((e) =>
-            e.episode.type == 0 && // 只处理本篇
-            e.episode.sort <= episodeSort &&
-            e.type != BgmConst.episodeDone)
+        .where(
+          (e) =>
+              e.episode.type == 0 && // 只处理本篇
+              e.episode.sort <= episodeSort &&
+              e.type != BgmConst.episodeDone,
+        )
         .map((e) => e.episode.id)
         .toList();
 
@@ -303,7 +328,9 @@ class CollectionProvider extends ChangeNotifier {
     final eps = _episodeProgress[subjectId];
     if (eps != null) {
       storage.setCache(
-          'episodes_$subjectId', eps.map((e) => e.toJson()).toList());
+        'episodes_$subjectId',
+        eps.map((e) => e.toJson()).toList(),
+      );
     }
   }
 
