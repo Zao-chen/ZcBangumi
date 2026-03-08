@@ -25,12 +25,27 @@ class SubjectImages {
   }
 
   Map<String, dynamic> toJson() => {
-        'large': large,
-        'common': common,
-        'medium': medium,
-        'small': small,
-        'grid': grid,
-      };
+    'large': large,
+    'common': common,
+    'medium': medium,
+    'small': small,
+    'grid': grid,
+  };
+}
+
+/// 计算收藏总数：优先使用 collection_total 字段，否则从 collection 对象计算
+int _parseCollectionTotal(Map<String, dynamic> json) {
+  final collectionTotal = (json['collection_total'] as int?) ?? 0;
+  if (collectionTotal > 0 || json['collection'] == null) {
+    return collectionTotal;
+  }
+
+  final collection = json['collection'] as Map<String, dynamic>;
+  return ((collection['wish'] as int?) ?? 0) +
+      ((collection['collect'] as int?) ?? 0) +
+      ((collection['doing'] as int?) ?? 0) +
+      ((collection['on_hold'] as int?) ?? 0) +
+      ((collection['dropped'] as int?) ?? 0);
 }
 
 /// 精简条目（用于收藏列表）
@@ -76,25 +91,25 @@ class SlimSubject {
           : null,
       eps: (json['eps'] as int?) ?? 0,
       volumes: (json['volumes'] as int?) ?? 0,
-      collectionTotal: (json['collection_total'] as int?) ?? 0,
+      collectionTotal: _parseCollectionTotal(json),
       score: (json['score'] as num?)?.toDouble() ?? 0.0,
       rank: (json['rank'] as int?) ?? 0,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'name': name,
-        'name_cn': nameCn,
-        'short_summary': shortSummary,
-        'images': images?.toJson(),
-        'eps': eps,
-        'volumes': volumes,
-        'collection_total': collectionTotal,
-        'score': score,
-        'rank': rank,
-      };
+    'id': id,
+    'type': type,
+    'name': name,
+    'name_cn': nameCn,
+    'short_summary': shortSummary,
+    'images': images?.toJson(),
+    'eps': eps,
+    'volumes': volumes,
+    'collection_total': collectionTotal,
+    'score': score,
+    'rank': rank,
+  };
 }
 
 /// 完整条目信息（用于详情页）
@@ -151,7 +166,7 @@ class Subject {
         if (item is Map<String, dynamic>) {
           final key = item['key'] as String? ?? '';
           final rawValue = item['value'];
-          
+
           // 处理不同类型的 value
           String value;
           if (rawValue is String) {
@@ -167,7 +182,7 @@ class Subject {
           } else {
             value = rawValue?.toString() ?? '';
           }
-          
+
           if (key.isNotEmpty) {
             infoboxMap[key] = value;
           }
@@ -186,11 +201,12 @@ class Subject {
           : null,
       eps: (json['eps'] as int?) ?? 0,
       volumes: (json['volumes'] as int?) ?? 0,
-      score: (json['rating']?['score'] as num?)?.toDouble() ?? 
-             (json['score'] as num?)?.toDouble() ?? 0.0,
-      rank: (json['rating']?['rank'] as int?) ?? 
-            (json['rank'] as int?) ?? 0,
-      collectionTotal: (json['collection_total'] as int?) ?? 0,
+      score:
+          (json['rating']?['score'] as num?)?.toDouble() ??
+          (json['score'] as num?)?.toDouble() ??
+          0.0,
+      rank: (json['rating']?['rank'] as int?) ?? (json['rank'] as int?) ?? 0,
+      collectionTotal: _parseCollectionTotal(json),
       date: (json['date'] as String?) ?? '',
       tags: tagsList,
       infobox: infoboxMap,
@@ -198,19 +214,19 @@ class Subject {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'name': name,
-        'name_cn': nameCn,
-        'summary': summary,
-        'images': images?.toJson(),
-        'eps': eps,
-        'volumes': volumes,
-        'score': score,
-        'rank': rank,
-        'collection_total': collectionTotal,
-        'date': date,
-        'tags': tags,
-        'infobox': infobox,
-      };
+    'id': id,
+    'type': type,
+    'name': name,
+    'name_cn': nameCn,
+    'summary': summary,
+    'images': images?.toJson(),
+    'eps': eps,
+    'volumes': volumes,
+    'score': score,
+    'rank': rank,
+    'collection_total': collectionTotal,
+    'date': date,
+    'tags': tags,
+    'infobox': infobox,
+  };
 }

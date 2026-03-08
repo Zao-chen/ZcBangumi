@@ -2115,16 +2115,10 @@ class _SubjectPageState extends State<SubjectPage>
                     const SizedBox(height: 4)
                   else
                     const SizedBox(height: 8),
-                  if (_subject!.collectionTotal > 0)
-                    Text(
-                      '${_subject!.collectionTotal} 人',
-                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                    )
-                  else
-                    Text(
-                      '暂无收藏',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                    ),
+                  Text(
+                    '标记数${_subject!.collectionTotal}',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                  ),
                   if (isLandscape)
                     const SizedBox(height: 4)
                   else
