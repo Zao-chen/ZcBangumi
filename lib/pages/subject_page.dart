@@ -1120,19 +1120,25 @@ class _SubjectPageState extends State<SubjectPage>
               _fitMindMapToViewport(viewportSize, layout);
             });
 
-            return Listener(
+            return GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onPointerSignal: _handleMindMapPointerSignal,
-              child: InteractiveViewer(
-                transformationController: _mindMapTransformController,
-                minScale: _mindMapMinScale,
-                maxScale: _mindMapMaxScale,
-                constrained: false,
-                boundaryMargin: const EdgeInsets.all(120),
-                child: SizedBox(
-                  width: layout.width,
-                  height: layout.height,
-                  child: Stack(
+              onScaleStart: (_) {},
+              onScaleUpdate: (_) {},
+              onScaleEnd: (_) {},
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerSignal: _handleMindMapPointerSignal,
+                child: InteractiveViewer(
+                  transformationController: _mindMapTransformController,
+                  minScale: _mindMapMinScale,
+                  maxScale: _mindMapMaxScale,
+                  constrained: false,
+                  boundaryMargin: EdgeInsets.all(viewportSize.longestSide * 2),
+                  clipBehavior: Clip.none,
+                  child: SizedBox(
+                    width: layout.width,
+                    height: layout.height,
+                    child: Stack(
                     children: [
                       CustomPaint(
                         size: Size(layout.width, layout.height),
@@ -1155,7 +1161,8 @@ class _SubjectPageState extends State<SubjectPage>
                   ),
                 ),
               ),
-            );
+            ),
+          );
           },
         ),
       ),
