@@ -581,6 +581,9 @@ class _SubjectPageState extends State<SubjectPage>
   Widget _buildTabView() {
     return TabBarView(
       controller: _tabController,
+      physics: _shouldLockTabSwipeForMindMap
+          ? const NeverScrollableScrollPhysics()
+          : null,
       children: [
         _buildOverviewTab(),
         _buildCharactersTab(),
@@ -589,6 +592,9 @@ class _SubjectPageState extends State<SubjectPage>
       ],
     );
   }
+
+  bool get _shouldLockTabSwipeForMindMap =>
+      _selectedTabIndex == 2 && _relatedViewMode == _RelatedViewMode.mindMap;
 
   Widget _buildOverviewTab() {
     final colorScheme = Theme.of(context).colorScheme;

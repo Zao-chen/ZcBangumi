@@ -81,7 +81,18 @@ class UpdateService {
 
       final packageInfo = await getCurrentVersion();
       final currentVersion = packageInfo.version;
-      final response = await _fetchLatestRelease();
+      final apiUrl =
+          'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
+
+      final response = await _dio.get(
+        apiUrl,
+        options: Options(
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        ),
+      );
 
       if (response.statusCode != 200 || response.data == null) {
         return const UpdateCheckResult(
@@ -181,12 +192,6 @@ class UpdateService {
         latestVersion: latestVersion,
       );
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        return const UpdateCheckResult(
-          status: UpdateCheckStatus.networkError,
-          message: '获取更新失败：GitHub 返回 401（认证失败）',
-        );
-      }
       if (e.response?.statusCode == 404) {
         return const UpdateCheckResult(
           status: UpdateCheckStatus.noReleaseFound,
@@ -203,26 +208,6 @@ class UpdateService {
         message: '获取更新失败：$e',
       );
     }
-  }
-
-  Future<Response<dynamic>> _fetchLatestRelease() async {
-    final apiUrl =
-        'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
-
-    // 使用独立 Dio，避免复用业务 API 的 Authorization 头导致 GitHub 401。
-    final githubDio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'ZCBangumi Update Checker',
-        },
-      ),
-    );
-
-    return githubDio.get(apiUrl);
   }
 
   /// 比较版本号

@@ -131,9 +131,19 @@ jobs:
           # 获取最后一个tag之后的提交信息
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --oneline --format="%H %s" | head -20 | sed 's/^/- /')
+            RAW_CHANGELOG=$(git log --format="%s" | head -20)
           else
-            CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --oneline --format="%H %s" | sed 's/^/- /')
+            RAW_CHANGELOG=$(git log "$PREVIOUS_TAG"..HEAD --format="%s")
+          fi
+
+          # 移除 conventional commit 前缀（feat/fix/chore 等）并格式化成列表
+          CHANGELOG=$(echo "$RAW_CHANGELOG" \
+            | sed -E 's/^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([^)]+\))?!?:[[:space:]]*//I' \
+            | sed '/^[[:space:]]*$/d' \
+            | sed 's/^/- /')
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- 本次发布未检测到可展示的提交说明"
           fi
           
           # 设置多行输出（使用 EOF delimiter 可直接保留换行符）
@@ -158,4 +168,4 @@ jobs:
             ${{ steps.changelog.outputs.CHANGELOG }}
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
