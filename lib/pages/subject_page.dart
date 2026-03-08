@@ -1139,30 +1139,32 @@ class _SubjectPageState extends State<SubjectPage>
                     width: layout.width,
                     height: layout.height,
                     child: Stack(
-                    children: [
-                      CustomPaint(
-                        size: Size(layout.width, layout.height),
-                        painter: _MindMapLinePainter(
-                          edges: layout.edges,
-                          lineColor: colorScheme.outlineVariant,
-                          highlightColor: colorScheme.primary.withOpacity(0.8),
+                      children: [
+                        CustomPaint(
+                          size: Size(layout.width, layout.height),
+                          painter: _MindMapLinePainter(
+                            edges: layout.edges,
+                            lineColor: colorScheme.outlineVariant,
+                            highlightColor: colorScheme.primary.withOpacity(
+                              0.8,
+                            ),
+                          ),
                         ),
-                      ),
-                      ...layout.nodes.map((node) {
-                        return Positioned(
-                          left: node.rect.left,
-                          top: node.rect.top,
-                          width: node.rect.width,
-                          height: node.rect.height,
-                          child: _buildMindMapNode(node),
-                        );
-                      }),
-                    ],
+                        ...layout.nodes.map((node) {
+                          return Positioned(
+                            left: node.rect.left,
+                            top: node.rect.top,
+                            width: node.rect.width,
+                            height: node.rect.height,
+                            child: _buildMindMapNode(node),
+                          );
+                        }),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
+            );
           },
         ),
       ),
