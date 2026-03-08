@@ -45,7 +45,7 @@ class UpdateCheckResult {
 }
 
 class UpdateService {
-  final Dio _dio;
+  final Dio _updateDio;
   final StorageService _storage;
   String? _downloadedPackagePath;
 
@@ -56,7 +56,22 @@ class UpdateService {
   static const String windowsAssetNameKeyword = 'windows';
   static const bool allowPrerelease = false;
 
-  UpdateService(this._dio, this._storage);
+  UpdateService(Dio dio, this._storage)
+    : _updateDio = Dio(
+        BaseOptions(
+          connectTimeout: dio.options.connectTimeout,
+          receiveTimeout: dio.options.receiveTimeout,
+          headers: {
+            'User-Agent':
+                (dio.options.headers['User-Agent'] as String?) ?? 'zc_bangumi',
+            'Accept': 'application/vnd.github+json',
+          },
+        ),
+      ) {
+    // Do not forward app auth to GitHub endpoints, otherwise invalid bearer
+    // tokens can cause 401 on version checks.
+    _updateDio.options.headers.remove('Authorization');
+  }
 
   /// 获取当前应用版本信息
   Future<PackageInfo> getCurrentVersion() async {
@@ -84,7 +99,7 @@ class UpdateService {
       final apiUrl =
           'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
 
-      final response = await _dio.get(
+      final response = await _updateDio.get(
         apiUrl,
         options: Options(
           headers: {
@@ -192,6 +207,12 @@ class UpdateService {
         latestVersion: latestVersion,
       );
     } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.networkError,
+          message: '获取更新失败：GitHub 鉴权异常（401）',
+        );
+      }
       if (e.response?.statusCode == 404) {
         return const UpdateCheckResult(
           status: UpdateCheckStatus.noReleaseFound,
@@ -362,7 +383,7 @@ class UpdateService {
         await file.delete();
       }
 
-      await _dio.download(
+      await _updateDio.download(
         downloadUrl,
         savePath,
         onReceiveProgress: onProgress,
