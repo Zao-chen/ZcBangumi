@@ -476,6 +476,9 @@ class _SubjectPageState extends State<SubjectPage>
     return Scaffold(
       body: NestedScrollView(
         controller: _nestedScrollController,
+        physics: _shouldLockTabSwipeForMindMap
+            ? const NeverScrollableScrollPhysics()
+            : null,
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           final colorScheme = Theme.of(context).colorScheme;
           return [
