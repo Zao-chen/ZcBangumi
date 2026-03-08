@@ -20,15 +20,69 @@ static const bool allowPrerelease = false;
 ## 第二步：发布 Release
 
 1. 更新项目版本（`pubspec.yaml`）
-2. 打包 APK：
+2. 确保 Android 发布签名固定不变：
+
+```bash
+copy android\\key.properties.example android\\key.properties
+```
+
+填写 `android/key.properties`（`storeFile/storePassword/keyAlias/keyPassword`）后再构建。
+
+3. 打包 APK：
 
 ```bash
 flutter build apk --release
 ```
 
-3. 到 GitHub 创建新 Release，Tag 如 `v0.2.0`
-4. 上传生成的 APK 和 Windows 安装包（`.exe/.msi/.msix`）到 Assets
-5. 写好 Release Notes（客户端会显示为更新内容）
+4. 到 GitHub 创建新 Release，Tag 如 `v0.2.0`
+5. 上传生成的 APK 和 Windows 安装包（`.exe/.msi/.msix`）到 Assets
+6. 写好 Release Notes（客户端会显示为更新内容）
+
+### 如果你使用 GitHub Actions 自动发布
+
+请在仓库 `Settings -> Secrets and variables -> Actions` 配置：
+
+- `ANDROID_KEYSTORE_BASE64`：发布 keystore 的 base64 内容
+- `ANDROID_STORE_PASSWORD`：keystore 密码
+- `ANDROID_KEY_ALIAS`：key alias
+- `ANDROID_KEY_PASSWORD`：key 密码
+- `ANDROID_CERT_SHA256`（可选但强烈建议）：证书 SHA256 指纹，用于 CI 防止签名漂移
+
+PowerShell 生成 base64 示例：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\\path\\to\\upload-keystore.jks"))
+```
+
+也可以直接运行脚本一次性生成 5 个 Secrets 值：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/generate_github_android_secrets.ps1 \
+	-KeystorePath "C:\path\to\upload-keystore.jks" \
+	-Alias "upload" \
+	-StorePassword "<store-password>" \
+	-KeyPassword "<key-password>"
+```
+
+获取证书 SHA256（Windows）：
+
+```powershell
+keytool -list -v -keystore C:\path\to\upload-keystore.jks -alias upload | Select-String "SHA256"
+```
+
+将输出中的指纹（去掉空格）填入 `ANDROID_CERT_SHA256`。
+
+本地发布前可执行签名校验：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/verify_android_signing.ps1 \
+	-KeystorePath "android/keystore/upload-keystore.jks" \
+	-Alias "upload" \
+	-StorePassword "<store-password>" \
+	-KeyPassword "<key-password>" \
+	-ApkPath "build/app/outputs/flutter-apk/app-release.apk" \
+	-ExpectedSha256 "<sha256-with-or-without-colons>"
+```
 
 ## 应用内体验
 
@@ -57,6 +111,12 @@ flutter build apk --release
 
 - 检查 APK 是否与已安装版本同签名
 - 检查系统安装未知来源权限
+
+#### 如何确认签名一致
+
+- 历史版本和新版本必须使用同一个 keystore（同一份 `.jks/.keystore`）
+- 不能一版用 debug 签名、一版用 release 签名
+- 不能更换 `keyAlias` 到另一个证书
 
 ## 备注
 

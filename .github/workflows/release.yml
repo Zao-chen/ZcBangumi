@@ -30,6 +30,48 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Configure Android signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_STORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "Missing Android signing secrets. Please configure ANDROID_KEYSTORE_BASE64/ANDROID_STORE_PASSWORD/ANDROID_KEY_ALIAS/ANDROID_KEY_PASSWORD."
+            exit 1
+          fi
+
+          mkdir -p android/keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/keystore/upload-keystore.jks
+
+          cat > android/key.properties <<EOF
+          storePassword=${ANDROID_STORE_PASSWORD}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=../keystore/upload-keystore.jks
+          EOF
+
+          if [ -n "$ANDROID_CERT_SHA256" ]; then
+            ACTUAL_SHA256=$(keytool -list -v -keystore android/keystore/upload-keystore.jks -alias "$ANDROID_KEY_ALIAS" -storepass "$ANDROID_STORE_PASSWORD" -keypass "$ANDROID_KEY_PASSWORD" \
+              | awk -F': ' '/SHA256:/{gsub(" ","",$2); print toupper($2); exit}')
+            EXPECTED_SHA256=$(echo "$ANDROID_CERT_SHA256" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+
+            if [ -z "$ACTUAL_SHA256" ]; then
+              echo "Failed to read certificate SHA256 from keystore."
+              exit 1
+            fi
+
+            if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo "Android signing certificate mismatch."
+              echo "Expected: $EXPECTED_SHA256"
+              echo "Actual:   $ACTUAL_SHA256"
+              exit 1
+            fi
+          fi
+
       - name: Build APK
         run: flutter build apk --release
 

@@ -14,6 +14,15 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")
+val releaseStorePassword = keystoreProperties.getProperty("storePassword")
+val releaseKeyAlias = keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
+val hasCompleteReleaseSigning = !releaseStoreFile.isNullOrBlank() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.example.zc_bangumi"
     compileSdk = flutter.compileSdkVersion
@@ -42,24 +51,26 @@ android {
 
     signingConfigs {
         create("release") {
-            val storeFilePath = keystoreProperties.getProperty("storeFile")
-            if (!storeFilePath.isNullOrBlank()) {
-                storeFile = file(storeFilePath)
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+            if (hasCompleteReleaseSigning) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
 
     buildTypes {
         release {
-            // Use a stable release keystore so update packages keep the same signature.
-            signingConfig = if (keystoreProperties.getProperty("storeFile").isNullOrBlank()) {
-                signingConfigs.getByName("debug")
-            } else {
-                signingConfigs.getByName("release")
+            // Update packages must keep one fixed signature.
+            if (!hasCompleteReleaseSigning) {
+                error(
+                    "Missing Android release signing config. " +
+                        "Create android/key.properties with storeFile/storePassword/keyAlias/keyPassword. " +
+                        "Do not publish release APKs signed with debug key."
+                )
             }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

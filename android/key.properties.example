@@ -1,0 +1,7 @@
+# Copy this file to android/key.properties and fill in your real values.
+# Keep android/key.properties out of git to protect your signing secrets.
+
+storePassword=your_store_password
+keyPassword=your_key_password
+keyAlias=upload
+storeFile=../keystore/upload-keystore.jks
