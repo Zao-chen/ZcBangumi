@@ -11,6 +11,7 @@ import 'providers/update_provider.dart';
 import 'widgets/responsive_scaffold.dart';
 import 'widgets/update_dialog.dart';
 import 'pages/timeline_page.dart';
+import 'pages/rakuen_page.dart';
 import 'pages/progress_page.dart';
 import 'pages/profile_page.dart';
 
@@ -171,6 +172,11 @@ class _AppShellState extends State<_AppShell> {
           label: '动态',
         ),
         NavigationItem(
+          icon: Icons.forum_outlined,
+          selectedIcon: Icons.forum,
+          label: '超展开',
+        ),
+        NavigationItem(
           icon: Icons.grid_view_outlined,
           selectedIcon: Icons.grid_view_rounded,
           label: '进度',
@@ -181,7 +187,12 @@ class _AppShellState extends State<_AppShell> {
           label: '我的',
         ),
       ],
-      pages: const [TimelinePage(), ProgressPage(), ProfilePage()],
+      pages: const [
+        TimelinePage(),
+        RakuenPage(),
+        ProgressPage(),
+        ProfilePage(),
+      ],
     );
   }
 }

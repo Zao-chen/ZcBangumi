@@ -6,6 +6,8 @@ import '../models/character.dart';
 import '../models/collection.dart';
 import '../models/comment.dart';
 import '../models/episode.dart';
+import '../models/rakuen_topic.dart';
+import '../models/rakuen_topic_detail.dart';
 import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
@@ -641,6 +643,38 @@ class ApiClient {
     return TimelineItem.fromApiJsonList(list, fallbackUser: fallbackUser);
   }
 
+  /// 获取超展开主题列表（通过网页 HTML 解析）
+  Future<List<RakuenTopic>> getRakuenTopics({
+    String? type,
+    String? filter,
+    int page = 1,
+  }) async {
+    final params = <String, dynamic>{'page': page};
+    if (type != null && type.isNotEmpty) params['type'] = type;
+    if (filter != null && filter.isNotEmpty) params['filter'] = filter;
+
+    final resp = await _webDio.get(
+      '/rakuen/topiclist',
+      queryParameters: params,
+    );
+    return _parseRakuenTopicsHtml(resp.data as String);
+  }
+
+  Future<RakuenTopicDetail> getRakuenTopicDetail({
+    required String topicUrl,
+  }) async {
+    final uri = Uri.parse(topicUrl);
+    final path = uri.path.isEmpty ? topicUrl : uri.path;
+    final resp = await _webDio.get(
+      path,
+      queryParameters: uri.queryParameters.isEmpty ? null : uri.queryParameters,
+    );
+    return _parseRakuenTopicDetailHtml(
+      html: resp.data as String,
+      topicUrl: _normalizeWebUrl(topicUrl),
+    );
+  }
+
   /// 解析时间线 HTML
   static List<TimelineItem> _parseTimelineHtml(String html) {
     final items = <TimelineItem>[];
@@ -815,6 +849,315 @@ class ApiClient {
       rank: rank,
       timeText: timeText,
     );
+  }
+
+  static List<RakuenTopic> _parseRakuenTopicsHtml(String html) {
+    final topics = <RakuenTopic>[];
+    final itemRegex = RegExp(
+      r'<li\s+id="item_([^"]+)"[^>]*class="[^"]*item_list[^"]*"[^>]*>([\s\S]*?)</li>',
+    );
+
+    for (final match in itemRegex.allMatches(html)) {
+      try {
+        final rawId = match.group(1) ?? '';
+        final content = match.group(2) ?? '';
+        final firstUnderscore = rawId.indexOf('_');
+        final type = firstUnderscore > 0
+            ? rawId.substring(0, firstUnderscore)
+            : rawId;
+
+        final avatarLinkMatch = RegExp(
+          r'<a\s+href="([^"]+)"[^>]*class="avatar [^"]*"([^>]*)>',
+        ).firstMatch(content);
+        final avatarAnchorAttrs = avatarLinkMatch?.group(2) ?? '';
+        final topicUrl = _normalizeWebUrl(avatarLinkMatch?.group(1) ?? '');
+        final authorName = _decodeHtml(
+          RegExp(r'title="([^"]*)"').firstMatch(avatarAnchorAttrs)?.group(1) ??
+              '',
+        ).trim();
+
+        var avatarUrl = '';
+        final avatarUrlMatch = RegExp(
+          r'''background-image:url\((['"]?)([^)'"]+)\1\)''',
+        ).firstMatch(content);
+        if (avatarUrlMatch != null) {
+          avatarUrl = _normalizeWebUrl(avatarUrlMatch.group(2) ?? '');
+        }
+
+        final titleMatch = RegExp(
+          r'<a\s+href="([^"]+)"\s+class="title avatar l"[^>]*>([\s\S]*?)</a>',
+        ).firstMatch(content);
+        final title = _decodeHtml(
+          _stripTags(titleMatch?.group(2) ?? ''),
+        ).trim();
+
+        final replyText = RegExp(
+          r'<small class="grey">\(\+(\d+)\)</small>',
+        ).firstMatch(content)?.group(1);
+        final replyCount = int.tryParse(replyText ?? '') ?? 0;
+
+        final sourceMatch = RegExp(
+          r'<span class="row">\s*(?:<a\s+href="([^"]+)"[^>]*>([\s\S]*?)</a>)?\s*<small class="time">([\s\S]*?)</small>',
+        ).firstMatch(content);
+        final sourceUrl = _normalizeWebUrl(sourceMatch?.group(1) ?? '');
+        final sourceTitle = _decodeHtml(
+          _stripTags(sourceMatch?.group(2) ?? ''),
+        ).trim();
+        final timeText = _decodeHtml(
+          _stripTags(sourceMatch?.group(3) ?? ''),
+        ).replaceAll(RegExp(r'\s+'), ' ').trim();
+
+        if (topicUrl.isEmpty || title.isEmpty) continue;
+
+        topics.add(
+          RakuenTopic(
+            id: rawId,
+            type: type,
+            title: title,
+            topicUrl: topicUrl,
+            avatarUrl: avatarUrl,
+            replyCount: replyCount,
+            timeText: timeText,
+            sourceTitle: sourceTitle.isEmpty ? null : sourceTitle,
+            sourceUrl: sourceUrl.isEmpty ? null : sourceUrl,
+            authorName: authorName.isEmpty ? null : authorName,
+          ),
+        );
+      } catch (_) {
+        // Skip malformed topic blocks.
+      }
+    }
+
+    return topics;
+  }
+
+  static RakuenTopicDetail _parseRakuenTopicDetailHtml({
+    required String html,
+    required String topicUrl,
+  }) {
+    final pageHeaderHtml = RegExp(
+      r'<div id="pageHeader">([\s\S]*?)</div>\s*<hr class="board"',
+    ).firstMatch(html)?.group(1);
+
+    final sourceAnchorMatches = RegExp(
+      r'<a\s+href="([^"]+)"[^>]*>([\s\S]*?)</a>',
+    ).allMatches(pageHeaderHtml ?? '').toList();
+
+    final sourceUrl = sourceAnchorMatches.isNotEmpty
+        ? _normalizeWebUrl(sourceAnchorMatches.first.group(1) ?? '')
+        : null;
+    final sourceTitle = sourceAnchorMatches.isNotEmpty
+        ? _decodeHtml(
+            _stripTags(sourceAnchorMatches.first.group(2) ?? ''),
+          ).trim()
+        : null;
+    final sectionTitle = sourceAnchorMatches.length >= 2
+        ? _decodeHtml(_stripTags(sourceAnchorMatches[1].group(2) ?? '')).trim()
+        : null;
+
+    final coverUrlMatch = RegExp(
+      r'<div id="pageHeader">[\s\S]*?<img src="([^"]+)"',
+    ).firstMatch(html);
+    final coverUrl = coverUrlMatch != null
+        ? _normalizeWebUrl(coverUrlMatch.group(1) ?? '')
+        : null;
+
+    final title = _decodeHtml(
+      _stripTags(
+        RegExp(
+              r'<h1>[\s\S]*?<br\s*/?>([\s\S]*?)</h1>',
+            ).firstMatch(pageHeaderHtml ?? '')?.group(1) ??
+            '',
+      ),
+    ).trim();
+
+    final canonicalUrlMatch = RegExp(
+      r'rakuen_redirect_url\s*=\s*"([^"]+)"',
+    ).firstMatch(html);
+    final canonicalUrl = canonicalUrlMatch != null
+        ? _normalizeWebUrl(canonicalUrlMatch.group(1) ?? '')
+        : null;
+
+    final originalPost = _parseOriginalPost(html);
+    final replies = _parseRakuenReplies(html);
+
+    return RakuenTopicDetail(
+      title: title.isEmpty ? '主题详情' : title,
+      topicUrl: topicUrl,
+      canonicalUrl: canonicalUrl?.isEmpty == true ? null : canonicalUrl,
+      sourceTitle: sourceTitle?.isEmpty == true ? null : sourceTitle,
+      sourceUrl: sourceUrl?.isEmpty == true ? null : sourceUrl,
+      sectionTitle: sectionTitle?.isEmpty == true ? null : sectionTitle,
+      coverUrl: coverUrl?.isEmpty == true ? null : coverUrl,
+      originalPost: originalPost,
+      replies: replies,
+    );
+  }
+
+  static RakuenPost? _parseOriginalPost(String html) {
+    final blockMatch = RegExp(
+      r'<div id="post_(\d+)" class="postTopic[\s\S]*?</div>\s*</div>\s*</div>\s*</div>',
+    ).firstMatch(html);
+    if (blockMatch == null) return null;
+    final content = blockMatch.group(0) ?? '';
+    final id = blockMatch.group(1) ?? '';
+    return _parseRakuenPostBlock(
+      id: id,
+      blockHtml: content,
+      contentClassName: 'topic_content',
+      avatarClassHint: 'avatarSize48',
+    );
+  }
+
+  static List<RakuenPost> _parseRakuenReplies(String html) {
+    final itemRegex = RegExp(
+      r'<div id="post_(\d+)" class="[^"]*row row_reply[^"]*"[^>]*>[\s\S]*?(?=<div id="post_\d+" class="[^"]*row row_reply|<template|<script|</body>)',
+    );
+    final posts = <RakuenPost>[];
+
+    for (final match in itemRegex.allMatches(html)) {
+      final id = match.group(1) ?? '';
+      final blockHtml = match.group(0) ?? '';
+      final parsed = _parseRakuenPostBlock(
+        id: id,
+        blockHtml: blockHtml,
+        contentClassName: 'message',
+        avatarClassHint: 'avatarReSize40',
+      );
+      if (parsed != null) posts.add(parsed);
+    }
+
+    return posts;
+  }
+
+  static RakuenPost? _parseRakuenPostBlock({
+    required String id,
+    required String blockHtml,
+    required String contentClassName,
+    required String avatarClassHint,
+  }) {
+    final floorTimeMatch = RegExp(
+      r'class="floor-anchor">([^<]+)</a>\s*-\s*([^<]+)</small>|<small>(#[^<]+)\s*-\s*([^<]+)</small>',
+    ).firstMatch(blockHtml);
+
+    final floor = _decodeHtml(
+      (floorTimeMatch?.group(1) ?? floorTimeMatch?.group(3) ?? '').trim(),
+    );
+    final timeText = _decodeHtml(
+      (floorTimeMatch?.group(2) ?? floorTimeMatch?.group(4) ?? '').trim(),
+    );
+
+    final avatarUrlMatch = RegExp(
+      r'''background-image:url\((['"]?)([^)'"]+)\1\)''',
+    ).firstMatch(blockHtml);
+    final avatarUrl = avatarUrlMatch != null
+        ? _normalizeWebUrl(avatarUrlMatch.group(2) ?? '')
+        : '';
+
+    final userLinkMatch = RegExp(
+      r'<a(?: id="[^"]+")?\s+href="/user/([^"]+)"[^>]*class="[^"]*\bl\b[^"]*"[^>]*>([\s\S]*?)</a>',
+    ).firstMatch(blockHtml);
+    final username = userLinkMatch?.group(1) ?? '';
+    final nickname = _decodeHtml(
+      _stripTags(userLinkMatch?.group(2) ?? ''),
+    ).trim();
+
+    final signMatch = RegExp(
+      r'<span class="sign tip_j">\(([\s\S]*?)\)</span>',
+    ).firstMatch(blockHtml);
+    final sign = _decodeHtml(_stripTags(signMatch?.group(1) ?? '')).trim();
+
+    final contentMatch = RegExp(
+      '<div class="$contentClassName[^"]*">([\\s\\S]*?)</div>',
+    ).firstMatch(blockHtml);
+    final content = _htmlBlockToText(contentMatch?.group(1) ?? '');
+
+    final subReplies = <RakuenPost>[];
+    final subReplyRegion = RegExp(
+      r'<div class="topic_sub_reply"[^>]*>([\s\S]*?)</div>\s*</div>\s*</div>',
+    ).firstMatch(blockHtml)?.group(1);
+    if (subReplyRegion != null && subReplyRegion.isNotEmpty) {
+      final subRegex = RegExp(
+        r'<div id="post_(\d+)" class="sub_reply_bg[\s\S]*?(?=<div id="post_\d+" class="sub_reply_bg|$)',
+      );
+      for (final match in subRegex.allMatches(subReplyRegion)) {
+        final subId = match.group(1) ?? '';
+        final subBlock = match.group(0) ?? '';
+        final parsed = _parseRakuenPostBlock(
+          id: subId,
+          blockHtml: subBlock,
+          contentClassName: 'cmt_sub_content',
+          avatarClassHint: 'avatarReSize32',
+        );
+        if (parsed != null) subReplies.add(parsed);
+      }
+    }
+
+    if (nickname.isEmpty && content.isEmpty) return null;
+
+    return RakuenPost(
+      id: id,
+      floor: floor.isEmpty ? '#?' : floor,
+      timeText: timeText,
+      username: username,
+      nickname: nickname.isEmpty ? username : nickname,
+      avatarUrl: avatarUrl,
+      sign: sign.isEmpty ? null : sign,
+      content: content,
+      subReplies: subReplies,
+    );
+  }
+
+  static String _htmlBlockToText(String html) {
+    if (html.isEmpty) return '';
+    var value = html;
+    value = value.replaceAllMapped(
+      RegExp(r'<img[^>]*alt="([^"]*)"[^>]*>'),
+      (match) => match.group(1) ?? '',
+    );
+    value = value.replaceAllMapped(
+      RegExp(
+        r'<span class="text_mask"[\s\S]*?<span class="inner">([\s\S]*?)</span>[\s\S]*?</span>',
+      ),
+      (match) => _decodeHtml(_stripTags(match.group(1) ?? '')),
+    );
+    value = value.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    value = value.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n\n');
+    value = value.replaceAllMapped(
+      RegExp(r'<a\s+href="([^"]+)"[^>]*>([\s\S]*?)</a>'),
+      (match) => _decodeHtml(_stripTags(match.group(2) ?? '')),
+    );
+    value = _decodeHtml(_stripTags(value));
+    value = value.replaceAll('\r', '');
+    value = value.replaceAll(RegExp(r'[ \t]*\n[ \t]*'), '\n');
+    value = value.replaceAll(RegExp(r'\n{2,}'), '\n');
+    value = value.replaceAll(RegExp(r'[ \t]+\n'), '\n');
+    return value.trim();
+  }
+
+  static String _normalizeWebUrl(String value) {
+    if (value.isEmpty) return '';
+    if (value.startsWith('//')) return 'https:$value';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    if (value.startsWith('/')) return '${BgmConst.webBaseUrl}$value';
+    return value;
+  }
+
+  static String _stripTags(String value) {
+    return value.replaceAll(RegExp(r'<[^>]+>'), '');
+  }
+
+  static String _decodeHtml(String value) {
+    return value
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&#039;', "'")
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&nbsp;', ' ');
   }
 
   /// 检测字符串是否包含中文字符
