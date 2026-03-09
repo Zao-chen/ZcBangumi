@@ -7,8 +7,6 @@ import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../pages/subject_page.dart';
 import '../services/api_client.dart';
-import '../services/storage_service.dart';
-import '../services/web_reply_service.dart';
 
 class RakuenTopicPage extends StatefulWidget {
   final RakuenTopic topic;
@@ -26,6 +24,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   bool _replySubmitting = false;
   bool _topicSubmitting = false;
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _replyScrollController = ScrollController();
   final GlobalKey _headerKey = GlobalKey();
   double _headerRevealOffset = 160;
   bool _showCollapsedTitle = false;
@@ -41,6 +40,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   void dispose() {
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
+    _replyScrollController.dispose();
     super.dispose();
   }
 
@@ -103,7 +103,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   @override
   Widget build(BuildContext context) {
     final title = _detail?.title ?? widget.topic.title;
-    final canCreateTopic = _canCreateTopic(_detail?.sourceUrl);
+    // 在主题详情页面不显示"发帖"按钮，这是查看别人的帖子，不应该提供创建新帖的功能
+    const canCreateTopic = false;
 
     return Scaffold(
       appBar: AppBar(
@@ -353,73 +354,112 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
 
     return RefreshIndicator(
       onRefresh: _load,
-      child: CustomScrollView(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            sliver: SliverToBoxAdapter(
-              child: KeyedSubtree(
-                key: _headerKey,
-                child: _RakuenTopicHeader(
-                  detail: detail,
-                  fallbackTopic: widget.topic,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth > 800;
+          final horizontalPadding = isWide
+              ? (constraints.maxWidth - 900).clamp(0, constraints.maxWidth) / 2
+              : 12.0;
+
+          return CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  12,
+                  horizontalPadding,
+                  0,
                 ),
-              ),
-            ),
-          ),
-          if (detail.originalPost != null) ...[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              sliver: SliverToBoxAdapter(
-                child: _SectionTitle(
-                  label: '楼主',
-                  trailing: detail.originalPost!.timeText,
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              sliver: SliverToBoxAdapter(
-                child: _RakuenPostCard(
-                  post: detail.originalPost!,
-                  emphasize: true,
-                ),
-              ),
-            ),
-          ],
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            sliver: SliverToBoxAdapter(
-              child: _SectionTitle(
-                label: '回复',
-                trailing: '${detail.replies.length} 条',
-              ),
-            ),
-          ),
-          if (detail.replies.isEmpty)
-            const SliverPadding(
-              padding: EdgeInsets.fromLTRB(12, 8, 12, 24),
-              sliver: SliverToBoxAdapter(
-                child: Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('暂无回复'),
+                sliver: SliverToBoxAdapter(
+                  child: KeyedSubtree(
+                    key: _headerKey,
+                    child: _RakuenTopicHeader(
+                      detail: detail,
+                      fallbackTopic: widget.topic,
+                    ),
                   ),
                 ),
               ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  return _RakuenPostCard(post: detail.replies[index]);
-                }, childCount: detail.replies.length),
+              if (detail.originalPost != null) ...[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    12,
+                    horizontalPadding,
+                    0,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _SectionTitle(
+                      label: '楼主',
+                      trailing: detail.originalPost!.timeText,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    8,
+                    horizontalPadding,
+                    0,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _RakuenPostCard(
+                      post: detail.originalPost!,
+                      emphasize: true,
+                    ),
+                  ),
+                ),
+              ],
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  12,
+                  horizontalPadding,
+                  0,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: _SectionTitle(
+                    label: '回复',
+                    trailing: '${detail.replies.length} 条',
+                  ),
+                ),
               ),
-            ),
-        ],
+              if (detail.replies.isEmpty)
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    8,
+                    horizontalPadding,
+                    24,
+                  ),
+                  sliver: const SliverToBoxAdapter(
+                    child: Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('暂无回复'),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    8,
+                    horizontalPadding,
+                    24,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      return _RakuenPostCard(post: detail.replies[index]);
+                    }, childCount: detail.replies.length),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

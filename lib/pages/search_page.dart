@@ -96,91 +96,108 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('搜索条目'), centerTitle: false),
-      body: Column(
-        children: [
-          // 搜索框
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: '搜索条目...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _searchResults = [];
-                            _searchError = null;
-                          });
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {});
-                if (value.isNotEmpty) {
-                  _search(value);
-                }
-              },
-            ),
-          ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth > 800;
+          final horizontalPadding = isWide
+              ? (constraints.maxWidth - 900).clamp(0.0, constraints.maxWidth) /
+                    2
+              : 16.0;
 
-          // 类型筛选
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _subjectTypes.map((config) {
-                  final isSelected = _selectedSubjectType == config.type;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: FilterChip(
-                      selected: isSelected,
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(config.icon, size: 16),
-                          const SizedBox(width: 4),
-                          Text(config.label),
-                        ],
-                      ),
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedSubjectType = config.type;
-                          if (_searchController.text.isNotEmpty) {
-                            _search(_searchController.text);
-                          }
-                        });
-                      },
+          return Column(
+            children: [
+              // 搜索框
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  16,
+                  horizontalPadding,
+                  16,
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '搜索条目...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchResults = [];
+                                _searchError = null;
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  );
-                }).toList(),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {});
+                    if (value.isNotEmpty) {
+                      _search(value);
+                    }
+                  },
+                ),
               ),
-            ),
-          ),
 
-          const SizedBox(height: 16),
+              // 类型筛选
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isWide ? horizontalPadding : 12,
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _subjectTypes.map((config) {
+                      final isSelected = _selectedSubjectType == config.type;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: FilterChip(
+                          selected: isSelected,
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(config.icon, size: 16),
+                              const SizedBox(width: 4),
+                              Text(config.label),
+                            ],
+                          ),
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedSubjectType = config.type;
+                              if (_searchController.text.isNotEmpty) {
+                                _search(_searchController.text);
+                              }
+                            });
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
 
-          // 搜索结果
-          Expanded(child: _buildResultContent()),
-        ],
+              const SizedBox(height: 16),
+
+              // 搜索结果
+              Expanded(child: _buildResultContent(horizontalPadding)),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildResultContent() {
+  Widget _buildResultContent(double horizontalPadding) {
     if (_isSearching) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -229,7 +246,9 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding > 16 ? horizontalPadding : 12,
+      ),
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
         final subject = _searchResults[index];
