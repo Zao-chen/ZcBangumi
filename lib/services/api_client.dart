@@ -16,6 +16,7 @@ import '../models/user.dart';
 class ApiClient {
   late final Dio _dio;
   String? _accessToken;
+  String? _webCookie;
 
   /// 公开 Dio 实例供其他服务使用
   Dio get dio => _dio;
@@ -33,9 +34,37 @@ class ApiClient {
       ),
     );
 
+    // 初始化网页 Dio 实例
+    _webDio = Dio(
+      BaseOptions(
+        baseUrl: BgmConst.webBaseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        responseType: ResponseType.plain,
+      ),
+    );
+
+    // 初始化 next API Dio 实例
+    _nextDio = Dio(
+      BaseOptions(
+        baseUrl: BgmConst.nextBaseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'User-Agent': BgmConst.userAgent,
+          'Accept': 'application/json',
+        },
+      ),
+    );
+
     // 添加日志拦截器（仅在调试模式）
     if (kDebugMode) {
       _dio.interceptors.add(LoggingInterceptor());
+      _webDio.interceptors.add(LoggingInterceptor());
     }
   }
 
@@ -50,6 +79,51 @@ class ApiClient {
   }
 
   bool get hasToken => _accessToken != null && _accessToken!.isNotEmpty;
+  bool get hasWebCookie => _webCookie != null && _webCookie!.isNotEmpty;
+
+  void setWebCookie(String? cookie) {
+    final normalized = sanitizeWebCookie(cookie ?? '');
+    _webCookie = normalized.isEmpty ? null : normalized;
+    if (_webCookie == null) {
+      _webDio.options.headers.remove('Cookie');
+      if (kDebugMode) {
+        print('[ApiClient] Cookie 已清除');
+      }
+    } else {
+      _webDio.options.headers['Cookie'] = _webCookie;
+      if (kDebugMode) {
+        print('[ApiClient] Cookie 已设置');
+        print('[ApiClient]   长度: ${_webCookie!.length} 字符');
+        print(
+          '[ApiClient]   包含 chii_auth: ${_webCookie!.contains('chii_auth')}',
+        );
+        print('[ApiClient]   包含 chii_sid: ${_webCookie!.contains('chii_sid')}');
+        print(
+          '[ApiClient]   包含 chii_sec_id: ${_webCookie!.contains('chii_sec_id')}',
+        );
+        print(
+          '[ApiClient]   开头: ${_webCookie!.substring(0, _webCookie!.length > 100 ? 100 : _webCookie!.length)}',
+        );
+
+        // 验证 Cookie 是否真的在 HTTP 头中
+        final cookieInHeaders = _webDio.options.headers['Cookie'];
+        print(
+          '[ApiClient] HTTP 头中的 Cookie: ${cookieInHeaders != null ? '已设置 (${(cookieInHeaders as String).length} 字符)' : '未设置'}',
+        );
+      }
+    }
+  }
+
+  Future<WebSessionInfo?> getWebSessionInfo({String? cookie}) async {
+    final normalized = cookie == null ? null : sanitizeWebCookie(cookie);
+    final resp = await _webDio.get(
+      '/',
+      options: normalized == null
+          ? null
+          : Options(headers: {'Cookie': normalized}),
+    );
+    return _parseWebSessionInfo(resp.data as String);
+  }
 
   // ========== 用户 ==========
 
@@ -559,28 +633,10 @@ class ApiClient {
   // ========== 时间线 ==========
 
   /// 用于抓取 bgm.tv 网页的 Dio 实例（全站动态 HTML 解析）
-  static final Dio _webDio = Dio(
-    BaseOptions(
-      baseUrl: BgmConst.webBaseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-      responseType: ResponseType.plain,
-    ),
-  );
+  late final Dio _webDio;
 
   /// 用于调用 next.bgm.tv /p1/ 私有 JSON API 的 Dio 实例
-  late final Dio _nextDio = Dio(
-    BaseOptions(
-      baseUrl: BgmConst.nextBaseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {'User-Agent': BgmConst.userAgent, 'Accept': 'application/json'},
-    ),
-  );
+  late final Dio _nextDio;
 
   /// 获取全站时间线（通过解析 HTML，不带认证）
   Future<List<TimelineItem>> getTimeline({int page = 1}) async {
@@ -673,6 +729,228 @@ class ApiClient {
       html: resp.data as String,
       topicUrl: _normalizeWebUrl(topicUrl),
     );
+  }
+
+  Future<void> createRakuenReply({
+    required String topicUrl,
+    required String content,
+  }) async {
+    if (kDebugMode) {
+      print('[ApiClient] 开始回复流程');
+      print('[ApiClient] 目标URL: $topicUrl');
+      print('[ApiClient] 内容长度: ${content.length}');
+      print('[ApiClient] Cookie已设置: ${_webCookie != null}');
+    }
+
+    var normalizedTopicUrl = _normalizeWebUrl(topicUrl);
+    String? redirectUrl;
+
+    // 必须先访问主题页面来建立会话，否则 new_reply 会被重定向到首页
+    if (kDebugMode) {
+      print('[ApiClient] 先访问主题页面来建立会话');
+    }
+    final topicResponse = await _fetchWebResponse(normalizedTopicUrl);
+    final topicHtml = topicResponse.data as String;
+
+    if (kDebugMode) {
+      print('[ApiClient] 主题页面响应 - 状态码: ${topicResponse.statusCode}');
+      print('[ApiClient] 主题页面响应 - 最终URL: ${topicResponse.realUri}');
+      final headLen = topicHtml.length > 200 ? 200 : topicHtml.length;
+      final tailStart = topicHtml.length > 200 ? topicHtml.length - 200 : 0;
+      print('[ApiClient] 主题页面响应 - HTML 开头: ${topicHtml.substring(0, headLen)}');
+      print('[ApiClient] 主题页面响应 - HTML 结尾: ${topicHtml.substring(tailStart)}');
+      print(
+        '[ApiClient] 主题页面响应 - 是否包含 <title>: ${topicHtml.contains('<title>')}',
+      );
+      if (topicHtml.contains('<title>')) {
+        final titleMatch = RegExp(
+          r'<title>([^<]+)</title>',
+        ).firstMatch(topicHtml);
+        if (titleMatch != null) {
+          print('[ApiClient] 页面标题: ${titleMatch.group(1)}');
+        }
+      }
+      print(
+        '[ApiClient] 主题页面响应 - 是否包含 "topic": ${topicHtml.contains('topic')}',
+      );
+      print(
+        '[ApiClient] 主题页面响应 - 是否包含 "login": ${topicHtml.toLowerCase().contains('login')}',
+      );
+      print('[ApiClient] 主题页面响应 - 是否包含 "最近浏览": ${topicHtml.contains('最近浏览')}');
+    }
+
+    // 如果是 rakuen 主题，尝试获取规范URL
+    if (normalizedTopicUrl.contains('/rakuen/topic/')) {
+      redirectUrl = _parseRakuenCanonicalUrl(topicHtml);
+      if (redirectUrl != null && redirectUrl != normalizedTopicUrl) {
+        normalizedTopicUrl = redirectUrl;
+        if (kDebugMode) {
+          print('[ApiClient] 重定向到规范URL: $normalizedTopicUrl');
+        }
+      }
+    }
+
+    // 直接从主题页面的 HTML 中解析回复表单，而不是访问 /new_reply 页面
+    if (kDebugMode) {
+      print('[ApiClient] 从主题页面解析回复表单');
+    }
+    final form = _parseRakuenReplyForm(topicHtml);
+    final html = topicHtml;
+    if (form == null) {
+      final session = _parseWebSessionInfo(html);
+      final finalUrl = _normalizeWebUrl(normalizedTopicUrl);
+      if (kDebugMode) {
+        print('[ApiClient] 未找到回复表单');
+        print('[ApiClient] HTML 长度: ${html.length}');
+        print('[ApiClient] 包含 ReplyForm: ${html.contains('id="ReplyForm"')}');
+        print('[ApiClient] 包含 textarea: ${html.contains('textarea')}');
+        print('[ApiClient] 包含 formhash: ${html.contains('formhash')}');
+        print('[ApiClient] 最终URL: $finalUrl');
+        print('[ApiClient] 登录状态: ${session != null}');
+        if (session != null) {
+          print('[ApiClient] 登录用户: ${session.username}');
+        }
+      }
+      if (session == null &&
+          (finalUrl == BgmConst.webBaseUrl ||
+              finalUrl == '${BgmConst.webBaseUrl}/')) {
+        throw Exception('当前网页 Cookie 未登录，请先在设置中重新自动获取 Bangumi 网页 Cookie');
+      }
+      throw Exception(
+        '当前主题暂时没有可用的回复表单'
+        ' | url=$normalizedTopicUrl'
+        ' | finalUrl=$finalUrl'
+        ' | redirect=${redirectUrl ?? '-'}'
+        ' | loggedIn=${session != null}',
+      );
+    }
+
+    if (kDebugMode) {
+      print('[ApiClient] 找到回复表单，准备提交');
+      print('[ApiClient] formhash: ${form.formhash}');
+      print('[ApiClient] actionUrl: ${form.actionUrl}');
+      print('[ApiClient] 表单字段: ${form.hiddenFields.keys.toList()}');
+    }
+
+    final data = <String, dynamic>{
+      ...form.hiddenFields,
+      'content': content.trim(),
+      if (form.hiddenFields['related_photo'] == null) 'related_photo': '0',
+    };
+
+    if (kDebugMode) {
+      print('[ApiClient] 最终提交字段: ${data.keys.toList()}');
+      print('[ApiClient] submit 值: ${data['submit']}');
+    }
+
+    final submitResponse = await _submitRakuenForm(
+      actionUrl: form.actionUrl,
+      data: data,
+      refererUrl: normalizedTopicUrl,
+    );
+
+    // 检查响应状态
+    if (kDebugMode) {
+      print('[ApiClient] 提交响应状态码: ${submitResponse.statusCode}');
+    }
+
+    // 检查是否是重定向
+    if (submitResponse.statusCode == 302 || submitResponse.statusCode == 301) {
+      final location = submitResponse.headers.value('location');
+      if (kDebugMode) {
+        print('[ApiClient] 服务器返回重定向: $location');
+      }
+      // 重定向通常表示提交成功
+    } else if (submitResponse.statusCode != null &&
+        submitResponse.statusCode! >= 400) {
+      throw Exception('提交表单失败: HTTP ${submitResponse.statusCode}');
+    }
+
+    if (kDebugMode) {
+      print('[ApiClient] 回复提交完成');
+    }
+  }
+
+  Future<String> createRakuenTopic({
+    required String sourceUrl,
+    required String title,
+    required String content,
+  }) async {
+    if (kDebugMode) {
+      print('[ApiClient] 开始发帖流程');
+      print('[ApiClient] 来源URL: $sourceUrl');
+      print('[ApiClient] 标题: $title');
+      print('[ApiClient] 内容长度: ${content.length}');
+      print('[ApiClient] Cookie已设置: ${_webCookie != null}');
+    }
+
+    // 先访问来源页面来建立会话
+    if (kDebugMode) {
+      print('[ApiClient] 先访问来源页面来建立会话');
+    }
+    try {
+      await _fetchWebResponse(_normalizeWebUrl(sourceUrl));
+    } catch (e) {
+      if (kDebugMode) {
+        print('[ApiClient] 访问来源页面失败，但继续: $e');
+      }
+    }
+
+    final newTopicUrl = _buildRakuenNewTopicUrl(sourceUrl);
+    if (newTopicUrl == null) {
+      throw Exception('当前来源暂不支持发帖');
+    }
+
+    if (kDebugMode) {
+      print('[ApiClient] 发帖页面URL: $newTopicUrl');
+    }
+
+    final uri = Uri.parse(newTopicUrl);
+    final pageResp = await _webDio.get(
+      uri.path,
+      queryParameters: uri.queryParameters.isEmpty ? null : uri.queryParameters,
+    );
+    final html = pageResp.data as String;
+    final form = _parseRakuenNewTopicForm(html);
+    if (form == null) {
+      if (kDebugMode) {
+        print('[ApiClient] 未找到发帖表单');
+      }
+      throw Exception('当前页面没有可用的发帖表单');
+    }
+
+    if (kDebugMode) {
+      print('[ApiClient] 找到发帖表单，准备提交');
+      print('[ApiClient] formhash: ${form.formhash}');
+      print('[ApiClient] actionUrl: ${form.actionUrl}');
+      print('[ApiClient] 表单字段: ${form.hiddenFields.keys.toList()}');
+    }
+
+    final response = await _submitRakuenForm(
+      actionUrl: form.actionUrl,
+      data: {
+        ...form.hiddenFields,
+        'title': title.trim(),
+        'content': content.trim(),
+      },
+      refererUrl: newTopicUrl,
+    );
+
+    if (kDebugMode) {
+      print('[ApiClient] 发帖响应状态码: ${response.statusCode}');
+    }
+
+    final resultUrl = _normalizeWebUrl(
+      response.realUri.toString().isNotEmpty
+          ? response.realUri.toString()
+          : (response.headers.value('location') ?? form.actionUrl),
+    );
+
+    if (kDebugMode) {
+      print('[ApiClient] 发帖提交完成，结果URL: $resultUrl');
+    }
+
+    return resultUrl;
   }
 
   /// 解析时间线 HTML
@@ -1160,6 +1438,266 @@ class ApiClient {
         .replaceAll('&nbsp;', ' ');
   }
 
+  static String sanitizeWebCookie(String value) {
+    var normalized = value.trim();
+    normalized = normalized.replaceFirst(
+      RegExp(r'^Cookie:\s*', caseSensitive: false),
+      '',
+    );
+    normalized = normalized.replaceAll('\r', ' ');
+    normalized = normalized.replaceAll('\n', ' ');
+    normalized = normalized.replaceAll(RegExp(r'\s+'), ' ');
+    normalized = normalized.replaceAll(RegExp(r';\s*'), '; ');
+    return normalized.trim();
+  }
+
+  static WebSessionInfo? _parseWebSessionInfo(String html) {
+    final uid =
+        int.tryParse(
+          RegExp(r'CHOBITS_UID\s*=\s*(\d+)').firstMatch(html)?.group(1) ?? '0',
+        ) ??
+        0;
+    final username =
+        RegExp(
+          r"CHOBITS_USERNAME\s*=\s*'([^']*)'",
+        ).firstMatch(html)?.group(1)?.trim() ??
+        '';
+    if (uid <= 0 || username.isEmpty) {
+      return null;
+    }
+    return WebSessionInfo(uid: uid, username: username);
+  }
+
+  static _RakuenReplyForm? _parseRakuenReplyForm(String html) {
+    final formRegex = RegExp(
+      r'<form([^>]*)action="([^"]+)"[^>]*>([\s\S]*?)</form>',
+      caseSensitive: false,
+    );
+    for (final formMatch in formRegex.allMatches(html)) {
+      final attrs = formMatch.group(1) ?? '';
+      final body = formMatch.group(3) ?? '';
+
+      // 查找可能的回复表单
+      final hasReplyId = attrs.contains('id="ReplyForm"');
+      final hasContentField = RegExp(
+        r'<textarea[^>]+name="content"',
+        caseSensitive: false,
+      ).hasMatch(body);
+      final hasFormhash = body.contains('formhash');
+
+      if (!hasReplyId && !hasContentField && !hasFormhash) {
+        continue;
+      }
+
+      final actionUrl = _normalizeWebUrl(formMatch.group(2) ?? '');
+
+      if (actionUrl.isEmpty) {
+        continue;
+      }
+
+      // 排除明显不是回复表单的 action
+      if (actionUrl.contains('/search') || actionUrl.contains('/browse')) {
+        continue;
+      }
+
+      // 只在满足严格条件或宽松条件时才提取
+      if (hasReplyId || hasContentField) {
+        final hiddenFields = _extractFormFields(body);
+        if (hiddenFields['formhash'] != null &&
+            hiddenFields['formhash']!.isNotEmpty) {
+          return _RakuenReplyForm(
+            actionUrl: actionUrl,
+            formhash: hiddenFields['formhash']!,
+            lastview: hiddenFields['lastview'],
+            hiddenFields: hiddenFields,
+          );
+        }
+      }
+    }
+
+    // 宽松匹配：任何包含 formhash 的表单
+    for (final formMatch in formRegex.allMatches(html)) {
+      final body = formMatch.group(3) ?? '';
+      if (!body.contains('formhash')) continue;
+
+      final actionUrl = _normalizeWebUrl(formMatch.group(2) ?? '');
+      if (actionUrl.isEmpty ||
+          actionUrl.contains('/search') ||
+          actionUrl.contains('/browse')) {
+        continue;
+      }
+
+      final hiddenFields = _extractFormFields(body);
+      if (hiddenFields['formhash'] != null &&
+          hiddenFields['formhash']!.isNotEmpty) {
+        return _RakuenReplyForm(
+          actionUrl: actionUrl,
+          formhash: hiddenFields['formhash']!,
+          lastview: hiddenFields['lastview'],
+          hiddenFields: hiddenFields,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /// 从表单 HTML 中提取所有 input 字段
+  static Map<String, String> _extractFormFields(String formBody) {
+    final fields = <String, String>{};
+
+    // 方法1：匹配 name="..." value="..." 的顺序
+    var inputRegex = RegExp(
+      r'<input[^>]+name="([^"]+)"[^>]+value="([^"]*)"',
+      caseSensitive: false,
+    );
+    for (final match in inputRegex.allMatches(formBody)) {
+      final name = match.group(1);
+      final value = match.group(2);
+      if (name != null && value != null) {
+        fields[name] = value;
+      }
+    }
+
+    // 方法2：匹配 value="..." name="..." 的顺序（处理按钮等元素）
+    inputRegex = RegExp(
+      r'<input[^>]+value="([^"]*)"[^>]+name="([^"]+)"',
+      caseSensitive: false,
+    );
+    for (final match in inputRegex.allMatches(formBody)) {
+      final value = match.group(1);
+      final name = match.group(2);
+      if (name != null && value != null && !fields.containsKey(name)) {
+        fields[name] = value;
+      }
+    }
+
+    if (kDebugMode) {
+      print('[ApiClient] 提取的表单字段: $fields');
+    }
+
+    return fields;
+  }
+
+  static _RakuenNewTopicForm? _parseRakuenNewTopicForm(String html) {
+    final formMatch = RegExp(
+      r'<form[^>]+id="ModifyTopicForm"[^>]+action="([^"]+)"[^>]*>([\s\S]*?)</form>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (formMatch == null) return null;
+    final actionUrl = _normalizeWebUrl(formMatch.group(1) ?? '');
+    final body = formMatch.group(2) ?? '';
+
+    final hiddenFields = _extractFormFields(body);
+    final formhash = hiddenFields['formhash'];
+
+    if (actionUrl.isEmpty || formhash == null || formhash.isEmpty) {
+      return null;
+    }
+    return _RakuenNewTopicForm(
+      actionUrl: actionUrl,
+      formhash: formhash,
+      hiddenFields: hiddenFields,
+    );
+  }
+
+  static String? _parseRakuenCanonicalUrl(String html) {
+    final match = RegExp(
+      r'rakuen_redirect_url\s*=\s*"([^"]+)"',
+    ).firstMatch(html);
+    if (match == null) return null;
+    final url = _normalizeWebUrl(match.group(1) ?? '');
+    return url.isEmpty ? null : url;
+  }
+
+  static String? _buildRakuenNewTopicUrl(String sourceUrl) {
+    final normalized = _normalizeWebUrl(sourceUrl);
+    final groupMatch = RegExp(r'/group/([^/?#]+)').firstMatch(normalized);
+    if (groupMatch != null) {
+      final groupName = groupMatch.group(1);
+      if (groupName != null && groupName.isNotEmpty) {
+        return '${BgmConst.webBaseUrl}/group/$groupName/new_topic';
+      }
+    }
+
+    final subjectMatch = RegExp(r'/subject/(\d+)').firstMatch(normalized);
+    if (subjectMatch != null) {
+      final subjectId = subjectMatch.group(1);
+      if (subjectId != null && subjectId.isNotEmpty) {
+        return '${BgmConst.webBaseUrl}/subject/$subjectId/topic/new?type=subject';
+      }
+    }
+
+    return null;
+  }
+
+  static String? _buildRakuenReplyPageUrl(String topicUrl) {
+    final normalized = _normalizeWebUrl(topicUrl);
+    if (normalized.contains('/group/topic/') ||
+        normalized.contains('/subject/topic/')) {
+      return normalized.endsWith('/new_reply')
+          ? normalized
+          : '$normalized/new_reply';
+    }
+    return null;
+  }
+
+  Future<Response<dynamic>> _submitRakuenForm({
+    required String actionUrl,
+    required Map<String, dynamic> data,
+    required String refererUrl,
+  }) {
+    final uri = Uri.parse(actionUrl);
+
+    if (kDebugMode) {
+      print('[ApiClient] _submitRakuenForm 详情:');
+      print('[ApiClient]   actionUrl: $actionUrl');
+      print('[ApiClient]   uri.path: ${uri.path}');
+      print('[ApiClient]   uri.host: ${uri.host}');
+      print('[ApiClient]   uri.scheme: ${uri.scheme}');
+      print('[ApiClient]   referer: $refererUrl');
+      print('[ApiClient]   数据: $data');
+    }
+
+    return _webDio
+        .post(
+          uri.path,
+          queryParameters: uri.queryParameters.isEmpty
+              ? null
+              : uri.queryParameters,
+          data: data,
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            headers: {
+              'Referer': refererUrl,
+              'Origin': BgmConst.webBaseUrl,
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            followRedirects: false, // 不自动跟随重定向，这样我们可以看到响应
+            validateStatus: (status) =>
+                status != null && status < 500, // 接受所有状态码
+          ),
+        )
+        .then((response) {
+          if (kDebugMode) {
+            print('[ApiClient] _submitRakuenForm 响应:');
+            print('[ApiClient]   状态码: ${response.statusCode}');
+            print(
+              '[ApiClient]   Location header: ${response.headers.value('location')}',
+            );
+          }
+          return response;
+        });
+  }
+
+  Future<Response<dynamic>> _fetchWebResponse(String url) {
+    final uri = Uri.parse(url);
+    return _webDio.get(
+      uri.path,
+      queryParameters: uri.queryParameters.isEmpty ? null : uri.queryParameters,
+    );
+  }
+
   /// 检测字符串是否包含中文字符
   static bool _hasChinese(String text) {
     return RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
@@ -1167,6 +1705,39 @@ class ApiClient {
 }
 
 /// 分页结果
+class WebSessionInfo {
+  final int uid;
+  final String username;
+
+  const WebSessionInfo({required this.uid, required this.username});
+}
+
+class _RakuenReplyForm {
+  final String actionUrl;
+  final String formhash;
+  final String? lastview;
+  final Map<String, String> hiddenFields; // 所有隐藏字段
+
+  const _RakuenReplyForm({
+    required this.actionUrl,
+    required this.formhash,
+    this.lastview,
+    this.hiddenFields = const {},
+  });
+}
+
+class _RakuenNewTopicForm {
+  final String actionUrl;
+  final String formhash;
+  final Map<String, String> hiddenFields;
+
+  const _RakuenNewTopicForm({
+    required this.actionUrl,
+    required this.formhash,
+    this.hiddenFields = const {},
+  });
+}
+
 class PagedResult<T> {
   final int total;
   final int limit;
@@ -1187,32 +1758,71 @@ class PagedResult<T> {
 class LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    debugPrint('🌐 REQUEST: ${options.method} ${options.path}');
-    debugPrint('   Headers: ${options.headers}');
-    if (options.queryParameters.isNotEmpty) {
-      debugPrint('   Query: ${options.queryParameters}');
+    // 只记录关键的请求信息
+    final logPrefix =
+        options.path.contains('rakuen') ||
+            options.path.contains('timeline') ||
+            options.path.contains('/group/topic') ||
+            options.path.contains('/subject/topic')
+        ? '🔵'
+        : '🌐';
+    debugPrint('$logPrefix ${options.method} ${options.path}');
+
+    // 记录 Cookie 信息
+    if (options.headers['Cookie'] != null) {
+      final cookie = options.headers['Cookie'] as String;
+      debugPrint(
+        '   [Cookie] ${cookie.substring(0, cookie.length > 60 ? 60 : cookie.length)}...',
+      );
+    } else {
+      debugPrint('   [Cookie] 未设置');
     }
-    if (options.data != null) {
-      debugPrint('   Data: ${options.data}');
+
+    // 只对特定路径显示详细信息
+    if (options.path.contains('rakuen') || options.path.contains('cookie')) {
+      if (options.queryParameters.isNotEmpty) {
+        debugPrint('   Query: ${options.queryParameters}');
+      }
     }
     super.onRequest(options, handler);
   }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    debugPrint(
-      '✅ RESPONSE: ${response.statusCode} ${response.requestOptions.path}',
-    );
-    debugPrint('   Data: ${response.data}');
+    final path = response.requestOptions.path;
+    final statusCode = response.statusCode;
+
+    // 简化日志输出
+    if (path.contains('rakuen') ||
+        path.contains('timeline') ||
+        path.contains('/group/topic') ||
+        path.contains('/subject/topic')) {
+      debugPrint('✅ ${statusCode} ${path}');
+
+      // 只显示数据大小，不显示完整内容
+      if (response.data != null) {
+        if (response.data is String) {
+          final length = (response.data as String).length;
+          debugPrint('   HTML/Text: ${length} bytes');
+        } else if (response.data is Map || response.data is List) {
+          debugPrint('   JSON: ${response.data.toString().length} bytes');
+        }
+      }
+    } else {
+      // 其他请求只显示简要状态
+      debugPrint('✓ ${statusCode} ${path}');
+    }
     super.onResponse(response, handler);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    debugPrint('❌ ERROR: ${err.type} ${err.requestOptions.path}');
-    debugPrint('   Message: ${err.message}');
-    debugPrint('   Response: ${err.response?.data}');
-    debugPrint('   StackTrace: ${err.stackTrace}');
+    debugPrint('❌ ${err.type} ${err.requestOptions.path}');
+    debugPrint('   ${err.message}');
+    // 不显示完整的响应数据和堆栈，避免刷屏
+    if (err.response != null) {
+      debugPrint('   Status: ${err.response?.statusCode}');
+    }
     super.onError(err, handler);
   }
 }

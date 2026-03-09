@@ -9,6 +9,10 @@ set(BINARY_NAME "zc_bangumi")
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
+if(POLICY CMP0175)
+  cmake_policy(SET CMP0175 OLD)
+endif()
+set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "Suppress dev warnings")
 
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -48,6 +52,16 @@ endfunction()
 # Flutter library and tool build rules.
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
+
+# Make project-local NuGet available to Windows plugins such as
+# flutter_inappwebview_windows without requiring a system-wide install.
+set(PROJECT_NUGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../tools/nuget")
+set(CMAKE_PROGRAM_PATH "${PROJECT_NUGET_DIR};${CMAKE_PROGRAM_PATH}")
+set(ENV{PATH} "${PROJECT_NUGET_DIR};$ENV{PATH}")
+
+# flutter_inappwebview on Windows can render a blank page on some machines
+# with the default D3D texture path. Force the plugin's PixelBuffer fallback.
+set(FLUTTER_WEBVIEW_WINDOWS_USE_TEXTURE_FALLBACK ON)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")

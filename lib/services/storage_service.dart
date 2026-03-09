@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StorageService {
   static const String _keyAccessToken = 'access_token';
   static const String _keyUsername = 'username';
+  static const String _keyWebCookie = 'web_cookie';
+  static const String _keyWebCookieJar = 'web_cookie_jar';
   static const String _keyLastUpdateCheck = 'last_update_check';
   static const String _keyIgnoredVersion = 'ignored_version';
 
@@ -36,6 +38,43 @@ class StorageService {
       await _prefs.remove(_keyUsername);
     } else {
       await _prefs.setString(_keyUsername, username);
+    }
+  }
+
+  /// 读取 Bangumi 网页 Cookie
+  String? get webCookie => _prefs.getString(_keyWebCookie);
+
+  /// 读取 Bangumi 网页 Cookie Jar
+  List<Map<String, dynamic>>? get webCookieJar {
+    final raw = _prefs.getString(_keyWebCookieJar);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return null;
+      return decoded
+          .whereType<Map>()
+          .map((item) => item.map((key, value) => MapEntry('$key', value)))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 保存 Bangumi 网页 Cookie
+  Future<void> setWebCookie(String? cookie) async {
+    if (cookie == null || cookie.isEmpty) {
+      await _prefs.remove(_keyWebCookie);
+    } else {
+      await _prefs.setString(_keyWebCookie, cookie);
+    }
+  }
+
+  /// 保存 Bangumi 网页 Cookie Jar
+  Future<void> setWebCookieJar(List<Map<String, dynamic>>? cookieJar) async {
+    if (cookieJar == null || cookieJar.isEmpty) {
+      await _prefs.remove(_keyWebCookieJar);
+    } else {
+      await _prefs.setString(_keyWebCookieJar, jsonEncode(cookieJar));
     }
   }
 

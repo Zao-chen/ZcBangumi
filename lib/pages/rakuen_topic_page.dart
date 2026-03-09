@@ -7,6 +7,8 @@ import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../pages/subject_page.dart';
 import '../services/api_client.dart';
+import '../services/storage_service.dart';
+import '../services/web_reply_service.dart';
 
 class RakuenTopicPage extends StatefulWidget {
   final RakuenTopic topic;
@@ -21,6 +23,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   RakuenTopicDetail? _detail;
   bool _loading = true;
   String? _error;
+  bool _replySubmitting = false;
+  bool _topicSubmitting = false;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _headerKey = GlobalKey();
   double _headerRevealOffset = 160;
@@ -99,6 +103,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   @override
   Widget build(BuildContext context) {
     final title = _detail?.title ?? widget.topic.title;
+    final canCreateTopic = _canCreateTopic(_detail?.sourceUrl);
 
     return Scaffold(
       appBar: AppBar(
@@ -114,7 +119,210 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         ],
       ),
       body: _buildBody(),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _replySubmitting ? null : _showReplyComposer,
+                  icon: _replySubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.reply_rounded),
+                  label: const Text('回复'),
+                ),
+              ),
+              if (canCreateTopic) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: _topicSubmitting ? null : _showNewTopicComposer,
+                    icon: _topicSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.edit_square),
+                    label: const Text('发帖'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  Future<void> _showReplyComposer() async {
+    if (!context.read<ApiClient>().hasWebCookie) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先在设置中导入网页 Cookie')));
+      return;
+    }
+    final result = await showModalBottomSheet<_RakuenComposeResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) =>
+          const _RakuenComposerSheet(title: '回复主题', submitLabel: '发送回复'),
+    );
+    if (!mounted || result == null) return;
+
+    setState(() {
+      _replySubmitting = true;
+    });
+
+    try {
+      final submitTopicUrl = _detail?.canonicalUrl ?? widget.topic.topicUrl;
+      final api = context.read<ApiClient>();
+      await api.createRakuenReply(
+        topicUrl: submitTopicUrl,
+        content: result.content,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('回复已发送')));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      final errorMsg = e.toString();
+      String displayMsg = '发送回复失败: $e';
+
+      // 提供更友好的错误提示
+      if (errorMsg.contains('login_required') || errorMsg.contains('未登录')) {
+        displayMsg = 'Cookie 未登录或已过期\n请在设置中重新"自动获取 Cookie"';
+      } else if (errorMsg.contains('form_missing')) {
+        displayMsg = '未找到回复表单\n该主题可能不支持回复';
+      } else if (errorMsg.contains('网页回复超时')) {
+        displayMsg = '回复超时，请检查网络连接后重试';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(displayMsg),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _replySubmitting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showNewTopicComposer() async {
+    if (!context.read<ApiClient>().hasWebCookie) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先在设置中导入网页 Cookie')));
+      return;
+    }
+    final detail = _detail;
+    final sourceUrl = detail?.sourceUrl;
+    if (sourceUrl == null || !_canCreateTopic(sourceUrl)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前来源暂不支持发帖')));
+      return;
+    }
+
+    final result = await showModalBottomSheet<_RakuenComposeResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _RakuenComposerSheet(
+        title: '发表新主题',
+        submitLabel: '发帖',
+        showTitleField: true,
+        initialTitle: detail?.sourceTitle,
+      ),
+    );
+    if (!mounted || result == null) return;
+
+    setState(() {
+      _topicSubmitting = true;
+    });
+
+    try {
+      final createdUrl = await context.read<ApiClient>().createRakuenTopic(
+        sourceUrl: sourceUrl,
+        title: result.title,
+        content: result.content,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('主题已发表')));
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RakuenTopicPage(
+            topic: RakuenTopic(
+              id: '',
+              type: _inferTopicTypeFromUrl(createdUrl),
+              title: result.title,
+              topicUrl: createdUrl,
+              avatarUrl: detail?.coverUrl ?? widget.topic.avatarUrl,
+              replyCount: 0,
+              timeText: '',
+              sourceTitle: detail?.sourceTitle,
+              sourceUrl: sourceUrl,
+              authorName: null,
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final errorMsg = e.toString();
+      String displayMsg = '发帖失败: $e';
+
+      // 提供更友好的错误提示
+      if (errorMsg.contains('login_required') || errorMsg.contains('未登录')) {
+        displayMsg = 'Cookie 未登录或已过期\n请在设置中重新"自动获取 Cookie"';
+      } else if (errorMsg.contains('form_missing') ||
+          errorMsg.contains('没有可用的发帖表单')) {
+        displayMsg = '未找到发帖表单\n该来源可能不支持发帖';
+      } else if (errorMsg.contains('暂不支持发帖')) {
+        displayMsg = '当前来源不支持发帖功能';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(displayMsg),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _topicSubmitting = false;
+        });
+      }
+    }
+  }
+
+  static bool _canCreateTopic(String? sourceUrl) {
+    final value = sourceUrl ?? '';
+    return RegExp(r'/group/[^/?#]+').hasMatch(value) ||
+        RegExp(r'/subject/\d+').hasMatch(value);
+  }
+
+  static String _inferTopicTypeFromUrl(String url) {
+    if (url.contains('/group/topic/')) return 'group';
+    if (url.contains('/subject/topic/')) return 'subject';
+    return 'group';
   }
 
   Widget _buildBody() {
@@ -580,6 +788,118 @@ class _HeaderAction extends StatelessWidget {
       avatar: Icon(icon, size: 16),
       label: Text(label),
       onPressed: onTap,
+    );
+  }
+}
+
+class _RakuenComposeResult {
+  final String title;
+  final String content;
+
+  const _RakuenComposeResult({this.title = '', required this.content});
+}
+
+class _RakuenComposerSheet extends StatefulWidget {
+  final String title;
+  final String submitLabel;
+  final bool showTitleField;
+  final String? initialTitle;
+
+  const _RakuenComposerSheet({
+    required this.title,
+    required this.submitLabel,
+    this.showTitleField = false,
+    this.initialTitle,
+  });
+
+  @override
+  State<_RakuenComposerSheet> createState() => _RakuenComposerSheetState();
+}
+
+class _RakuenComposerSheetState extends State<_RakuenComposerSheet> {
+  late final TextEditingController _titleController;
+  final TextEditingController _contentController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.initialTitle ?? '');
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    if (widget.showTitleField && title.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('标题不能为空')));
+      return;
+    }
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('正文不能为空')));
+      return;
+    }
+    Navigator.of(
+      context,
+    ).pop(_RakuenComposeResult(title: title, content: content));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          if (widget.showTitleField) ...[
+            TextField(
+              controller: _titleController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: '标题',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            controller: _contentController,
+            minLines: 6,
+            maxLines: 10,
+            textInputAction: TextInputAction.newline,
+            decoration: const InputDecoration(
+              labelText: '正文',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _submit,
+              child: Text(widget.submitLabel),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
