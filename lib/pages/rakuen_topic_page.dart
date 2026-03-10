@@ -103,8 +103,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   @override
   Widget build(BuildContext context) {
     final title = _detail?.title ?? widget.topic.title;
-    // 在主题详情页面不显示"发帖"按钮，这是查看别人的帖子，不应该提供创建新帖的功能
-    const canCreateTopic = false;
 
     return Scaffold(
       appBar: AppBar(
@@ -120,45 +118,21 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         ],
       ),
       body: _buildBody(),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _replySubmitting ? null : _showReplyComposer,
-                  icon: _replySubmitting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.reply_rounded),
-                  label: const Text('回复'),
-                ),
-              ),
-              if (canCreateTopic) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: _topicSubmitting ? null : _showNewTopicComposer,
-                    icon: _topicSubmitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.edit_square),
-                    label: const Text('发帖'),
-                  ),
-                ),
-              ],
-            ],
-          ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: FloatingActionButton.extended(
+          onPressed: _replySubmitting ? null : _showReplyComposer,
+          icon: _replySubmitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.reply_rounded),
+          label: Text(_replySubmitting ? '发送中' : '回复'),
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -352,114 +326,186 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     final detail = _detail;
     if (detail == null) return const SizedBox.shrink();
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 800;
-          final horizontalPadding = isWide
-              ? (constraints.maxWidth - 900).clamp(0, constraints.maxWidth) / 2
-              : 12.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mediaQuery = MediaQuery.of(context);
+        final isLandscape = mediaQuery.orientation == Orientation.landscape;
+        final useSplitLayout = isLandscape && constraints.maxWidth >= 960;
 
-          return CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  12,
-                  horizontalPadding,
-                  0,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: KeyedSubtree(
-                    key: _headerKey,
-                    child: _RakuenTopicHeader(
-                      detail: detail,
-                      fallbackTopic: widget.topic,
-                    ),
-                  ),
+        if (useSplitLayout) {
+          return _buildSplitBody(detail, constraints.maxWidth);
+        }
+
+        return RefreshIndicator(
+          onRefresh: _load,
+          child: _buildSingleColumnBody(detail, constraints.maxWidth),
+        );
+      },
+    );
+  }
+
+  Widget _buildSingleColumnBody(RakuenTopicDetail detail, double maxWidth) {
+    final horizontalPadding = maxWidth > 800
+        ? (maxWidth - 900).clamp(0, maxWidth) / 2
+        : 12.0;
+
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          sliver: SliverToBoxAdapter(
+            child: KeyedSubtree(
+              key: _headerKey,
+              child: _RakuenTopicHeader(
+                detail: detail,
+                fallbackTopic: widget.topic,
+              ),
+            ),
+          ),
+        ),
+        if (detail.originalPost != null) ...[
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+            sliver: SliverToBoxAdapter(
+              child: _SectionTitle(
+                label: '楼主',
+                trailing: detail.originalPost!.timeText,
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
+            sliver: SliverToBoxAdapter(
+              child: _RakuenPostCard(
+                post: detail.originalPost!,
+                emphasize: true,
+              ),
+            ),
+          ),
+        ],
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          sliver: SliverToBoxAdapter(
+            child: _SectionTitle(
+              label: '回复',
+              trailing: '${detail.replies.length} 条',
+            ),
+          ),
+        ),
+        if (detail.replies.isEmpty)
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
+            sliver: const SliverToBoxAdapter(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('暂无回复'),
                 ),
               ),
-              if (detail.originalPost != null) ...[
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    12,
-                    horizontalPadding,
-                    0,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: _SectionTitle(
-                      label: '楼主',
-                      trailing: detail.originalPost!.timeText,
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    8,
-                    horizontalPadding,
-                    0,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: _RakuenPostCard(
-                      post: detail.originalPost!,
-                      emphasize: true,
-                    ),
-                  ),
-                ),
-              ],
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  12,
-                  horizontalPadding,
-                  0,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: _SectionTitle(
-                    label: '回复',
-                    trailing: '${detail.replies.length} 条',
-                  ),
-                ),
-              ),
-              if (detail.replies.isEmpty)
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    8,
-                    horizontalPadding,
-                    24,
-                  ),
-                  sliver: const SliverToBoxAdapter(
-                    child: Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text('暂无回复'),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                return _RakuenPostCard(post: detail.replies[index]);
+              }, childCount: detail.replies.length),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSplitBody(RakuenTopicDetail detail, double maxWidth) {
+    final outerPadding = maxWidth >= 1320 ? 20.0 : 12.0;
+    const paneGap = 16.0;
+    const scrollbarGutter = 14.0;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(outerPadding, 12, outerPadding, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 15,
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.only(right: scrollbarGutter),
+                    sliver: SliverToBoxAdapter(
+                      child: KeyedSubtree(
+                        key: _headerKey,
+                        child: _RakuenLeadPane(
+                          detail: detail,
+                          fallbackTopic: widget.topic,
+                          originalPost: detail.originalPost,
+                        ),
                       ),
                     ),
                   ),
-                )
-              else
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    8,
-                    horizontalPadding,
-                    24,
+                  const SliverPadding(
+                    padding: EdgeInsets.only(right: scrollbarGutter, bottom: 24),
+                    sliver: SliverToBoxAdapter(child: SizedBox.shrink()),
                   ),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      return _RakuenPostCard(post: detail.replies[index]);
-                    }, childCount: detail.replies.length),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: paneGap),
+          Expanded(
+            flex: 11,
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: CustomScrollView(
+                controller: _replyScrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.only(right: scrollbarGutter),
+                    sliver: SliverToBoxAdapter(
+                      child: _SectionTitle(
+                        label: '回复',
+                        trailing: '${detail.replies.length} 条',
+                      ),
+                    ),
                   ),
-                ),
-            ],
-          );
-        },
+                  if (detail.replies.isEmpty)
+                    const SliverPadding(
+                      padding: EdgeInsets.only(top: 8, right: scrollbarGutter),
+                      sliver: SliverToBoxAdapter(
+                        child: Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('暂无回复'),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.only(
+                        top: 8,
+                        right: scrollbarGutter,
+                        bottom: 24,
+                      ),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          return _RakuenPostCard(post: detail.replies[index]);
+                        }, childCount: detail.replies.length),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -576,6 +622,183 @@ class _RakuenTopicHeader extends StatelessWidget {
   static int? _extractSubjectId(String? url) {
     final match = RegExp(r'/subject/(\d+)').firstMatch(url ?? '');
     return match != null ? int.tryParse(match.group(1) ?? '') : null;
+  }
+}
+
+class _RakuenLeadPane extends StatelessWidget {
+  final RakuenTopicDetail detail;
+  final RakuenTopic fallbackTopic;
+  final RakuenPost? originalPost;
+
+  const _RakuenLeadPane({
+    required this.detail,
+    required this.fallbackTopic,
+    required this.originalPost,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final subjectId = _RakuenTopicHeader._extractSubjectId(detail.sourceUrl);
+    final coverUrl = detail.coverUrl ?? fallbackTopic.avatarUrl;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: coverUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: coverUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: colorScheme.surfaceContainerHighest,
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: colorScheme.surfaceContainerHighest,
+                            child: const Icon(Icons.article_outlined),
+                          ),
+                        )
+                      : Container(
+                          color: colorScheme.surfaceContainerHighest,
+                          child: const Icon(Icons.article_outlined),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      detail.title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (detail.sourceTitle != null &&
+                        detail.sourceTitle!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        detail.sourceTitle!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (detail.sectionTitle != null &&
+                        detail.sectionTitle!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        detail.sectionTitle!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (subjectId != null) ...[
+            const SizedBox(height: 14),
+            _HeaderAction(
+              icon: Icons.movie_outlined,
+              label: '条目',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SubjectPage(subjectId: subjectId),
+                ),
+              ),
+            ),
+          ],
+          if (originalPost != null) ...[
+            const SizedBox(height: 18),
+            Divider(color: colorScheme.outlineVariant, height: 1),
+            const SizedBox(height: 18),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Avatar(url: originalPost!.avatarUrl, size: 48),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _PostBody(
+                    nickname: originalPost!.nickname,
+                    sign: originalPost!.sign,
+                    floorText: originalPost!.floor,
+                    timeText: originalPost!.timeText,
+                    content: originalPost!.content,
+                    titleFontSize: 15,
+                    metaFontSize: 11,
+                    contentFontSize: 15,
+                    contentHeight: 1.5,
+                    colorScheme: colorScheme,
+                  ),
+                ),
+              ],
+            ),
+            if (originalPost!.subReplies.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.only(left: 60),
+                child: Column(
+                  children: originalPost!.subReplies.map((reply) {
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _Avatar(url: reply.avatarUrl, size: 32),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _PostBody(
+                              nickname: reply.nickname,
+                              sign: reply.sign,
+                              floorText: reply.floor,
+                              timeText: reply.timeText,
+                              content: reply.content,
+                              titleFontSize: 13,
+                              metaFontSize: 10,
+                              contentFontSize: 13,
+                              contentHeight: 1.4,
+                              colorScheme: colorScheme,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 }
 
