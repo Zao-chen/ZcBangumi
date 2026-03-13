@@ -24,7 +24,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.3'
+          flutter-version: '3.41.2'
           cache: true
 
       - name: Get dependencies
@@ -116,7 +116,7 @@ jobs:
           path: zc_bangumi-${{ github.event.inputs.release_tag }}.apk
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     
     steps:
       - uses: actions/checkout@v4
@@ -124,7 +124,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.3'
+          flutter-version: '3.41.2'
           cache: true
 
       - name: Get dependencies
