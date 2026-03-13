@@ -176,6 +176,13 @@ class _RakuenPageState extends State<RakuenPage>
       appBar: AppBar(
         title: const Text('超展开'),
         centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: '按帖子 ID 跳转',
+            onPressed: _openJumpDialog,
+            icon: const Icon(Icons.travel_explore_outlined),
+          ),
+        ],
         bottom: isLandscape
             ? null
             : TabBar(
@@ -185,6 +192,100 @@ class _RakuenPageState extends State<RakuenPage>
               ),
       ),
       body: isLandscape ? _buildLandscapeLayout() : _buildTabBarView(),
+    );
+  }
+
+  Future<void> _openJumpDialog() async {
+    final controller = TextEditingController();
+    final api = context.read<ApiClient>();
+
+    final topic = await showDialog<RakuenTopic>(
+      context: context,
+      builder: (dialogContext) {
+        bool submitting = false;
+        String? errorText;
+
+        Future<void> submit(StateSetter setState) async {
+          final input = controller.text.trim();
+          if (input.isEmpty) {
+            setState(() => errorText = '请输入帖子 ID');
+            return;
+          }
+
+          setState(() {
+            submitting = true;
+            errorText = null;
+          });
+
+          try {
+            final resolved = await api.resolveRakuenTopic(input: input);
+            if (!dialogContext.mounted) return;
+            Navigator.of(dialogContext).pop(resolved);
+          } catch (e) {
+            setState(() {
+              submitting = false;
+              errorText = e.toString().replaceFirst('Exception: ', '');
+            });
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('帖子跳转'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      enabled: !submitting,
+                      decoration: InputDecoration(
+                        hintText: '输入帖子 ID、group_123 或完整链接',
+                        errorText: errorText,
+                      ),
+                      onSubmitted: (_) => submit(setState),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '支持纯数字 ID，会自动尝试 group、subject、ep、角色和人物主题。',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: submitting ? null : () => submit(setState),
+                  child: submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('跳转'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (topic == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RakuenTopicPage(topic: topic)),
     );
   }
 

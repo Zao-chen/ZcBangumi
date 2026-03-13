@@ -776,6 +776,48 @@ class ApiClient {
     );
   }
 
+  Future<RakuenTopic> resolveRakuenTopic({
+    required String input,
+  }) async {
+    final normalized = input.trim();
+    if (normalized.isEmpty) {
+      throw Exception('请输入帖子 ID');
+    }
+
+    final candidates = _buildRakuenTopicCandidates(normalized);
+    if (candidates.isEmpty) {
+      throw Exception('无法识别帖子 ID');
+    }
+
+    for (final candidate in candidates) {
+      try {
+        final detail = await getRakuenTopicDetail(topicUrl: candidate);
+        if (!_looksLikeRakuenTopicDetail(detail)) continue;
+
+        final resolvedUrl = detail.canonicalUrl ?? candidate;
+        final identity = _parseRakuenTopicIdentity(resolvedUrl);
+        return RakuenTopic(
+          id: identity == null
+              ? 'manual_${DateTime.now().millisecondsSinceEpoch}'
+              : '${identity.type}_${identity.id}',
+          type: identity?.type ?? '',
+          title: detail.title,
+          topicUrl: resolvedUrl,
+          avatarUrl: detail.coverUrl ?? '',
+          replyCount: detail.replies.length,
+          timeText: '帖子 ID 跳转',
+          sourceTitle: detail.sourceTitle,
+          sourceUrl: detail.sourceUrl,
+          authorName: detail.originalPost?.username,
+        );
+      } catch (_) {
+        continue;
+      }
+    }
+
+    throw Exception('未找到对应帖子');
+  }
+
   Future<void> createRakuenReply({
     required String topicUrl,
     required String content,
@@ -1796,6 +1838,158 @@ class ApiClient {
     return null;
   }
 
+  static List<String> _buildRakuenTopicCandidates(String input) {
+    final candidates = <String>[];
+
+    void addCandidate(String? value) {
+      final trimmed = value?.trim() ?? '';
+      if (trimmed.isEmpty || candidates.contains(trimmed)) return;
+      candidates.add(trimmed);
+    }
+
+    final directUrl = _normalizeRakuenTopicUrl(input);
+    if (directUrl != null) {
+      addCandidate(directUrl);
+    }
+
+    final rakuenMatch = RegExp(
+      r'(?:rakuen/topic/)?(group|subject|ep|crt|prsn)[/_: -]?(\d+)',
+      caseSensitive: false,
+    ).firstMatch(input);
+    if (rakuenMatch != null) {
+      final type = _normalizeRakuenTopicType(rakuenMatch.group(1));
+      final id = rakuenMatch.group(2);
+      if (type != null && id != null) {
+        addCandidate('${BgmConst.webBaseUrl}/rakuen/topic/$type/$id');
+      }
+    }
+
+    final aliasMatch = RegExp(
+      r'(character|person|mono)[/_: -]?(\d+)',
+      caseSensitive: false,
+    ).firstMatch(input);
+    if (aliasMatch != null) {
+      final id = aliasMatch.group(2);
+      if (id != null) {
+        switch (aliasMatch.group(1)?.toLowerCase()) {
+          case 'character':
+            addCandidate('${BgmConst.webBaseUrl}/rakuen/topic/crt/$id');
+            break;
+          case 'person':
+            addCandidate('${BgmConst.webBaseUrl}/rakuen/topic/prsn/$id');
+            break;
+          case 'mono':
+            addCandidate('${BgmConst.webBaseUrl}/rakuen/topic/crt/$id');
+            addCandidate('${BgmConst.webBaseUrl}/rakuen/topic/prsn/$id');
+            break;
+        }
+      }
+    }
+
+    final digitsOnly = RegExp(r'^\d+$').hasMatch(input);
+    if (digitsOnly) {
+      for (final type in const ['group', 'subject', 'ep', 'crt', 'prsn']) {
+        addCandidate('${BgmConst.webBaseUrl}/rakuen/topic/$type/$input');
+      }
+    }
+
+    return candidates;
+  }
+
+  static String? _normalizeRakuenTopicUrl(String input) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return null;
+
+    Uri? uri;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      uri = Uri.tryParse(trimmed);
+    } else if (trimmed.startsWith('/')) {
+      uri = Uri.tryParse('${BgmConst.webBaseUrl}$trimmed');
+    } else if (trimmed.contains('/')) {
+      uri = Uri.tryParse('${BgmConst.webBaseUrl}/$trimmed');
+    }
+
+    if (uri == null) return null;
+    final host = uri.host.toLowerCase();
+    if (!{
+      'bgm.tv',
+      'www.bgm.tv',
+      'bangumi.tv',
+      'www.bangumi.tv',
+      'chii.in',
+      'www.chii.in',
+    }.contains(host)) {
+      return null;
+    }
+
+    final path = uri.path;
+    if (RegExp(r'^/rakuen/topic/(group|subject|ep|crt|prsn)/\d+$')
+        .hasMatch(path)) {
+      return Uri(
+        scheme: 'https',
+        host: BgmConst.webBaseUrl.replaceFirst(RegExp(r'^https?://'), ''),
+        path: path,
+      ).toString();
+    }
+
+    final directMatch = RegExp(
+      r'^/(group/topic|subject/topic|ep|character/topic|person/topic)/(\d+)$',
+    ).firstMatch(path);
+    if (directMatch == null) return null;
+
+    final segment = directMatch.group(1);
+    final id = directMatch.group(2);
+    final type = switch (segment) {
+      'group/topic' => 'group',
+      'subject/topic' => 'subject',
+      'ep' => 'ep',
+      'character/topic' => 'crt',
+      'person/topic' => 'prsn',
+      _ => null,
+    };
+    if (type == null || id == null) return null;
+    return '${BgmConst.webBaseUrl}/rakuen/topic/$type/$id';
+  }
+
+  static String? _normalizeRakuenTopicType(String? type) {
+    switch ((type ?? '').trim().toLowerCase()) {
+      case 'group':
+        return 'group';
+      case 'subject':
+        return 'subject';
+      case 'ep':
+        return 'ep';
+      case 'crt':
+      case 'character':
+        return 'crt';
+      case 'prsn':
+      case 'person':
+        return 'prsn';
+      default:
+        return null;
+    }
+  }
+
+  static bool _looksLikeRakuenTopicDetail(RakuenTopicDetail detail) {
+    return detail.originalPost != null ||
+        detail.replies.isNotEmpty ||
+        detail.canonicalUrl != null ||
+        detail.sourceTitle != null ||
+        detail.sectionTitle != null ||
+        detail.coverUrl != null;
+  }
+
+  static _RakuenTopicIdentity? _parseRakuenTopicIdentity(String topicUrl) {
+    final match = RegExp(
+      r'/rakuen/topic/(group|subject|ep|crt|prsn)/(\d+)',
+    ).firstMatch(topicUrl);
+    if (match == null) return null;
+    final type = match.group(1);
+    final id = match.group(2);
+    if (type == null || id == null) return null;
+    return _RakuenTopicIdentity(type: type, id: id);
+  }
+
   Future<Response<dynamic>> _submitRakuenForm({
     required String actionUrl,
     required Map<String, dynamic> data,
@@ -1887,6 +2081,13 @@ class _RakuenReplyForm {
     this.lastview,
     this.hiddenFields = const {},
   });
+}
+
+class _RakuenTopicIdentity {
+  final String type;
+  final String id;
+
+  const _RakuenTopicIdentity({required this.type, required this.id});
 }
 
 class _RakuenNewTopicForm {
