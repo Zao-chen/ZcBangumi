@@ -24,7 +24,7 @@ void main() async {
 
   // 初始化 API 客户端
   final apiClient = ApiClient();
-  apiClient.setWebCookie(storage.webCookie);
+  apiClient.setWebSession(storage.webSession);
 
   // 初始化更新服务
   final updateService = UpdateService(apiClient.dio, storage);

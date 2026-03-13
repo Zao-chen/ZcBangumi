@@ -1,12 +1,17 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/bangumi_web_session.dart';
+
 /// 本地存储服务
 class StorageService {
   static const String _keyAccessToken = 'access_token';
   static const String _keyUsername = 'username';
   static const String _keyWebCookie = 'web_cookie';
   static const String _keyWebCookieJar = 'web_cookie_jar';
+  static const String _keyWebSession = 'web_session';
+  static const String _keyLegacyWebSessionInvalidated =
+      'legacy_web_session_invalidated';
   static const String _keyLastUpdateCheck = 'last_update_check';
   static const String _keyIgnoredVersion = 'ignored_version';
 
@@ -15,6 +20,7 @@ class StorageService {
   /// 初始化
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyWebSession();
   }
 
   /// 读取 Access Token
@@ -41,40 +47,37 @@ class StorageService {
     }
   }
 
-  /// 读取 Bangumi 网页 Cookie
-  String? get webCookie => _prefs.getString(_keyWebCookie);
-
-  /// 读取 Bangumi 网页 Cookie Jar
-  List<Map<String, dynamic>>? get webCookieJar {
-    final raw = _prefs.getString(_keyWebCookieJar);
+  BangumiWebSession? get webSession {
+    final raw = _prefs.getString(_keyWebSession);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) return null;
-      return decoded
-          .whereType<Map>()
-          .map((item) => item.map((key, value) => MapEntry('$key', value)))
-          .toList();
+      if (decoded is! Map) return null;
+      return BangumiWebSession.fromJson(
+        decoded.map((key, value) => MapEntry('$key', value)),
+      );
     } catch (_) {
       return null;
     }
   }
 
-  /// 保存 Bangumi 网页 Cookie
-  Future<void> setWebCookie(String? cookie) async {
-    if (cookie == null || cookie.isEmpty) {
-      await _prefs.remove(_keyWebCookie);
-    } else {
-      await _prefs.setString(_keyWebCookie, cookie);
+  bool get legacyWebSessionInvalidated =>
+      _prefs.getBool(_keyLegacyWebSessionInvalidated) ?? false;
+
+  Future<void> setWebSession(BangumiWebSession? session) async {
+    if (session == null || !session.isValid) {
+      await _prefs.remove(_keyWebSession);
+      return;
     }
+    await _prefs.setString(_keyWebSession, jsonEncode(session.toJson()));
+    await _prefs.remove(_keyLegacyWebSessionInvalidated);
   }
 
-  /// 保存 Bangumi 网页 Cookie Jar
-  Future<void> setWebCookieJar(List<Map<String, dynamic>>? cookieJar) async {
-    if (cookieJar == null || cookieJar.isEmpty) {
-      await _prefs.remove(_keyWebCookieJar);
+  Future<void> setLegacyWebSessionInvalidated(bool value) async {
+    if (value) {
+      await _prefs.setBool(_keyLegacyWebSessionInvalidated, true);
     } else {
-      await _prefs.setString(_keyWebCookieJar, jsonEncode(cookieJar));
+      await _prefs.remove(_keyLegacyWebSessionInvalidated);
     }
   }
 
@@ -82,6 +85,22 @@ class StorageService {
   Future<void> clearAuth() async {
     await _prefs.remove(_keyAccessToken);
     await _prefs.remove(_keyUsername);
+  }
+
+  Future<void> _migrateLegacyWebSession() async {
+    final hasLegacyCookie = (_prefs.getString(_keyWebCookie) ?? '').isNotEmpty;
+    final hasLegacyCookieJar =
+        (_prefs.getString(_keyWebCookieJar) ?? '').isNotEmpty;
+    final hasStructuredSession = (_prefs.getString(_keyWebSession) ?? '')
+        .isNotEmpty;
+
+    if (hasLegacyCookie || hasLegacyCookieJar) {
+      await _prefs.remove(_keyWebCookie);
+      await _prefs.remove(_keyWebCookieJar);
+      if (!hasStructuredSession) {
+        await _prefs.setBool(_keyLegacyWebSessionInvalidated, true);
+      }
+    }
   }
 
   // ==================== 数据缓存 ====================

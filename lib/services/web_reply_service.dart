@@ -5,19 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../constants.dart';
+import '../models/bangumi_web_session.dart';
 import 'webview_environment_service.dart';
 
 class WebReplyService {
   static Future<void> submitReply({
     required String topicUrl,
     required String content,
-    String? cookie,
-    List<Map<String, dynamic>>? cookieJar,
+    required BangumiWebSession session,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
       throw Exception('回复内容不能为空');
     }
+    final cookie = session.buildCookieHeaderForUri(Uri.parse(BgmConst.webBaseUrl));
+    final cookieJar = session.cookies
+        .map((item) => item.toJson())
+        .cast<Map<String, dynamic>>()
+        .toList();
 
     final replyPageUrl = _buildReplyPageUrl(topicUrl);
     if (replyPageUrl == null) {

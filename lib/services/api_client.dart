@@ -6,17 +6,20 @@ import '../models/character.dart';
 import '../models/collection.dart';
 import '../models/comment.dart';
 import '../models/episode.dart';
+import '../models/bangumi_web_session.dart';
 import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
+import 'web_reply_service.dart';
 
 /// Bangumi API 客户端
 class ApiClient {
   late final Dio _dio;
   String? _accessToken;
   String? _webCookie;
+  BangumiWebSession? _webSession;
 
   /// 公开 Dio 实例供其他服务使用
   Dio get dio => _dio;
@@ -45,6 +48,19 @@ class ApiClient {
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
         responseType: ResponseType.plain,
+      ),
+    );
+    _webDio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.headers['Cookie'] == null) {
+            final cookieHeader = _buildCookieHeaderForUri(options.uri);
+            if (cookieHeader != null && cookieHeader.isNotEmpty) {
+              options.headers['Cookie'] = cookieHeader;
+            }
+          }
+          handler.next(options);
+        },
       ),
     );
 
@@ -79,7 +95,8 @@ class ApiClient {
   }
 
   bool get hasToken => _accessToken != null && _accessToken!.isNotEmpty;
-  bool get hasWebCookie => _webCookie != null && _webCookie!.isNotEmpty;
+  bool get hasWebSession => _webSession?.isValid == true;
+  bool get hasWebCookie => hasWebSession;
 
   void setWebCookie(String? cookie) {
     final normalized = sanitizeWebCookie(cookie ?? '');
@@ -121,6 +138,34 @@ class ApiClient {
       options: normalized == null
           ? null
           : Options(headers: {'Cookie': normalized}),
+    );
+    return _parseWebSessionInfo(resp.data as String);
+  }
+
+  void setWebSession(BangumiWebSession? session) {
+    _webSession = session?.isValid == true ? session : null;
+    if (_webSession == null) {
+      _webCookie = null;
+    }
+    if (!kDebugMode) return;
+    if (_webSession == null) {
+      print('[ApiClient] Web session cleared');
+      return;
+    }
+    print('[ApiClient] Web session set');
+    print('[ApiClient]   user: @${_webSession!.username}');
+    print('[ApiClient]   uid: ${_webSession!.uid}');
+    print('[ApiClient]   cookies: ${_webSession!.cookies.length}');
+  }
+
+  Future<WebSessionInfo?> validateWebSession(BangumiWebSession session) async {
+    final cookieHeader = session.buildCookieHeaderForUri(
+      Uri.parse(BgmConst.webBaseUrl),
+    );
+    if (cookieHeader == null || cookieHeader.isEmpty) return null;
+    final resp = await _webDio.get(
+      '/',
+      options: Options(headers: {'Cookie': cookieHeader}),
     );
     return _parseWebSessionInfo(resp.data as String);
   }
@@ -871,6 +916,79 @@ class ApiClient {
     }
   }
 
+  Future<void> submitRakuenReply({
+    required String topicUrl,
+    required String content,
+  }) async {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('回复内容不能为空');
+    }
+    if (!hasWebSession) {
+      throw Exception('当前网页会话未登录，请先重新登录 Bangumi 网页');
+    }
+
+    var normalizedTopicUrl = _normalizeWebUrl(topicUrl);
+    try {
+      final topicResponse = await _fetchWebResponse(normalizedTopicUrl);
+      final topicHtml = topicResponse.data as String;
+      final redirectUrl = normalizedTopicUrl.contains('/rakuen/topic/')
+          ? _parseRakuenCanonicalUrl(topicHtml)
+          : null;
+      if (redirectUrl != null && redirectUrl != normalizedTopicUrl) {
+        normalizedTopicUrl = redirectUrl;
+      }
+
+      final form = _parseRakuenReplyForm(topicHtml);
+      if (form == null) {
+        throw Exception('form_missing');
+      }
+
+      final data = <String, dynamic>{
+        ...form.hiddenFields,
+        'content': trimmed,
+        if (form.hiddenFields['related_photo'] == null) 'related_photo': '0',
+      };
+
+      final response = await _submitRakuenForm(
+        actionUrl: form.actionUrl,
+        data: data,
+        refererUrl: normalizedTopicUrl,
+      );
+      if (response.statusCode == 301 || response.statusCode == 302) {
+        final location = response.headers.value('location');
+        if (location != null) {
+          final target = _normalizeWebUrl(location);
+          if (target == BgmConst.webBaseUrl ||
+              target == '${BgmConst.webBaseUrl}/' ||
+              target.contains('/login')) {
+            throw Exception('login_required');
+          }
+        }
+        return;
+      }
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        throw Exception('http_${response.statusCode}');
+      }
+    } catch (_) {
+      await _submitRakuenReplyFallback(
+        topicUrl: normalizedTopicUrl,
+        content: trimmed,
+      );
+    }
+  }
+
+  Future<void> _submitRakuenReplyFallback({
+    required String topicUrl,
+    required String content,
+  }) {
+    final session = _webSession;
+    if (session == null || !session.isValid) {
+      throw Exception('当前网页会话未登录，请先重新登录 Bangumi 网页');
+    }
+    return WebReplyService.submitReply(topicUrl: topicUrl, content: content, session: session);
+  }
+
   Future<String> createRakuenTopic({
     required String sourceUrl,
     required String title,
@@ -1256,6 +1374,8 @@ class ApiClient {
         ? _normalizeWebUrl(canonicalUrlMatch.group(1) ?? '')
         : null;
 
+    final session = _parseWebSessionInfo(html);
+    final replyForm = _parseRakuenReplyForm(html);
     final originalPost = _parseOriginalPost(html);
     final replies = _parseRakuenReplies(html);
 
@@ -1267,6 +1387,8 @@ class ApiClient {
       sourceUrl: sourceUrl?.isEmpty == true ? null : sourceUrl,
       sectionTitle: sectionTitle?.isEmpty == true ? null : sectionTitle,
       coverUrl: coverUrl?.isEmpty == true ? null : coverUrl,
+      replyAuthor: session?.username,
+      canReply: session != null && replyForm != null,
       originalPost: originalPost,
       replies: replies,
     );
@@ -1452,20 +1574,52 @@ class ApiClient {
   }
 
   static WebSessionInfo? _parseWebSessionInfo(String html) {
-    final uid =
+    final uidFromChobits =
         int.tryParse(
           RegExp(r'CHOBITS_UID\s*=\s*(\d+)').firstMatch(html)?.group(1) ?? '0',
         ) ??
         0;
-    final username =
+    final uidFromAlt =
+        int.tryParse(
+          RegExp(
+            r'CHOBITS_USER_UID\s*=\s*(\d+)',
+          ).firstMatch(html)?.group(1) ??
+              '0',
+        ) ??
+        0;
+
+    final usernameFromChobits =
         RegExp(
-          r"CHOBITS_USERNAME\s*=\s*'([^']*)'",
+          r'''CHOBITS_USERNAME\s*=\s*['"]([^'"]*)['"]''',
         ).firstMatch(html)?.group(1)?.trim() ??
         '';
-    if (uid <= 0 || username.isEmpty) {
+
+    final userLinkMatch = RegExp(
+      r'<a[^>]+href="/user/([^"/?#]+)"[^>]*>([\s\S]*?)</a>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    final usernameFromLink = userLinkMatch?.group(1)?.trim() ?? '';
+
+    final fallbackUsername = usernameFromChobits.isNotEmpty
+        ? usernameFromChobits
+        : usernameFromLink;
+    final fallbackUid = uidFromChobits > 0
+        ? uidFromChobits
+        : (uidFromAlt > 0 ? uidFromAlt : int.tryParse(usernameFromLink) ?? 0);
+
+    final hasLogout =
+        html.contains('/logout') ||
+        html.contains('logout') ||
+        html.contains('/signout');
+
+    if (fallbackUsername.isEmpty && !hasLogout) {
       return null;
     }
-    return WebSessionInfo(uid: uid, username: username);
+
+    return WebSessionInfo(
+      uid: fallbackUid > 0 ? fallbackUid : 1,
+      username: fallbackUsername.isNotEmpty ? fallbackUsername : 'logged_in',
+    );
   }
 
   static _RakuenReplyForm? _parseRakuenReplyForm(String html) {
@@ -1696,6 +1850,15 @@ class ApiClient {
       uri.path,
       queryParameters: uri.queryParameters.isEmpty ? null : uri.queryParameters,
     );
+  }
+
+  String? _buildCookieHeaderForUri(
+    Uri uri, {
+    BangumiWebSession? session,
+  }) {
+    final candidate = session ?? _webSession;
+    if (candidate == null || !candidate.isValid) return null;
+    return candidate.buildCookieHeaderForUri(uri);
   }
 
   /// 检测字符串是否包含中文字符

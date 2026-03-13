@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../pages/web_cookie_login_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
-import '../pages/web_cookie_login_page.dart';
 import '../services/api_client.dart';
+import '../services/bangumi_web_session_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/update_dialog.dart';
 
@@ -22,10 +23,14 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _webCookieUsername;
   bool _webCookieValidated = false;
 
+  BangumiWebSessionService get _webSessionService => BangumiWebSessionService(
+        storage: context.read<StorageService>(),
+        api: context.read<ApiClient>(),
+      );
+
   bool get _hasWebCookie {
     final storage = context.read<StorageService>();
-    final cookie = storage.webCookie;
-    return cookie != null && cookie.isNotEmpty;
+    return storage.webSession?.isValid == true;
   }
 
   @override
@@ -47,10 +52,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _refreshWebCookieStatus({bool showMessage = false}) async {
     final storage = context.read<StorageService>();
-    final api = context.read<ApiClient>();
-    final cookie = storage.webCookie;
+    final session = storage.webSession;
 
-    if (cookie == null || cookie.isEmpty) {
+    if (session == null || !session.isValid) {
       if (!mounted) return;
       setState(() {
         _checkingWebCookie = false;
@@ -58,9 +62,12 @@ class _SettingsPageState extends State<SettingsPage> {
         _webCookieUsername = null;
       });
       if (showMessage) {
+        final message = storage.legacyWebSessionInvalidated
+            ? '旧版网页登录状态已失效，请重新登录 Bangumi 网页'
+            : '当前还没有可用的网页登录会话';
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('还没有导入网页 Cookie')));
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
       return;
     }
@@ -70,17 +77,17 @@ class _SettingsPageState extends State<SettingsPage> {
     });
 
     try {
-      final session = await api.getWebSessionInfo();
+      final sessionInfo = await _webSessionService.validateSession(session);
       if (!mounted) return;
       setState(() {
         _checkingWebCookie = false;
-        _webCookieValidated = session != null;
-        _webCookieUsername = session?.username;
+        _webCookieValidated = sessionInfo != null;
+        _webCookieUsername = sessionInfo?.username ?? session.username;
       });
       if (showMessage) {
-        final text = session == null
-            ? 'Cookie 已保存，但当前没有识别到登录态'
-            : 'Cookie 校验成功，当前会话为 @${session.username}';
+        final text = sessionInfo == null
+            ? '网页登录会话已保存，但当前无法确认仍处于登录状态'
+            : '网页登录会话校验成功，当前账号为 @${sessionInfo.username}';
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(text)));
@@ -95,77 +102,15 @@ class _SettingsPageState extends State<SettingsPage> {
       if (showMessage) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Cookie 校验失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('网页登录会话校验失败: $e')));
       }
     }
-  }
-
-  Future<void> _editWebCookie() async {
-    final storage = context.read<StorageService>();
-    final api = context.read<ApiClient>();
-    final controller = TextEditingController(text: storage.webCookie ?? '');
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('导入网页 Cookie'),
-        content: SizedBox(
-          width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '从已登录的浏览器复制完整 Cookie 字符串，支持直接粘贴 “Cookie: ...” 请求头。',
-                style: Theme.of(ctx).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                maxLines: 8,
-                minLines: 5,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Cookie: chii_auth=...; chii_sec_id=...; ...',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted || result == null) return;
-
-    final normalized = ApiClient.sanitizeWebCookie(result);
-    if (normalized.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cookie 不能为空')));
-      return;
-    }
-
-    await storage.setWebCookie(normalized);
-    await storage.setWebCookieJar(null);
-    api.setWebCookie(normalized);
-    await _refreshWebCookieStatus(showMessage: true);
   }
 
   Future<void> _autoFetchWebCookie() async {
     if (!WebCookieLoginPage.isSupported) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('自动获取目前只支持 Android、iOS 和 Windows')),
+        const SnackBar(content: Text('自动获取当前仅支持 Android、iOS 和 Windows')),
       );
       return;
     }
@@ -183,18 +128,18 @@ class _SettingsPageState extends State<SettingsPage> {
     });
 
     final message = result.validated && result.username != null
-        ? '已自动获取并保存 @${result.username} 的 Cookie'
-        : '已自动获取并保存 Cookie，但当前设备无法完成在线校验';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+        ? '已自动获取并保存 @${result.username} 的网页登录会话'
+        : '已保存网页登录会话，但当前设备无法完成在线校验';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _clearWebCookie() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清除网页 Cookie'),
+        title: const Text('清除网页登录会话'),
         content: const Text('清除后将无法使用网页发帖和回复能力。'),
         actions: [
           TextButton(
@@ -211,12 +156,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (confirmed != true || !mounted) return;
 
-    final storage = context.read<StorageService>();
-    final api = context.read<ApiClient>();
-    await storage.setWebCookie(null);
-    await storage.setWebCookieJar(null);
+    await _webSessionService.clearPersistedSession(clearLegacyInvalidated: false);
     if (!mounted) return;
-    api.setWebCookie(null);
     setState(() {
       _webCookieValidated = false;
       _webCookieUsername = null;
@@ -224,20 +165,23 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('已清除网页 Cookie')));
+    ).showSnackBar(const SnackBar(content: Text('已清除网页登录会话')));
   }
 
   String _webCookieSubtitle() {
+    final storage = context.read<StorageService>();
     if (!_hasWebCookie) {
-      return '未导入，超展开发帖和回复不可用';
+      return storage.legacyWebSessionInvalidated
+          ? '旧版网页登录状态已失效，请重新登录'
+          : '未登录，超展开发帖和回复不可用';
     }
     if (_checkingWebCookie) {
-      return '正在校验当前 Cookie 对应的网页会话';
+      return '正在校验当前网页登录会话';
     }
     if (_webCookieValidated && _webCookieUsername != null) {
-      return '已导入，当前网页会话为 @$_webCookieUsername';
+      return '已登录，当前网页会话为 @$_webCookieUsername';
     }
-    return '已导入，但当前设备未完成在线校验';
+    return '网页登录会话已保存，但当前尚未通过在线校验';
   }
 
   @override
@@ -309,9 +253,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     leading: const Icon(Icons.person_outline),
                     title: const Text('Account'),
                     subtitle: Text(
-                      auth.user != null
-                          ? '@${auth.user!.username}'
-                          : 'Not signed in',
+                      auth.user != null ? '@${auth.user!.username}' : 'Not signed in',
                     ),
                   ),
                 ),
@@ -327,31 +269,26 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ? Icons.verified_user_outlined
                                 : Icons.cookie_outlined,
                           ),
-                          title: const Text('Bangumi 网页 Cookie'),
+                          title: const Text('Bangumi 网页登录'),
                           subtitle: Text(_webCookieSubtitle()),
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: Row(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
                             children: [
                               FilledButton.tonalIcon(
                                 onPressed: _autoFetchWebCookie,
                                 icon: const Icon(Icons.login_rounded),
-                                label: const Text('自动获取'),
+                                label: Text(_hasWebCookie ? '重新登录' : '自动登录'),
                               ),
-                              const SizedBox(width: 12),
-                              FilledButton.tonalIcon(
-                                onPressed: _editWebCookie,
-                                icon: const Icon(Icons.edit_outlined),
-                                label: Text(_hasWebCookie ? '编辑' : '导入'),
-                              ),
-                              const SizedBox(width: 12),
                               OutlinedButton.icon(
                                 onPressed: _checkingWebCookie
                                     ? null
                                     : () => _refreshWebCookieStatus(
-                                        showMessage: true,
-                                      ),
+                                          showMessage: true,
+                                        ),
                                 icon: _checkingWebCookie
                                     ? const SizedBox(
                                         width: 16,
@@ -363,7 +300,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : const Icon(Icons.refresh_rounded),
                                 label: const Text('校验'),
                               ),
-                              const SizedBox(width: 12),
                               if (_hasWebCookie)
                                 TextButton.icon(
                                   onPressed: _clearWebCookie,
@@ -376,9 +312,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                           child: Text(
-                            '这份 Cookie 只用于 Bangumi 网页侧的超展开回复和发帖，不影响 API Token 登录。',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                            '这份网页登录会话只用于 Bangumi 网页侧的超展开回复和发帖，不影响 API Token 登录。',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                           ),
                         ),
                       ],
