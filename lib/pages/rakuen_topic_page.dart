@@ -1,6 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
+﻿import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -92,12 +91,67 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     }
   }
 
-  Future<void> _submitInlineReply() async {
+  bool get _canShowReplyAction {
+    final detail = _detail;
+    return detail != null && detail.canReply;
+  }
+
+  Future<void> _openReplyComposer() async {
+    final detail = _detail;
+    if (detail == null) return;
     if (!context.read<ApiClient>().hasWebCookie) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在设置中导入 Bangumi 网页 Cookie')),
+        const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')),
       );
       return;
+    }
+    if (!detail.canReply) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前主题没有可用的回复表单')),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: _RakuenInlineReplyCard(
+              author: (detail.replyAuthor?.trim().isNotEmpty ?? false)
+                  ? detail.replyAuthor!.trim()
+                  : '你',
+              controller: _replyController,
+              focusNode: _replyFocusNode,
+              submitting: _replySubmitting,
+              onSubmit: () async {
+                final ok = await _submitInlineReply();
+                if (ok && sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop();
+                }
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _submitInlineReply() async {
+    if (_replySubmitting) return false;
+    if (!context.read<ApiClient>().hasWebCookie) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')),
+      );
+      return false;
     }
 
     final content = _replyController.text.trim();
@@ -105,7 +159,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('回复内容不能为空')));
-      return;
+      return false;
     }
 
     setState(() => _replySubmitting = true);
@@ -116,27 +170,29 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         topicUrl: submitTopicUrl,
         content: content,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       _replyController.clear();
       FocusScope.of(context).unfocus();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('回复已发送')));
       await _load();
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       final msg = e.toString();
       var displayMsg = '发送回复失败: $e';
       if (msg.contains('login_required') || msg.contains('未登录')) {
-        displayMsg = '当前网页 Cookie 未登录或已过期，请在设置中重新获取。';
+        displayMsg = '当前网页会话未登录或已过期，请在设置中重新登录';
       } else if (msg.contains('form_missing') || msg.contains('没有可用的回复表单')) {
-        displayMsg = '当前主题没有可用的回复表单。';
+        displayMsg = '当前主题没有可用的回复表单';
       } else if (msg.contains('网页回复超时')) {
-        displayMsg = '回复超时，请检查网络后重试。';
+        displayMsg = '回复超时，请检查网络后重试';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(displayMsg), duration: const Duration(seconds: 4)),
       );
+      return false;
     } finally {
       if (mounted) setState(() => _replySubmitting = false);
     }
@@ -159,6 +215,19 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         ],
       ),
       body: _buildBody(),
+      floatingActionButton: _canShowReplyAction
+          ? FloatingActionButton.extended(
+              onPressed: _replySubmitting ? null : _openReplyComposer,
+              icon: _replySubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.reply_rounded),
+              label: Text(_replySubmitting ? '发送中' : '回复'),
+            )
+          : null,
     );
   }
 
@@ -255,10 +324,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
               ),
             ),
           ),
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(horizontalPadding, 6, horizontalPadding, 24),
-          sliver: SliverToBoxAdapter(child: _buildReplySection(detail)),
-        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 96)),
       ],
     );
   }
@@ -330,32 +396,13 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                         ),
                       ),
                     ),
-                  SliverPadding(
-                    padding: const EdgeInsets.only(top: 6, right: gutter, bottom: 24),
-                    sliver: SliverToBoxAdapter(child: _buildReplySection(detail)),
-                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 96)),
                 ],
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildReplySection(RakuenTopicDetail detail) {
-    if (!detail.canReply) {
-      return _RakuenReplyUnavailableCard(
-        hasCookie: context.read<ApiClient>().hasWebCookie,
-      );
-    }
-    return _RakuenInlineReplyCard(
-      author: detail.replyAuthor ?? '你',
-      controller: _replyController,
-      focusNode: _replyFocusNode,
-      submitting: _replySubmitting,
-      onSubmit: _submitInlineReply,
-      onOpenBbcodeGuide: () => _openExternal('https://bgm.tv/help/bbcode'),
     );
   }
 
@@ -627,7 +674,6 @@ class _RakuenInlineReplyCard extends StatelessWidget {
   final FocusNode focusNode;
   final bool submitting;
   final Future<void> Function() onSubmit;
-  final VoidCallback onOpenBbcodeGuide;
 
   const _RakuenInlineReplyCard({
     required this.author,
@@ -635,108 +681,90 @@ class _RakuenInlineReplyCard extends StatelessWidget {
     required this.focusNode,
     required this.submitting,
     required this.onSubmit,
-    required this.onOpenBbcodeGuide,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: colorScheme.surface,
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            RichText(
-              text: TextSpan(
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                children: [
-                  TextSpan(text: author, style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w800)),
-                  TextSpan(text: ' / 添加新回复', style: TextStyle(color: colorScheme.onSurface)),
-                ],
+            Text(
+              '回复 $author',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '写下你的想法',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              focusNode: focusNode,
+              minLines: 8,
+              maxLines: 12,
+              textInputAction: TextInputAction.newline,
+              decoration: InputDecoration(
+                hintText: '输入回复内容',
+                filled: true,
+                fillColor: colorScheme.surfaceContainerLowest,
+                contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: colorScheme.outlineVariant),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: colorScheme.outlineVariant),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+                ),
+                alignLabelWithHint: true,
               ),
             ),
-            const SizedBox(height: 12),
-            CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
-                  onSubmit();
-                },
-                const SingleActivator(LogicalKeyboardKey.keyS, alt: true): () {
-                  onSubmit();
-                },
-              },
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                minLines: 6,
-                maxLines: 12,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: '输入回复内容',
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  alignLabelWithHint: true,
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: submitting ? null : onSubmit,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
+                child: submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('发送回复'),
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: submitting
-                      ? null
-                      : () {
-                          onSubmit();
-                        },
-                  child: submitting
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('加上去'),
-                ),
-                Text(
-                  '使用 Ctrl+Enter 或 Alt+S 快速提交',
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                ),
-                TextButton(onPressed: onOpenBbcodeGuide, child: const Text('BBCode 指南')),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RakuenReplyUnavailableCard extends StatelessWidget {
-  final bool hasCookie;
-
-  const _RakuenReplyUnavailableCard({required this.hasCookie});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final message = hasCookie
-        ? '当前网页会话未登录，回复表单不会显示。请在设置里重新获取 Cookie。'
-        : '当前未导入 Bangumi 网页 Cookie，登录后才会显示回复表单。';
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.lock_outline, color: colorScheme.onSurfaceVariant),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message, style: TextStyle(color: colorScheme.onSurfaceVariant))),
           ],
         ),
       ),

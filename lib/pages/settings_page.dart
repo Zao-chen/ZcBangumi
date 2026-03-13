@@ -65,16 +65,18 @@ class _SettingsPageState extends State<SettingsPage> {
         final message = storage.legacyWebSessionInvalidated
             ? '旧版网页登录状态已失效，请重新登录 Bangumi 网页'
             : '当前还没有可用的网页登录会话';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
       }
       return;
     }
 
-    setState(() {
-      _checkingWebCookie = true;
-    });
+    if (mounted) {
+      setState(() {
+        _checkingWebCookie = true;
+      });
+    }
 
     try {
       final sessionInfo = await _webSessionService.validateSession(session);
@@ -88,9 +90,9 @@ class _SettingsPageState extends State<SettingsPage> {
         final text = sessionInfo == null
             ? '网页登录会话已保存，但当前无法确认仍处于登录状态'
             : '网页登录会话校验成功，当前账号为 @${sessionInfo.username}';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(text)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(text)),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -100,9 +102,9 @@ class _SettingsPageState extends State<SettingsPage> {
         _webCookieUsername = null;
       });
       if (showMessage) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('网页登录会话校验失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('网页登录会话校验失败: $e')),
+        );
       }
     }
   }
@@ -110,7 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _autoFetchWebCookie() async {
     if (!WebCookieLoginPage.isSupported) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('自动获取当前仅支持 Android、iOS 和 Windows')),
+        const SnackBar(content: Text('自动登录当前仅支持 Android、iOS 和 Windows')),
       );
       return;
     }
@@ -140,7 +142,7 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('清除网页登录会话'),
-        content: const Text('清除后将无法使用网页发帖和回复能力。'),
+        content: const Text('清除后将无法使用网页登录发帖和回复功能。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -163,9 +165,9 @@ class _SettingsPageState extends State<SettingsPage> {
       _webCookieUsername = null;
       _checkingWebCookie = false;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已清除网页登录会话')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已清除网页登录会话')),
+    );
   }
 
   String _webCookieSubtitle() {
@@ -179,7 +181,7 @@ class _SettingsPageState extends State<SettingsPage> {
       return '正在校验当前网页登录会话';
     }
     if (_webCookieValidated && _webCookieUsername != null) {
-      return '已登录，当前网页会话为 @$_webCookieUsername';
+      return '已登录，当前网页登录账号为 @$_webCookieUsername';
     }
     return '网页登录会话已保存，但当前尚未通过在线校验';
   }
@@ -190,7 +192,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('设置')),
       body: Column(
         children: [
           Expanded(
@@ -251,9 +253,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.person_outline),
-                    title: const Text('Account'),
+                    title: const Text('账号'),
                     subtitle: Text(
-                      auth.user != null ? '@${auth.user!.username}' : 'Not signed in',
+                      auth.user != null ? '@${auth.user!.username}' : '未登录',
                     ),
                   ),
                 ),
@@ -312,7 +314,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                           child: Text(
-                            '这份网页登录会话只用于 Bangumi 网页侧的超展开回复和发帖，不影响 API Token 登录。',
+                            '这份网页登录会话仅用于 Bangumi 网页侧的超展开回复和发帖，不影响 API Token 登录。',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: colorScheme.onSurfaceVariant,
                                 ),
@@ -341,7 +343,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       Icon(Icons.logout_rounded),
                       SizedBox(width: 8),
-                      Text('Sign out'),
+                      Text('退出登录'),
                     ],
                   ),
                 ),
@@ -357,16 +359,16 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Sign out'),
-        content: const Text('Are you sure you want to sign out?'),
+        title: const Text('退出登录'),
+        content: const Text('确定要退出当前账号吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm'),
+            child: const Text('确认'),
           ),
         ],
       ),

@@ -42,7 +42,7 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
   bool _capturing = false;
   String? _webViewError;
   String? _debugText;
-  String _title = 'Bangumi Login';
+  String _title = 'Bangumi 网页登录';
   int _reloadNonce = 0;
 
   BangumiWebSessionService get _sessionService => BangumiWebSessionService(
@@ -81,14 +81,14 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
       setState(() {
         _preparing = false;
         _reloadNonce++;
-        _debugText = 'Preparing login session...';
+        _debugText = '正在准备网页登录环境...';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _preparing = false;
         _loading = false;
-        _webViewError = 'Failed to initialize login webview: $e';
+        _webViewError = '初始化网页登录页失败: $e';
       });
     }
   }
@@ -185,13 +185,13 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
             .join(', ');
         setState(() {
           _debugText =
-              'url=$currentUrl\n'
-              'signal.loggedIn=${signal.loggedIn} uid=${signal.uid ?? '-'} username=${signal.username ?? '-'}\n'
-              'onBangumiHome=$onBangumiHome cookies=${inspection.cookies.length} hasAuthCookie=${inspection.hasAuthCookie}\n'
-              'cookieNames=${cookieNames.isEmpty ? '-' : cookieNames}\n'
-              'requestCookies=${inspection.requestCookieCount} requestCookieNames=${requestCookieNames.isEmpty ? '-' : requestCookieNames}\n'
-              'validated=${inspection.validatedSession != null ? '@${inspection.validatedSession!.username}' : 'null'}\n'
-              'inspectionError=${inspection.error ?? '-'}';
+              '当前地址: $currentUrl\n'
+              '页面登录态: ${signal.loggedIn} uid=${signal.uid ?? '-'} username=${signal.username ?? '-'}\n'
+              '是否在 Bangumi 首页: $onBangumiHome cookies=${inspection.cookies.length} hasAuthCookie=${inspection.hasAuthCookie}\n'
+              'Cookie 名称: ${cookieNames.isEmpty ? '-' : cookieNames}\n'
+              '验真请求 Cookie: ${inspection.requestCookieCount} 个 ${requestCookieNames.isEmpty ? '-' : requestCookieNames}\n'
+              '验真结果: ${inspection.validatedSession != null ? '@${inspection.validatedSession!.username}' : 'null'}\n'
+              '检查错误: ${inspection.error ?? '-'}';
         });
       }
       if (!signal.loggedIn && !onBangumiHome && !inspection.hasAuthCookie) {
@@ -210,7 +210,7 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _webViewError = 'Login detected but session validation failed: $e';
+        _webViewError = '检测到已登录，但会话校验失败: $e';
       });
     } finally {
       _capturing = false;
@@ -281,7 +281,7 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'After login succeeds, the app will validate and save the Bangumi web session automatically.',
+                        '登录成功后，应用会自动校验并保存 Bangumi 网页会话。',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -330,7 +330,7 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
                             setState(() {
                               _title = title?.trim().isNotEmpty == true
                                   ? title!.trim()
-                                  : 'Bangumi Login';
+                                  : 'Bangumi 网页登录';
                             });
                           },
                           onLoadStart: (controller, url) {
