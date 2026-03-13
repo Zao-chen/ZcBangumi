@@ -233,7 +233,7 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
     WebResourceRequest request,
     WebResourceError error,
   ) {
-    final requestUrl = request.url?.toString() ?? '';
+    final requestUrl = request.url.toString();
     if (requestUrl == 'about:blank') return true;
     final description = error.description.toLowerCase();
     if (description.contains('connection was stopped')) return true;

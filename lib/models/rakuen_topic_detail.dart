@@ -35,6 +35,7 @@ class RakuenPost {
   final String avatarUrl;
   final String? sign;
   final String content;
+  final String? subReplyAction;
   final List<RakuenPost> subReplies;
 
   const RakuenPost({
@@ -46,6 +47,7 @@ class RakuenPost {
     required this.avatarUrl,
     this.sign,
     required this.content,
+    this.subReplyAction,
     this.subReplies = const [],
   });
 }

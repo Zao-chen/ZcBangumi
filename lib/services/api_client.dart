@@ -961,6 +961,7 @@ class ApiClient {
   Future<void> submitRakuenReply({
     required String topicUrl,
     required String content,
+    RakuenPost? replyToPost,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
@@ -971,6 +972,14 @@ class ApiClient {
     }
 
     var normalizedTopicUrl = _normalizeWebUrl(topicUrl);
+    if (replyToPost?.subReplyAction != null) {
+      await _submitRakuenReplyFallback(
+        topicUrl: normalizedTopicUrl,
+        content: trimmed,
+        replyToPost: replyToPost,
+      );
+      return;
+    }
     try {
       final topicResponse = await _fetchWebResponse(normalizedTopicUrl);
       final topicHtml = topicResponse.data as String;
@@ -1016,6 +1025,7 @@ class ApiClient {
       await _submitRakuenReplyFallback(
         topicUrl: normalizedTopicUrl,
         content: trimmed,
+        replyToPost: replyToPost,
       );
     }
   }
@@ -1023,12 +1033,18 @@ class ApiClient {
   Future<void> _submitRakuenReplyFallback({
     required String topicUrl,
     required String content,
+    RakuenPost? replyToPost,
   }) {
     final session = _webSession;
     if (session == null || !session.isValid) {
       throw Exception('当前网页会话未登录，请先重新登录 Bangumi 网页');
     }
-    return WebReplyService.submitReply(topicUrl: topicUrl, content: content, session: session);
+    return WebReplyService.submitReply(
+      topicUrl: topicUrl,
+      content: content,
+      session: session,
+      replyToPost: replyToPost,
+    );
   }
 
   Future<String> createRakuenTopic({
@@ -1513,6 +1529,11 @@ class ApiClient {
       '<div class="$contentClassName[^"]*">([\\s\\S]*?)</div>',
     ).firstMatch(blockHtml);
     final content = _htmlBlockToText(contentMatch?.group(1) ?? '');
+    final subReplyActionMatch = RegExp(
+      r'''onclick="(subReply\([^\"]+\))"''',
+      caseSensitive: false,
+    ).firstMatch(blockHtml);
+    final subReplyAction = subReplyActionMatch?.group(1)?.trim();
 
     final subReplies = <RakuenPost>[];
     final subReplyRegion = RegExp(
@@ -1546,6 +1567,7 @@ class ApiClient {
       avatarUrl: avatarUrl,
       sign: sign.isEmpty ? null : sign,
       content: content,
+      subReplyAction: subReplyAction?.isEmpty == true ? null : subReplyAction,
       subReplies: subReplies,
     );
   }
@@ -1824,17 +1846,6 @@ class ApiClient {
       }
     }
 
-    return null;
-  }
-
-  static String? _buildRakuenReplyPageUrl(String topicUrl) {
-    final normalized = _normalizeWebUrl(topicUrl);
-    if (normalized.contains('/group/topic/') ||
-        normalized.contains('/subject/topic/')) {
-      return normalized.endsWith('/new_reply')
-          ? normalized
-          : '$normalized/new_reply';
-    }
     return null;
   }
 
@@ -2161,20 +2172,20 @@ class LoggingInterceptor extends Interceptor {
         path.contains('timeline') ||
         path.contains('/group/topic') ||
         path.contains('/subject/topic')) {
-      debugPrint('✅ ${statusCode} ${path}');
+      debugPrint('✅ $statusCode $path');
 
       // 只显示数据大小，不显示完整内容
       if (response.data != null) {
         if (response.data is String) {
           final length = (response.data as String).length;
-          debugPrint('   HTML/Text: ${length} bytes');
+          debugPrint('   HTML/Text: $length bytes');
         } else if (response.data is Map || response.data is List) {
           debugPrint('   JSON: ${response.data.toString().length} bytes');
         }
       }
     } else {
       // 其他请求只显示简要状态
-      debugPrint('✓ ${statusCode} ${path}');
+      debugPrint('✓ $statusCode $path');
     }
     super.onResponse(response, handler);
   }

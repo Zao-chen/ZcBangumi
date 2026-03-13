@@ -6,6 +6,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../constants.dart';
 import '../models/bangumi_web_session.dart';
+import '../models/rakuen_topic_detail.dart';
 import 'webview_environment_service.dart';
 
 class WebReplyService {
@@ -13,74 +14,71 @@ class WebReplyService {
     required String topicUrl,
     required String content,
     required BangumiWebSession session,
+    RakuenPost? replyToPost,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
       throw Exception('回复内容不能为空');
     }
-    final cookie = session.buildCookieHeaderForUri(Uri.parse(BgmConst.webBaseUrl));
+
+    final cookie = session.buildCookieHeaderForUri(
+      Uri.parse(BgmConst.webBaseUrl),
+    );
     final cookieJar = session.cookies
         .map((item) => item.toJson())
         .cast<Map<String, dynamic>>()
         .toList();
 
-    final replyPageUrl = _buildReplyPageUrl(topicUrl);
+    final isSubReply = replyToPost?.subReplyAction != null;
+    final replyPageUrl = isSubReply
+        ? _getTopicPageUrl(_normalizeWebUrl(topicUrl))
+        : _buildReplyPageUrl(topicUrl);
     if (replyPageUrl == null) {
       throw Exception('当前主题暂不支持回复');
     }
 
     if (kDebugMode) {
       print('');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🔄 [回复流程开始]');
-      print('   目标URL: $replyPageUrl');
-      print('   Cookie长度: ${cookie?.length ?? 0}');
-      print('   CookieJar: ${cookieJar?.length ?? 0} 条');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('-----------------');
+      print('[WebReplyService] 开始网页回复');
+      print('  目标地址: $replyPageUrl');
+      print('  回复类型: ${isSubReply ? "楼中楼" : "主题回复"}');
+      print('  Cookie Header 长度: ${cookie?.length ?? 0}');
+      print('  CookieJar 数量: ${cookieJar.length}');
+      print('-----------------');
     }
 
     final environment = await WebViewEnvironmentService.getSharedEnvironment();
-
-    // 先种植Cookie
     await _seedCookies(
       cookie: cookie,
       cookieJar: cookieJar,
       environment: environment,
     );
-
-    // 额外延迟确保Cookie生效
     await Future.delayed(const Duration(milliseconds: 500));
 
     final completer = Completer<void>();
     HeadlessInAppWebView? headlessWebView;
     Timer? timeoutTimer;
-    bool submitted = false;
-    bool cookiesInjected = false; // 标记是否已注入Cookie
+    var submitted = false;
+    var cookiesInjected = false;
 
     Future<void> finishSuccess() async {
       if (completer.isCompleted) return;
-      if (kDebugMode) {
-        print('');
-        print('✅ [回复成功]');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('');
-      }
       timeoutTimer?.cancel();
       await headlessWebView?.dispose();
+      if (kDebugMode) {
+        print('[WebReplyService] 网页回复成功');
+      }
       completer.complete();
     }
 
     Future<void> finishError(Object error) async {
       if (completer.isCompleted) return;
-      if (kDebugMode) {
-        print('');
-        print('❌ [回复失败]');
-        print('   错误: $error');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('');
-      }
       timeoutTimer?.cancel();
       await headlessWebView?.dispose();
+      if (kDebugMode) {
+        print('[WebReplyService] 网页回复失败: $error');
+      }
       completer.completeError(error);
     }
 
@@ -90,37 +88,13 @@ class WebReplyService {
 
       if (kDebugMode) {
         print('[WebReplyService] 页面加载完成: $currentUrl');
-
-        // 检查页面实际可用的Cookie
-        try {
-          final cookieCheck = await controller.evaluateJavascript(
-            source: '''
-            (() => {
-              const cookies = document.cookie;
-              const cookieList = cookies.split(';').map(c => c.trim().split('=')[0]);
-              return {
-                hasCookie: cookies.length > 0,
-                cookieCount: cookieList.length,
-                hasAuth: cookieList.includes('chii_auth'),
-                hasSec: cookieList.includes('chii_sec_id'),
-                hasSid: cookieList.includes('chii_sid'),
-                uid: typeof CHOBITS_UID !== 'undefined' ? CHOBITS_UID : null
-              };
-            })();
-          ''',
-          );
-          print('[WebReplyService] Cookie检查: $cookieCheck');
-        } catch (e) {
-          print('[WebReplyService] Cookie检查失败: $e');
-        }
       }
 
-      // 如果当前在主题页面（不是回复页），导航到回复页
-      if (!currentUrl.endsWith('/new_reply')) {
+      if (!isSubReply && !currentUrl.endsWith('/new_reply')) {
         if (currentUrl.contains('/group/topic/') ||
             currentUrl.contains('/subject/topic/')) {
           if (kDebugMode) {
-            print('[WebReplyService] 从主题页导航到回复页');
+            print('[WebReplyService] 跳转到主题回复页');
           }
           await controller.loadUrl(
             urlRequest: URLRequest(url: WebUri(replyPageUrl)),
@@ -130,19 +104,28 @@ class WebReplyService {
       }
 
       final result = await controller.evaluateJavascript(
-        source: _buildReplyScript(trimmed),
+        source: isSubReply
+            ? _buildSubReplyScript(
+                content: trimmed,
+                postId: replyToPost!.id,
+                subReplyAction: replyToPost.subReplyAction!,
+              )
+            : _buildReplyScript(trimmed),
       );
 
       if (kDebugMode) {
-        print('[WebReplyService] JavaScript 执行结果: $result');
+        print('[WebReplyService] JavaScript 返回: $result');
       }
 
-      if (result is! Map) {
-        throw Exception('未能识别网页回复状态，返回值类型: ${result.runtimeType}');
+      final normalizedResult = _normalizeJsResult(result);
+      if (normalizedResult == null) {
+        throw Exception(
+          '无法识别网页回复结果，返回类型: ${result.runtimeType}',
+        );
       }
 
-      final status = '${result['status'] ?? ''}';
-      final detail = '${result['detail'] ?? '-'}';
+      final status = '${normalizedResult['status'] ?? ''}';
+      final detail = '${normalizedResult['detail'] ?? '-'}';
 
       if (kDebugMode) {
         print('[WebReplyService] 状态: $status, 详情: $detail');
@@ -151,20 +134,29 @@ class WebReplyService {
       switch (status) {
         case 'submitted':
           submitted = true;
-          if (kDebugMode) {
-            print('[WebReplyService] 表单已提交，等待跳转');
+          if (isSubReply && replyToPost != null) {
+            final success = await _waitForSubReplySuccess(
+              controller: controller,
+              postId: replyToPost.id,
+              content: trimmed,
+            );
+            if (success) {
+              await finishSuccess();
+            }
           }
           return;
         case 'success':
           await finishSuccess();
           return;
         case 'login_required':
-          throw Exception('当前网页 Cookie 未登录，请先在设置中重新自动获取 Bangumi 网页 Cookie');
+          throw Exception(
+            '当前网页会话未登录，请先在设置中重新登录 Bangumi 网页',
+          );
         case 'form_missing':
-          throw Exception('当前主题暂时没有可用的回复表单 | 详情: $detail');
+          throw Exception('当前主题没有可用的回复表单: $detail');
         default:
           throw Exception(
-            '网页回复失败 | 状态: $status | URL: $currentUrl | 详情: $detail',
+            '网页回复失败，状态: $status，详情: $detail，URL: $currentUrl',
           );
       }
     }
@@ -179,62 +171,74 @@ class WebReplyService {
         isInspectable: kDebugMode,
         thirdPartyCookiesEnabled: true,
         userAgent:
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       ),
       onLoadStop: (controller, url) async {
-        // 先检查Cookie，如果没有就注入
-        if (!cookiesInjected && cookie != null && cookie.trim().isNotEmpty) {
+        if (!cookiesInjected && (cookie?.trim().isNotEmpty ?? false)) {
           try {
-            final check = await controller.evaluateJavascript(
+            final hasAuthCookie = await controller.evaluateJavascript(
               source: '''
-              (() => {
-                const cookies = document.cookie;
-                return cookies.includes('chii_auth');
-              })();
-            ''',
+(() => {
+  const cookies = document.cookie || '';
+  return (
+    cookies.includes('chii_auth') ||
+    cookies.includes('chii_sec_id') ||
+    cookies.includes('chii_sid')
+  );
+})()
+''',
             );
 
-            if (check != true) {
+            if (hasAuthCookie != true) {
               if (kDebugMode) {
-                print('[WebReplyService] 检测到Cookie缺失，注入中...');
+                print('[WebReplyService] 页面 Cookie 缺失，准备补种');
               }
 
-              // 注入Cookie
-              final parts = cookie.trim().split(';');
+              final parts = cookie!.trim().split(';');
               for (final part in parts) {
                 final segment = part.trim();
                 if (segment.isEmpty) continue;
                 final index = segment.indexOf('=');
                 if (index <= 0) continue;
+
                 final name = segment.substring(0, index).trim();
                 final value = segment.substring(index + 1).trim();
                 if (name.isEmpty) continue;
 
+                final encodedName = jsonEncode(name);
+                final encodedValue = jsonEncode(value);
                 await controller.evaluateJavascript(
-                  source:
-                      '''
-                  document.cookie = "$name=$value; path=/; domain=.bgm.tv; max-age=86400";
-                ''',
+                  source: '''
+(() => {
+  const name = $encodedName;
+  const value = $encodedValue;
+  const host = location.hostname || 'bgm.tv';
+  const cookieDomain = host.endsWith('bangumi.tv')
+    ? '.bangumi.tv'
+    : host.endsWith('chii.in')
+        ? '.chii.in'
+        : '.bgm.tv';
+  document.cookie = name + '=' + value + '; path=/; domain=' + cookieDomain + '; max-age=86400';
+})()
+''',
                 );
               }
 
               cookiesInjected = true;
-
-              // 重新加载当前页面
               if (kDebugMode) {
-                print('[WebReplyService] Cookie注入完成，重新加载页面');
+                print('[WebReplyService] 页面 Cookie 已补种，重新加载当前页面');
               }
               await controller.reload();
               return;
             }
           } catch (e) {
             if (kDebugMode) {
-              print('[WebReplyService] Cookie检查/注入失败: $e');
+              print('[WebReplyService] 页面 Cookie 检查失败: $e');
             }
           }
         }
 
-        // Cookie已就位，正常处理页面
         try {
           await handlePage(controller);
         } catch (e) {
@@ -244,7 +248,6 @@ class WebReplyService {
       onUpdateVisitedHistory: (controller, url, isReload) async {
         if (!submitted || completer.isCompleted) return;
         final currentUrl = url?.toString() ?? '';
-        // 提交后返回主题页（不带/new_reply），说明回复成功
         if ((currentUrl.contains('/group/topic/') ||
                 currentUrl.contains('/subject/topic/')) &&
             !currentUrl.endsWith('/new_reply')) {
@@ -282,7 +285,6 @@ class WebReplyService {
   }
 
   static String _getTopicPageUrl(String replyPageUrl) {
-    // 从回复页URL提取主题页URL（去掉 /new_reply 后缀）
     return replyPageUrl.replaceAll(RegExp(r'/new_reply$'), '');
   }
 
@@ -304,167 +306,134 @@ class WebReplyService {
     final manager = CookieManager.instance(webViewEnvironment: environment);
 
     if (kDebugMode) {
-      print('🍪 [Cookie种植]');
+      print('[WebReplyService] 开始注入 Cookie');
     }
 
-    // 先清除旧的Cookie，确保干净的环境
     try {
-      final oldCookies = await manager.getCookies(
-        url: WebUri('https://bgm.tv/'),
-      );
-      if (oldCookies.isNotEmpty && kDebugMode) {
-        print('   清除 ${oldCookies.length} 个旧Cookie');
-      }
+      final oldCookies = await manager.getCookies(url: WebUri('https://bgm.tv/'));
       for (final oldCookie in oldCookies) {
         await manager.deleteCookie(
           url: WebUri('https://bgm.tv/'),
           name: oldCookie.name,
         );
       }
+      if (kDebugMode && oldCookies.isNotEmpty) {
+        print('[WebReplyService] 已清理旧 Cookie: ${oldCookies.length}');
+      }
     } catch (e) {
       if (kDebugMode) {
-        print('   清除旧Cookie失败（可忽略）');
+        print('[WebReplyService] 清理旧 Cookie 失败，可忽略: $e');
       }
     }
 
-    // 优先使用 cookieJar（包含完整的 cookie 信息）
     if (cookieJar != null && cookieJar.isNotEmpty) {
       if (kDebugMode) {
-        print('   使用 CookieJar (${cookieJar.length} 条)');
-        // 输出关键Cookie的详细信息用于调试
-        final importantNames = ['chii_auth', 'chii_sec_id', 'chii_sid'];
-        for (final item in cookieJar) {
-          final name = '${item['name'] ?? ''}'.trim();
-          if (importantNames.contains(name)) {
-            final value = '${item['value'] ?? ''}';
-            final domain = '${item['domain'] ?? ''}';
-            final path = '${item['path'] ?? '/'}';
-            final valuePreview = value.length > 20
-                ? '${value.substring(0, 20)}...'
-                : value;
-            print('   > $name: $valuePreview (domain: $domain, path: $path)');
-          }
-        }
+        print('[WebReplyService] 使用结构化 CookieJar: ${cookieJar.length}');
       }
-      int successCount = 0;
+
+      var successCount = 0;
       final failedCookies = <String>[];
+
       for (final item in cookieJar) {
         try {
           final name = '${item['name'] ?? ''}'.trim();
           final value = '${item['value'] ?? ''}';
-          if (name.isEmpty) continue;
-
           final domain = '${item['domain'] ?? ''}'.trim();
           final path = '${item['path'] ?? '/'}'.trim();
+          if (name.isEmpty) continue;
 
-          // 根据cookie的domain获取应该种植的URLs
           final urls = _getCookieUrls(domain);
-          if (urls.isEmpty) {
-            continue;
-          }
+          if (urls.isEmpty) continue;
 
-          // 为每个相关URL种植cookie（明确指定domain）
-          bool planted = false;
+          var planted = false;
           for (final url in urls) {
             try {
-              // 对于带前导点的domain（如.bgm.tv），需要明确指定
-              final cookieDomain = domain.isNotEmpty ? domain : null;
-
               await manager.setCookie(
                 url: WebUri(url),
                 name: name,
                 value: value,
-                domain: cookieDomain,
+                domain: domain.isEmpty ? null : domain,
                 path: path.isEmpty ? '/' : path,
                 expiresDate: item['expiresDate'] as int?,
                 isSecure: item['isSecure'] as bool?,
                 isHttpOnly: item['isHttpOnly'] as bool?,
               );
               planted = true;
-            } catch (e) {
-              if (kDebugMode && name == 'chii_auth') {
-                print('   ! 种植 $name 失败: $e');
-              }
-            }
+            } catch (_) {}
           }
+
           if (planted) {
             successCount++;
           } else {
             failedCookies.add(name);
           }
-        } catch (e) {
-          // 静默失败
-        }
+        } catch (_) {}
       }
+
       if (kDebugMode) {
-        print('   ✓ 种植成功: $successCount/${cookieJar.length}');
+        print('[WebReplyService] CookieJar 注入成功: $successCount/${cookieJar.length}');
         if (failedCookies.isNotEmpty) {
-          print('   ! 失败: ${failedCookies.join(", ")}');
+          print('[WebReplyService] 注入失败的 Cookie: ${failedCookies.join(", ")}');
         }
       }
 
-      // 验证关键Cookie
       final missingCookies = await _verifyCookies(manager);
-
-      // 如果有关键Cookie缺失，且提供了cookie字符串，则补种
       if (missingCookies.isNotEmpty &&
           cookie != null &&
           cookie.trim().isNotEmpty) {
         if (kDebugMode) {
-          print('   ⚠️  使用Cookie字符串补种缺失的: ${missingCookies.join(", ")}');
+          print(
+            '[WebReplyService] 用 Cookie Header 补种缺失项: ${missingCookies.join(", ")}',
+          );
         }
-        await _seedCookiesFromString(cookie, manager, environment);
+        await _seedCookiesFromString(cookie, manager);
         await _verifyCookies(manager);
       }
       return;
     }
 
-    // 使用简单的 cookie 字符串
-    await _seedCookiesFromString(cookie, manager, environment);
+    await _seedCookiesFromString(cookie, manager);
   }
 
-  /// 使用Cookie字符串种植
   static Future<void> _seedCookiesFromString(
     String? cookie,
     CookieManager manager,
-    WebViewEnvironment? environment,
   ) async {
     final normalized = (cookie ?? '').trim();
     if (normalized.isEmpty) {
       if (kDebugMode) {
-        print('   ⚠️  没有可用的 Cookie');
+        print('[WebReplyService] 没有可用的 Cookie Header');
       }
       return;
     }
 
     if (kDebugMode) {
-      print('   使用 Cookie 字符串补种');
+      print('[WebReplyService] 使用 Cookie Header 补种');
     }
 
     final parts = normalized.split(';');
-    int successCount = 0;
-    final importantNames = ['chii_auth', 'chii_sec_id', 'chii_sid'];
+    var successCount = 0;
+    const importantNames = {'chii_auth', 'chii_sec_id', 'chii_sid'};
 
     for (final part in parts) {
       final segment = part.trim();
       if (segment.isEmpty) continue;
       final index = segment.indexOf('=');
       if (index <= 0) continue;
+
       final name = segment.substring(0, index).trim();
       final value = segment.substring(index + 1).trim();
       if (name.isEmpty) continue;
 
-      // 为所有相关域名和子域名种植
-      final urlsWithDomain = [
+      const urlsWithDomain = [
         ('https://bgm.tv/', '.bgm.tv'),
         ('https://bangumi.tv/', '.bangumi.tv'),
         ('https://chii.in/', '.chii.in'),
       ];
 
-      bool planted = false;
+      var planted = false;
       for (final (url, domain) in urlsWithDomain) {
         try {
-          // 对关键Cookie，明确设置domain为.bgm.tv等
           await manager.setCookie(
             url: WebUri(url),
             name: name,
@@ -473,32 +442,25 @@ class WebReplyService {
             path: '/',
           );
           planted = true;
-
-          if (kDebugMode && importantNames.contains(name)) {
-            print('   > 补种 $name @ $domain');
-          }
-        } catch (e) {
-          if (kDebugMode && importantNames.contains(name)) {
-            print('   ! 补种 $name @ $domain 失败: $e');
-          }
-        }
+        } catch (_) {}
       }
-      if (planted) successCount++;
-    }
-    if (kDebugMode) {
-      print('   ✓ 补种成功: $successCount 个');
+
+      if (planted) {
+        successCount++;
+      }
     }
 
-    // 验证关键Cookie
+    if (kDebugMode) {
+      print('[WebReplyService] Cookie Header 补种成功: $successCount');
+    }
+
     await _verifyCookies(manager);
   }
 
-  /// 验证关键Cookie是否存在，返回缺失的Cookie列表
   static Future<List<String>> _verifyCookies(CookieManager manager) async {
     try {
-      // 检查所有相关域名的Cookie（包括根域和带点的域）
       final allCookies = <String, Cookie>{};
-      final urlsToCheck = [
+      const urlsToCheck = [
         'https://bgm.tv/',
         'https://www.bgm.tv/',
         'https://bangumi.tv/',
@@ -511,43 +473,33 @@ class WebReplyService {
         try {
           final cookies = await manager.getCookies(url: WebUri(url));
           for (final cookie in cookies) {
-            // 使用 name 作为key，后面的会覆盖前面的
             allCookies[cookie.name] = cookie;
           }
         } catch (_) {}
       }
 
-      final importantCookies = ['chii_auth', 'chii_sec_id', 'chii_sid'];
-      final foundCookies = <String>[];
-
-      for (final name in importantCookies) {
-        if (allCookies.containsKey(name)) {
-          foundCookies.add(name);
-        }
-      }
-
+      const importantCookies = ['chii_auth', 'chii_sec_id', 'chii_sid'];
       final missing = importantCookies
-          .where((name) => !foundCookies.contains(name))
+          .where((name) => !allCookies.containsKey(name))
           .toList();
 
       if (kDebugMode) {
         if (missing.isEmpty) {
-          print('   ✓ 关键Cookie已就位');
+          print('[WebReplyService] 关键 Cookie 已齐全');
         } else {
-          print('   ⚠️  缺失: ${missing.join(", ")}');
+          print('[WebReplyService] 缺少关键 Cookie: ${missing.join(", ")}');
         }
       }
 
       return missing;
     } catch (e) {
       if (kDebugMode) {
-        print('   ⚠️  Cookie验证失败');
+        print('[WebReplyService] 验证 Cookie 失败: $e');
       }
       return ['chii_auth', 'chii_sec_id', 'chii_sid'];
     }
   }
 
-  /// 根据domain获取应该设置Cookie的URLs
   static List<String> _getCookieUrls(String domain) {
     final normalized = domain.trim().replaceFirst(RegExp(r'^\.+'), '');
     if (normalized.isEmpty) {
@@ -566,77 +518,73 @@ class WebReplyService {
     final encoded = jsonEncode(content);
     return '''
 (() => {
-  // 检查Cookie
-  const cookies = document.cookie;
-  const hasAuthCookie = cookies.includes('chii_auth') || cookies.includes('chii_sec_id') || cookies.includes('chii_sid');
-  
-  // 检查登录状态
+  const cookies = document.cookie || '';
+  const hasAuthCookie =
+    cookies.includes('chii_auth') ||
+    cookies.includes('chii_sec_id') ||
+    cookies.includes('chii_sid');
+
   const uid = typeof CHOBITS_UID !== 'undefined'
     ? Number.parseInt(CHOBITS_UID, 10) || 0
-    : 0;
+    : (typeof CHOBITS_USER_UID !== 'undefined'
+        ? Number.parseInt(CHOBITS_USER_UID, 10) || 0
+        : 0);
   const username = typeof CHOBITS_USERNAME !== 'undefined'
     ? String(CHOBITS_USERNAME || '')
     : '';
-  
-  if (uid <= 0) {
-    return { 
+
+  if (uid <= 0 && !hasAuthCookie) {
+    return {
       status: 'login_required',
-      detail: 'uid=' + uid + ', hasCookie=' + hasAuthCookie + ', cookieCount=' + cookies.split(';').length + ', url=' + location.href
+      detail: 'uid=' + uid + ', cookieCount=' + cookies.split(';').filter(Boolean).length + ', url=' + location.href
     };
   }
-  if (location.pathname === '/' || location.pathname === '') {
-    return { 
-      status: 'login_required', 
-      detail: 'redirected_home, uid=' + uid + ', username=' + username
-    };
-  }
+
   const submit =
     document.querySelector('#ReplyForm input[type="submit"]') ||
     Array.from(document.querySelectorAll('input[type="submit"], button[type="submit"], input.inputBtn')).find((item) => {
       const value = (item.value || item.textContent || '').trim();
       return value.includes('加上去') || value.includes('写好了') || item.getAttribute('name') === 'submit';
     });
+
   const form =
     document.querySelector('#ReplyForm') ||
     submit?.closest('form') ||
     Array.from(document.forms).find((item) => {
-      return (
+      return !!(
         item.querySelector('textarea[name="content"]') ||
-        item.querySelector('textarea') ||
-        item.querySelector('input[type="submit"]') ||
-        item.querySelector('button[type="submit"]')
+        item.querySelector('textarea')
       );
     });
+
   if (!form) {
     return {
       status: 'form_missing',
-      detail: 'form_missing:title=' + (document.title || location.href),
+      detail: 'reply_form_missing:title=' + (document.title || location.href),
     };
   }
+
   const textarea =
     form.querySelector('textarea[name="content"]') ||
     form.querySelector('textarea') ||
-    form.querySelector('[contenteditable="true"]') ||
     document.querySelector('#content');
+
   if (!textarea) {
     return {
       status: 'form_missing',
-      detail:
-        'textarea_missing:submit=' +
-        (submit ? submit.outerHTML.slice(0, 240) : '-'),
+      detail: 'reply_textarea_missing',
     };
   }
-  if ('value' in textarea) {
-    textarea.value = $encoded;
-  } else {
-    textarea.innerHTML = $encoded.replace(/\\n/g, '<br>');
-  }
+
+  textarea.value = $encoded;
   textarea.dispatchEvent(new Event('input', { bubbles: true }));
   textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
   const formSubmit =
     submit ||
     form.querySelector('input[type="submit"]') ||
     form.querySelector('button[type="submit"]');
+
   if (formSubmit) {
     formSubmit.click();
   } else if (typeof form.requestSubmit === 'function') {
@@ -644,8 +592,148 @@ class WebReplyService {
   } else {
     form.submit();
   }
+
   return { status: 'submitted' };
 })()
 ''';
+  }
+
+  static String _buildSubReplyScript({
+    required String content,
+    required String postId,
+    required String subReplyAction,
+  }) {
+    final encodedContent = jsonEncode(content);
+    final encodedPostId = jsonEncode(postId);
+    final encodedAction = jsonEncode(subReplyAction);
+    return '''
+(() => {
+  const postId = String($encodedPostId);
+  const action = $encodedAction;
+  const post = document.querySelector('#post_' + postId);
+  if (!post) {
+    return { status: 'form_missing', detail: 'post_not_found:' + postId };
+  }
+
+  try {
+    (0, eval)(action);
+  } catch (error) {
+    return { status: 'form_missing', detail: 'sub_reply_eval_failed:' + error };
+  }
+
+  const form =
+    document.querySelector('#ReplysForm') ||
+    document.querySelector('form[name="new_comment"] input[name="post_id"][value="' + postId + '"]')?.closest('form') ||
+    Array.from(document.querySelectorAll('form')).find((item) => {
+      const postIdInput = item.querySelector('input[name="post_id"]');
+      return postIdInput && String(postIdInput.value || '') === postId;
+    }) ||
+    post.querySelector('.topic_sub_reply form') ||
+    post.querySelector('form') ||
+    document.querySelector('#reply_wrapper form') ||
+    document.querySelector('form[name="sub_reply"]');
+
+  if (!form) {
+    return { status: 'form_missing', detail: 'sub_reply_form_missing:' + postId };
+  }
+
+  const textarea =
+    document.querySelector('#content_' + postId) ||
+    form.querySelector('textarea.reply.sub_reply') ||
+    form.querySelector('textarea[name="content"]') ||
+    form.querySelector('textarea') ||
+    post.querySelector('textarea');
+
+  if (!textarea) {
+    return { status: 'form_missing', detail: 'sub_reply_textarea_missing:' + postId };
+  }
+
+  textarea.value = $encodedContent;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+  const submit =
+    form.querySelector('input[type="submit"]') ||
+    form.querySelector('button[type="submit"]') ||
+    post.querySelector('input.inputBtn');
+
+  if (submit) {
+    submit.click();
+  } else if (typeof form.requestSubmit === 'function') {
+    form.requestSubmit();
+  } else {
+    form.submit();
+  }
+
+  return { status: 'submitted', detail: 'sub_reply_submitted:' + postId };
+})()
+''';
+  }
+
+  static Future<bool> _waitForSubReplySuccess({
+    required InAppWebViewController controller,
+    required String postId,
+    required String content,
+  }) async {
+    final encodedPostId = jsonEncode(postId);
+    final encodedContent = jsonEncode(content.trim());
+
+    for (var i = 0; i < 12; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      try {
+        final raw = await controller.evaluateJavascript(
+          source: '''
+(() => {
+  const postId = String($encodedPostId);
+  const expected = String($encodedContent).replace(/\\s+/g, ' ').trim();
+  const post = document.querySelector('#post_' + postId);
+  if (!post) {
+    return { success: false, detail: 'post_missing' };
+  }
+
+  const form =
+    document.querySelector('#ReplysForm') ||
+    Array.from(document.querySelectorAll('form')).find((item) => {
+      const postIdInput = item.querySelector('input[name="post_id"]');
+      return postIdInput && String(postIdInput.value || '') === postId;
+    });
+
+  const text = (post.innerText || '').replace(/\\s+/g, ' ').trim();
+  const hasContent = expected.length > 0 && text.includes(expected);
+
+  return {
+    success: hasContent || !form,
+    hasContent,
+    formPresent: !!form,
+  };
+})()
+''',
+        );
+        final normalized = _normalizeJsResult(raw);
+        if (normalized?['success'] == true) {
+          return true;
+        }
+      } catch (_) {
+        // Ignore transient DOM errors while the page is updating.
+      }
+    }
+    return false;
+  }
+
+  static Map<String, dynamic>? _normalizeJsResult(dynamic raw) {
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry('$key', value));
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry('$key', value));
+        }
+      } catch (_) {
+        // Ignore non-JSON strings.
+      }
+    }
+    return null;
   }
 }

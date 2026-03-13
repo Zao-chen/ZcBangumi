@@ -110,7 +110,7 @@ jobs:
   release:
     needs: [build, build-windows]
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ needs.build.result == 'success' && needs.build-windows.result == 'success' }}
     permissions:
       contents: write
     

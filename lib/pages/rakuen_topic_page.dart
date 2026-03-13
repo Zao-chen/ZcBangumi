@@ -221,6 +221,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       await context.read<ApiClient>().submitRakuenReply(
         topicUrl: submitTopicUrl,
         content: content,
+        replyToPost: _replyTarget,
       );
       if (!mounted) return false;
       _replyTarget = null;
