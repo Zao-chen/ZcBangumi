@@ -178,10 +178,52 @@ jobs:
           name: windows-release
           path: zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
 
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          cache: true
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Package macOS app
+        shell: bash
+        run: |
+          APP_NAME="zc_bangumi.app"
+          ZIP_NAME="zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/$APP_NAME" "$ZIP_NAME"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-release
+          path: zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.zip
+
   release:
-    needs: [build, build-windows]
+    needs: [build, build-windows, build-macos]
     runs-on: ubuntu-latest
-    if: ${{ needs.build.result == 'success' && needs.build-windows.result == 'success' }}
+    if: ${{ needs.build.result == 'success' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' }}
     permissions:
       contents: write
     
@@ -232,6 +274,8 @@ jobs:
           files: |
             artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
             artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
+            artifacts/macos-x64-release/zc_bangumi-${{ github.event.inputs.release_tag }}-macos-x64.zip
+            artifacts/macos-arm64-release/zc_bangumi-${{ github.event.inputs.release_tag }}-macos-arm64.zip
           body: |
             ZC Bangumi ${{ github.event.inputs.release_tag }} 正式版本发布
             

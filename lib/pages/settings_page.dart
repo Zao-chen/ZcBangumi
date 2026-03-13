@@ -112,7 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _autoFetchWebCookie() async {
     if (!WebCookieLoginPage.isSupported) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('自动登录当前仅支持 Android、iOS 和 Windows')),
+        const SnackBar(content: Text('自动登录当前仅支持 Android、iOS、Windows 和 macOS')),
       );
       return;
     }

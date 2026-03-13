@@ -19,7 +19,8 @@ class WebCookieLoginPage extends StatefulWidget {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.windows);
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   @override
   State<WebCookieLoginPage> createState() => _WebCookieLoginPageState();
