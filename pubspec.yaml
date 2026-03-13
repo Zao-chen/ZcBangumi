@@ -1,7 +1,7 @@
 name: zc_bangumi
 description: "ZcBangumi - Bangumi 番组计划第三方客户端"
 publish_to: 'none'
-version: 1.2.0+1
+version: 1.2.1+1
 
 environment:
   sdk: ^3.11.0

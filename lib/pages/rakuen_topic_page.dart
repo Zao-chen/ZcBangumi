@@ -22,6 +22,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   bool _loading = true;
   String? _error;
   bool _replySubmitting = false;
+  RakuenPost? _replyTarget;
   final ScrollController _scrollController = ScrollController();
   final ScrollController _replyScrollController = ScrollController();
   final TextEditingController _replyController = TextEditingController();
@@ -96,7 +97,58 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     return detail != null && detail.canReply;
   }
 
-  Future<void> _openReplyComposer() async {
+  String _replyDraftPrefixFor(RakuenPost post) {
+    final username = post.username.trim();
+    if (username.isNotEmpty) {
+      return '@$username ';
+    }
+    final nickname = post.nickname.trim();
+    if (nickname.isNotEmpty) {
+      return '回复 ${post.floor} $nickname：\n';
+    }
+    return '回复 ${post.floor}：\n';
+  }
+
+  String _replyTargetTitle(RakuenPost? post) {
+    if (post == null) return '添加新回复';
+    final nickname = post.nickname.trim();
+    final label = nickname.isNotEmpty ? nickname : post.username.trim();
+    return label.isNotEmpty ? '回复 ${post.floor} $label' : '回复 ${post.floor}';
+  }
+
+  String? _replyTargetSubtitle(RakuenPost? post) {
+    if (post == null) return null;
+    final username = post.username.trim();
+    if (username.isNotEmpty) {
+      return '@$username';
+    }
+    final nickname = post.nickname.trim();
+    return nickname.isNotEmpty ? '发送给 $nickname' : null;
+  }
+
+  void _prepareReplyDraft(RakuenPost? target) {
+    final previousTarget = _replyTarget;
+    final previousPrefix =
+        previousTarget == null ? '' : _replyDraftPrefixFor(previousTarget);
+    final nextPrefix = target == null ? '' : _replyDraftPrefixFor(target);
+
+    var nextText = _replyController.text;
+    if (nextText.isEmpty) {
+      nextText = nextPrefix;
+    } else if (previousPrefix.isNotEmpty && nextText.startsWith(previousPrefix)) {
+      nextText = '$nextPrefix${nextText.substring(previousPrefix.length)}';
+    } else if (nextPrefix.isNotEmpty && !nextText.startsWith(nextPrefix)) {
+      nextText = '$nextPrefix$nextText';
+    }
+
+    _replyTarget = target;
+    _replyController.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextText.length),
+    );
+  }
+
+  Future<void> _openReplyComposer([RakuenPost? target]) async {
     final detail = _detail;
     if (detail == null) return;
     if (!context.read<ApiClient>().hasWebCookie) {
@@ -111,6 +163,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       );
       return;
     }
+    _prepareReplyDraft(target);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -126,9 +179,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: _RakuenInlineReplyCard(
-              author: (detail.replyAuthor?.trim().isNotEmpty ?? false)
-                  ? detail.replyAuthor!.trim()
-                  : '你',
+              title: _replyTargetTitle(target),
+              subtitle: _replyTargetSubtitle(target),
               controller: _replyController,
               focusNode: _replyFocusNode,
               submitting: _replySubmitting,
@@ -171,6 +223,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         content: content,
       );
       if (!mounted) return false;
+      _replyTarget = null;
       _replyController.clear();
       FocusScope.of(context).unfocus();
       ScaffoldMessenger.of(
@@ -217,7 +270,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       body: _buildBody(),
       floatingActionButton: _canShowReplyAction
           ? FloatingActionButton.extended(
-              onPressed: _replySubmitting ? null : _openReplyComposer,
+              onPressed: _replySubmitting ? null : () => _openReplyComposer(),
               icon: _replySubmitting
                   ? const SizedBox(
                       width: 18,
@@ -299,7 +352,11 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
           SliverPadding(
             padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
             sliver: SliverToBoxAdapter(
-              child: _RakuenPostCard(post: detail.originalPost!, emphasize: true),
+                child: _RakuenPostCard(
+                  post: detail.originalPost!,
+                  emphasize: true,
+                  onReply: (post) => _openReplyComposer(post),
+                ),
             ),
           ),
         ],
@@ -319,7 +376,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
             padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => _RakuenPostCard(post: detail.replies[index]),
+                (context, index) => _RakuenPostCard(
+                  post: detail.replies[index],
+                  onReply: (post) => _openReplyComposer(post),
+                ),
                 childCount: detail.replies.length,
               ),
             ),
@@ -356,6 +416,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                           detail: detail,
                           fallbackTopic: widget.topic,
                           originalPost: detail.originalPost,
+                          onReply: (post) => _openReplyComposer(post),
                         ),
                       ),
                     ),
@@ -391,7 +452,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) =>
-                              _RakuenPostCard(post: detail.replies[index]),
+                              _RakuenPostCard(
+                                post: detail.replies[index],
+                                onReply: (post) => _openReplyComposer(post),
+                              ),
                           childCount: detail.replies.length,
                         ),
                       ),
@@ -488,8 +552,14 @@ class _RakuenLeadPane extends StatelessWidget {
   final RakuenTopicDetail detail;
   final RakuenTopic fallbackTopic;
   final RakuenPost? originalPost;
+  final ValueChanged<RakuenPost>? onReply;
 
-  const _RakuenLeadPane({required this.detail, required this.fallbackTopic, required this.originalPost});
+  const _RakuenLeadPane({
+    required this.detail,
+    required this.fallbackTopic,
+    required this.originalPost,
+    this.onReply,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -544,7 +614,15 @@ class _RakuenLeadPane extends StatelessWidget {
             const SizedBox(height: 18),
             Divider(color: colorScheme.outlineVariant, height: 1),
             const SizedBox(height: 18),
-            _RakuenPostBlock(post: originalPost!, avatarSize: 48, titleFontSize: 15, metaFontSize: 11, contentFontSize: 15, contentHeight: 1.5),
+            _RakuenPostBlock(
+              post: originalPost!,
+              avatarSize: 48,
+              titleFontSize: 15,
+              metaFontSize: 11,
+              contentFontSize: 15,
+              contentHeight: 1.5,
+              onReply: onReply,
+            ),
           ],
         ],
       ),
@@ -555,8 +633,13 @@ class _RakuenLeadPane extends StatelessWidget {
 class _RakuenPostCard extends StatelessWidget {
   final RakuenPost post;
   final bool emphasize;
+  final ValueChanged<RakuenPost>? onReply;
 
-  const _RakuenPostCard({required this.post, this.emphasize = false});
+  const _RakuenPostCard({
+    required this.post,
+    this.emphasize = false,
+    this.onReply,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -574,6 +657,7 @@ class _RakuenPostCard extends StatelessWidget {
           metaFontSize: 11,
           contentFontSize: 14,
           contentHeight: 1.42,
+          onReply: onReply,
         ),
       ),
     );
@@ -587,6 +671,7 @@ class _RakuenPostBlock extends StatelessWidget {
   final double metaFontSize;
   final double contentFontSize;
   final double contentHeight;
+  final ValueChanged<RakuenPost>? onReply;
 
   const _RakuenPostBlock({
     required this.post,
@@ -595,6 +680,7 @@ class _RakuenPostBlock extends StatelessWidget {
     required this.metaFontSize,
     required this.contentFontSize,
     required this.contentHeight,
+    this.onReply,
   });
 
   @override
@@ -620,6 +706,7 @@ class _RakuenPostBlock extends StatelessWidget {
                 contentFontSize: contentFontSize,
                 contentHeight: contentHeight,
                 colorScheme: colorScheme,
+                onReply: onReply == null ? null : () => onReply!(post),
               ),
             ),
           ],
@@ -655,6 +742,7 @@ class _RakuenPostBlock extends StatelessWidget {
                           contentFontSize: 13,
                           contentHeight: 1.4,
                           colorScheme: colorScheme,
+                          onReply: onReply == null ? null : () => onReply!(reply),
                         ),
                       ),
                     ],
@@ -669,14 +757,16 @@ class _RakuenPostBlock extends StatelessWidget {
   }
 }
 class _RakuenInlineReplyCard extends StatelessWidget {
-  final String author;
+  final String title;
+  final String? subtitle;
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool submitting;
   final Future<void> Function() onSubmit;
 
   const _RakuenInlineReplyCard({
-    required this.author,
+    required this.title,
+    this.subtitle,
     required this.controller,
     required this.focusNode,
     required this.submitting,
@@ -706,18 +796,20 @@ class _RakuenInlineReplyCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '回复 $author',
+              title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '写下你的想法',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
             const SizedBox(height: 14),
             TextField(
               controller: controller,
@@ -783,6 +875,7 @@ class _PostBody extends StatelessWidget {
   final double contentFontSize;
   final double contentHeight;
   final ColorScheme colorScheme;
+  final VoidCallback? onReply;
 
   const _PostBody({
     required this.nickname,
@@ -795,6 +888,7 @@ class _PostBody extends StatelessWidget {
     required this.contentFontSize,
     required this.contentHeight,
     required this.colorScheme,
+    this.onReply,
   });
 
   @override
@@ -827,7 +921,35 @@ class _PostBody extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text('$floorText  $timeText', style: TextStyle(fontSize: metaFontSize, color: colorScheme.onSurfaceVariant)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '$floorText  $timeText',
+                  style: TextStyle(
+                    fontSize: metaFontSize,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (onReply != null)
+                  TextButton(
+                    onPressed: onReply,
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: Text(
+                      '回复',
+                      style: TextStyle(fontSize: metaFontSize),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 4),
