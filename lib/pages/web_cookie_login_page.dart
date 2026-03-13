@@ -106,23 +106,31 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
   const usernameFromVar = typeof CHOBITS_USERNAME !== 'undefined'
     ? String(CHOBITS_USERNAME || '').trim()
     : '';
-  const profileLink = document.querySelector('a[href^="/user/"]');
-  const profileHref = profileLink?.getAttribute('href') || '';
-  const usernameFromHref = profileHref.startsWith('/user/')
-    ? profileHref.replace('/user/', '').split(/[?#]/)[0]
-    : '';
-  const logoutLink = document.querySelector('a[href*="/logout"]');
-  const signOutLink = document.querySelector('a[href*="logout"], a[href*="/signout"]');
   const chobitsUser = typeof window !== 'undefined' &&
     typeof window.CHOBITS_USER_UID !== 'undefined'
       ? Number.parseInt(window.CHOBITS_USER_UID, 10) || 0
       : 0;
-  const username = usernameFromVar || usernameFromHref;
+  const headerProfileLink =
+    document.querySelector('#headerNeue2 .idBadgerNeue a[href^="/user/"]') ||
+    document.querySelector('#dock a[href^="/user/"]') ||
+    document.querySelector('#badgeUserPanel a[href^="/user/"]') ||
+    document.querySelector('.idBadgerNeue a[href^="/user/"]');
+  const headerProfileHref = headerProfileLink?.getAttribute('href') || '';
+  const usernameFromHeader = headerProfileHref.startsWith('/user/')
+    ? headerProfileHref.replace('/user/', '').split(/[?#]/)[0]
+    : '';
+  const logoutLink =
+    document.querySelector('#headerNeue2 a[href*="/logout"]') ||
+    document.querySelector('#dock a[href*="/logout"]') ||
+    document.querySelector('.idBadgerNeue a[href*="/logout"]');
+  const signOutLink =
+    document.querySelector('#headerNeue2 a[href*="/signout"]') ||
+    document.querySelector('#dock a[href*="/signout"]') ||
+    document.querySelector('.idBadgerNeue a[href*="/signout"]');
+  const username = usernameFromVar || usernameFromHeader;
   const loggedIn = uid > 0 ||
     chobitsUser > 0 ||
-    !!logoutLink ||
-    !!signOutLink ||
-    profileHref.startsWith('/user/');
+    (headerProfileHref.startsWith('/user/') && (!!logoutLink || !!signOutLink || usernameFromHeader.length > 0));
   return {
     loggedIn,
     uid: uid > 0 ? uid : (chobitsUser > 0 ? chobitsUser : null),
@@ -194,7 +202,9 @@ class _WebCookieLoginPageState extends State<WebCookieLoginPage> {
               '检查错误: ${inspection.error ?? '-'}';
         });
       }
-      if (!signal.loggedIn && !onBangumiHome && !inspection.hasAuthCookie) {
+      if (!signal.loggedIn &&
+          !inspection.hasAuthCookie &&
+          inspection.validatedSession == null) {
         return;
       }
 

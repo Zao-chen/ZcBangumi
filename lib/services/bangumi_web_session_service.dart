@@ -184,13 +184,15 @@ class BangumiWebSessionService {
         cookies: cookies,
       );
       final requestCookies = candidate.cookiesForUri(Uri.parse('https://bgm.tv/'));
+      final validatedSession = await validateSession(candidate) ??
+          _fallbackValidatedSessionFromPageSignal(pageSignal);
 
       return BangumiWebSessionInspection(
         cookies: cookies,
         hasAuthCookie: true,
         requestCookieCount: requestCookies.length,
         requestCookieNames: requestCookies.map((cookie) => cookie.name).toList(),
-        validatedSession: await validateSession(candidate),
+        validatedSession: validatedSession,
       );
     } catch (e) {
       return BangumiWebSessionInspection(
@@ -253,5 +255,16 @@ class BangumiWebSessionService {
       isSecure: cookie.isSecure ?? false,
       isHttpOnly: cookie.isHttpOnly ?? false,
     );
+  }
+
+  WebSessionInfo? _fallbackValidatedSessionFromPageSignal(
+    BangumiWebPageSignal pageSignal,
+  ) {
+    final username = (pageSignal.username ?? '').trim();
+    final uid = pageSignal.uid ?? 0;
+    if (!pageSignal.loggedIn || username.isEmpty || uid <= 0) {
+      return null;
+    }
+    return WebSessionInfo(uid: uid, username: username);
   }
 }

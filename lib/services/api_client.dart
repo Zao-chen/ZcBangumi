@@ -1658,31 +1658,42 @@ class ApiClient {
         ).firstMatch(html)?.group(1)?.trim() ??
         '';
 
-    final userLinkMatch = RegExp(
-      r'<a[^>]+href="/user/([^"/?#]+)"[^>]*>([\s\S]*?)</a>',
+    final headerUserLinkMatch = RegExp(
+      r'idBadgerNeue[\s\S]{0,1200}?href="/user/([^"/?#]+)"',
       caseSensitive: false,
-    ).firstMatch(html);
-    final usernameFromLink = userLinkMatch?.group(1)?.trim() ?? '';
+    ).firstMatch(html) ??
+        RegExp(
+          r'id="dock"[\s\S]{0,1200}?href="/user/([^"/?#]+)"',
+          caseSensitive: false,
+        ).firstMatch(html) ??
+        RegExp(
+          r'id="badgeUserPanel"[\s\S]{0,1200}?href="/user/([^"/?#]+)"',
+          caseSensitive: false,
+        ).firstMatch(html);
+    final usernameFromHeader = headerUserLinkMatch?.group(1)?.trim() ?? '';
+
+    final hasHeaderLogout = RegExp(
+      r'(idBadgerNeue|id="dock"|id="badgeUserPanel")[\s\S]{0,1200}?(?:/logout|/signout)',
+      caseSensitive: false,
+    ).hasMatch(html);
 
     final fallbackUsername = usernameFromChobits.isNotEmpty
         ? usernameFromChobits
-        : usernameFromLink;
+        : usernameFromHeader;
     final fallbackUid = uidFromChobits > 0
         ? uidFromChobits
-        : (uidFromAlt > 0 ? uidFromAlt : int.tryParse(usernameFromLink) ?? 0);
+        : (uidFromAlt > 0 ? uidFromAlt : int.tryParse(usernameFromHeader) ?? 0);
 
-    final hasLogout =
-        html.contains('/logout') ||
-        html.contains('logout') ||
-        html.contains('/signout');
-
-    if (fallbackUsername.isEmpty && !hasLogout) {
+    if (fallbackUsername.isEmpty || fallbackUid <= 0) {
+      return null;
+    }
+    if (!hasHeaderLogout && uidFromChobits <= 0 && uidFromAlt <= 0) {
       return null;
     }
 
     return WebSessionInfo(
-      uid: fallbackUid > 0 ? fallbackUid : 1,
-      username: fallbackUsername.isNotEmpty ? fallbackUsername : 'logged_in',
+      uid: fallbackUid,
+      username: fallbackUsername,
     );
   }
 
