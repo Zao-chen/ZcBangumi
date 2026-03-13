@@ -183,9 +183,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
+          - runner: macos-15-intel
             arch: x64
-          - runner: macos-14
+          - runner: macos-15
             arch: arm64
     runs-on: ${{ matrix.runner }}
 
@@ -210,9 +210,14 @@ jobs:
       - name: Package macOS app
         shell: bash
         run: |
-          APP_NAME="zc_bangumi.app"
+          APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No .app bundle found in build/macos/Build/Products/Release"
+            ls -la build/macos/Build/Products/Release || true
+            exit 1
+          fi
           ZIP_NAME="zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.zip"
-          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/$APP_NAME" "$ZIP_NAME"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
 
       - name: Upload macOS package
         uses: actions/upload-artifact@v4
