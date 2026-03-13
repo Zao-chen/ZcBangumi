@@ -30,6 +30,77 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Validate Android signing secrets
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=0
+          for var in ANDROID_KEYSTORE_BASE64 ANDROID_STORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Missing required GitHub Actions secret: $var"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Prepare Android release signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p android/keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/keystore/upload-keystore.jks
+
+          cat > android/key.properties <<EOF
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=../keystore/upload-keystore.jks
+          EOF
+
+      - name: Verify Android signing certificate
+        shell: bash
+        env:
+          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_CERT_SHA256" ]; then
+            echo "ANDROID_CERT_SHA256 not set; skipping certificate fingerprint verification."
+            exit 0
+          fi
+
+          actual_sha256=$(
+            keytool -list -v \
+              -keystore android/keystore/upload-keystore.jks \
+              -alias "$ANDROID_KEY_ALIAS" \
+              -storepass "$ANDROID_STORE_PASSWORD" \
+              -keypass "$ANDROID_KEY_PASSWORD" \
+              | awk -F': ' '/SHA256:/{gsub(/:/, "", $2); print toupper($2); exit}'
+          )
+          expected_sha256=$(echo "$ANDROID_CERT_SHA256" | tr -d '[:space:]:' | tr '[:lower:]' '[:upper:]')
+
+          if [ -z "$actual_sha256" ]; then
+            echo "::error::Unable to read SHA256 from Android keystore."
+            exit 1
+          fi
+
+          if [ "$actual_sha256" != "$expected_sha256" ]; then
+            echo "::error::Android signing certificate SHA256 mismatch."
+            exit 1
+          fi
+
       - name: Build APK
         run: flutter build apk --release
 

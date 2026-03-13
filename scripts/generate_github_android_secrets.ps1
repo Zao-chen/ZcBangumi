@@ -30,8 +30,15 @@ if (-not (Get-Command keytool -ErrorAction SilentlyContinue)) {
 $keystoreBytes = [IO.File]::ReadAllBytes((Resolve-Path $KeystorePath))
 $keystoreBase64 = [Convert]::ToBase64String($keystoreBytes)
 
-$keytoolOutput = keytool -list -v -keystore $KeystorePath -alias $Alias -storepass $StorePassword -keypass $KeyPassword
-$shaLine = ($keytoolOutput | Select-String "SHA256").Line | Select-Object -First 1
+$keytoolOutput = @(keytool -list -v -keystore $KeystorePath -alias $Alias -storepass $StorePassword -keypass $KeyPassword 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw (($keytoolOutput | ForEach-Object { "$_" }) -join [Environment]::NewLine)
+}
+
+$shaLine = $keytoolOutput |
+    Select-String "SHA256" |
+    ForEach-Object { $_.Line } |
+    Select-Object -First 1
 if (-not $shaLine) {
     throw "Cannot read SHA256 from keystore. Check alias/passwords."
 }
