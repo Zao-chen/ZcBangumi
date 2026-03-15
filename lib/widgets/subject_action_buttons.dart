@@ -92,8 +92,12 @@ class _SubjectActionButtonsState extends State<SubjectActionButtons> {
       label: Text(label, style: const TextStyle(fontSize: 13)),
       style: FilledButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        backgroundColor: isCollected ? colorScheme.primary : colorScheme.surface,
-        foregroundColor: isCollected ? colorScheme.onPrimary : colorScheme.onSurface,
+        backgroundColor: isCollected
+            ? colorScheme.primary
+            : colorScheme.surface,
+        foregroundColor: isCollected
+            ? colorScheme.onPrimary
+            : colorScheme.onSurface,
       ),
     );
   }
@@ -188,9 +192,11 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
               scrollDirection: Axis.horizontal,
               child: SegmentedButton<int>(
                 showSelectedIcon: false,
-                onSelectionChanged: _loading ? null : (Set<int> newSelection) {
-                  setState(() => _selectedType = newSelection.first);
-                },
+                onSelectionChanged: _loading
+                    ? null
+                    : (Set<int> newSelection) {
+                        setState(() => _selectedType = newSelection.first);
+                      },
                 selected: <int>{_selectedType},
                 segments: const <ButtonSegment<int>>[
                   ButtonSegment<int>(value: 1, label: Text('想看')),

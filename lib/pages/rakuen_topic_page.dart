@@ -266,9 +266,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
             ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => _RakuenPostCard(
-                  post: detail.replies[index],
-                ),
+                (context, index) =>
+                    _RakuenPostCard(post: detail.replies[index]),
                 childCount: detail.replies.length,
               ),
             ),
@@ -344,9 +343,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                       padding: const EdgeInsets.only(top: 8, right: gutter),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => _RakuenPostCard(
-                            post: detail.replies[index],
-                          ),
+                          (context, index) =>
+                              _RakuenPostCard(post: detail.replies[index]),
                           childCount: detail.replies.length,
                         ),
                       ),
@@ -616,10 +614,7 @@ class _RakuenPostCard extends StatelessWidget {
   final RakuenPost post;
   final bool emphasize;
 
-  const _RakuenPostCard({
-    required this.post,
-    this.emphasize = false,
-  });
+  const _RakuenPostCard({required this.post, this.emphasize = false});
 
   @override
   Widget build(BuildContext context) {
