@@ -681,20 +681,8 @@ class _EpisodeCell extends StatelessWidget {
         height: 40,
         child: _MenuRow(
           icon: Icons.fast_forward,
-          label: '\u770b\u5230 EP.${ep.episode.sortLabel}',
+          label: '\u770b\u5230',
           color: Colors.teal,
-        ),
-      ),
-    );
-
-    items.add(
-      const PopupMenuItem(
-        value: _menuOpenDiscussion,
-        height: 40,
-        child: _MenuRow(
-          icon: Icons.forum_outlined,
-          label: '\u5355\u96c6\u8ba8\u8bba',
-          color: Colors.indigo,
         ),
       ),
     );
@@ -741,6 +729,19 @@ class _EpisodeCell extends StatelessWidget {
         ),
       );
     }
+
+    items.add(const PopupMenuDivider(height: 8));
+    items.add(
+      const PopupMenuItem(
+        value: _menuOpenDiscussion,
+        height: 40,
+        child: _MenuRow(
+          icon: Icons.forum_outlined,
+          label: '\u8ba8\u8bba',
+          color: Colors.indigo,
+        ),
+      ),
+    );
 
     showMenu<int>(
       context: context,

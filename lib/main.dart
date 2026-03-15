@@ -168,8 +168,8 @@ class _AppShellState extends State<_AppShell> {
       },
       items: const [
         NavigationItem(
-          icon: Icons.dynamic_feed_outlined,
-          selectedIcon: Icons.dynamic_feed,
+          icon: Icons.rss_feed_outlined,
+          selectedIcon: Icons.rss_feed,
           label: '动态',
         ),
         NavigationItem(
