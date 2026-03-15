@@ -118,7 +118,6 @@ class _UnifiedEditDialog extends StatefulWidget {
 class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
   late int _selectedType;
   late int _selectedRating;
-  late TextEditingController _commentController;
   bool _loading = false;
 
   @override
@@ -126,15 +125,6 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     super.initState();
     _selectedType = widget.collection?.type ?? 0;
     _selectedRating = widget.collection?.rate ?? 0;
-    _commentController = TextEditingController(
-      text: widget.collection?.comment ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
   }
 
   Future<void> _saveChanges() async {
@@ -156,14 +146,6 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
         type: _selectedType,
         rate: _selectedRating > 0 ? _selectedRating : null,
       );
-
-      // 如果有吐槽内容，保存吐槽
-      if (_commentController.text.trim().isNotEmpty) {
-        await api.createSubjectComment(
-          subjectId: widget.subject.id,
-          content: _commentController.text,
-        );
-      }
 
       if (mounted) {
         widget.onChanged();
@@ -251,27 +233,6 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                     ),
                   );
                 }),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 吐槽
-            Text(
-              '吐槽',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _commentController,
-              maxLines: 4,
-              enabled: !_loading,
-              decoration: InputDecoration(
-                hintText: '分享你对这部作品的想法...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
               ),
             ),
           ],

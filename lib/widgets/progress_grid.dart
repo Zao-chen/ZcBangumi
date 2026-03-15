@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../constants.dart';
 import '../models/episode.dart';
+import '../pages/rakuen_topic_page.dart';
+import '../services/api_client.dart';
 
 class ProgressGrid extends StatelessWidget {
   final List<UserEpisodeCollection> episodes;
@@ -57,7 +60,10 @@ class ProgressGrid extends StatelessWidget {
     if (episodes.isEmpty && !useNumberPicker) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Text('\u6682\u65e0\u7ae0\u8282\u4fe1\u606f', style: TextStyle(color: Colors.grey)),
+        child: Text(
+          '\u6682\u65e0\u7ae0\u8282\u4fe1\u606f',
+          style: TextStyle(color: Colors.grey),
+        ),
       );
     }
 
@@ -65,7 +71,10 @@ class ProgressGrid extends StatelessWidget {
     if (mainEps.isEmpty && !useNumberPicker) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Text('\u6682\u65e0\u672c\u7bc7\u7ae0\u8282', style: TextStyle(color: Colors.grey)),
+        child: Text(
+          '\u6682\u65e0\u672c\u7bc7\u7ae0\u8282',
+          style: TextStyle(color: Colors.grey),
+        ),
       );
     }
 
@@ -114,11 +123,26 @@ class _CollectionTypeCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final (accentColor, textColor) = switch (collectionType) {
-      BgmConst.collectionDoing => (colorScheme.primary, colorScheme.onPrimaryContainer),
-      BgmConst.collectionDone => (colorScheme.primaryContainer, colorScheme.onPrimaryContainer),
-      BgmConst.collectionWish => (colorScheme.secondaryContainer, colorScheme.onSecondaryContainer),
-      BgmConst.collectionDropped => (colorScheme.errorContainer, colorScheme.onErrorContainer),
-      BgmConst.collectionOnHold => (colorScheme.tertiaryContainer, colorScheme.onTertiaryContainer),
+      BgmConst.collectionDoing => (
+        colorScheme.primary,
+        colorScheme.onPrimaryContainer,
+      ),
+      BgmConst.collectionDone => (
+        colorScheme.primaryContainer,
+        colorScheme.onPrimaryContainer,
+      ),
+      BgmConst.collectionWish => (
+        colorScheme.secondaryContainer,
+        colorScheme.onSecondaryContainer,
+      ),
+      BgmConst.collectionDropped => (
+        colorScheme.errorContainer,
+        colorScheme.onErrorContainer,
+      ),
+      BgmConst.collectionOnHold => (
+        colorScheme.tertiaryContainer,
+        colorScheme.onTertiaryContainer,
+      ),
       _ => (colorScheme.surfaceContainerHighest, colorScheme.onSurfaceVariant),
     };
     final isDoing = collectionType == BgmConst.collectionDoing;
@@ -146,7 +170,8 @@ class _CollectionTypeCell extends StatelessWidget {
                 child: Stack(
                   children: [
                     if (!isDoing) Container(color: accentColor.withAlpha(110)),
-                    if (isDoing) const _IndeterminateProgressOverlay(enabled: true),
+                    if (isDoing)
+                      const _IndeterminateProgressOverlay(enabled: true),
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -182,7 +207,9 @@ class _CollectionTypeCell extends StatelessWidget {
         .map(
           (type) => PopupMenuItem<int>(
             value: type,
-            child: Text(BgmConst.collectionLabel(type, subjectType: subjectType)),
+            child: Text(
+              BgmConst.collectionLabel(type, subjectType: subjectType),
+            ),
           ),
         )
         .toList();
@@ -225,7 +252,9 @@ class _BookProgressSelector extends StatelessWidget {
         .toSet()
         .toList();
     if (sorts.isEmpty) {
-      final fallbackMax = maxByInput > 0 ? maxByInput : (currentProgress > 0 ? currentProgress + 100 : 100);
+      final fallbackMax = maxByInput > 0
+          ? maxByInput
+          : (currentProgress > 0 ? currentProgress + 100 : 100);
       return List<int>.generate(fallbackMax, (i) => i + 1);
     }
     if (maxByInput > 0 && !sorts.contains(maxByInput)) {
@@ -247,7 +276,9 @@ class _BookProgressSelector extends StatelessWidget {
         .toList();
     if (doneSorts.isEmpty) return currentProgress;
     doneSorts.sort();
-    return doneSorts.last.toInt() > currentProgress ? doneSorts.last.toInt() : currentProgress;
+    return doneSorts.last.toInt() > currentProgress
+        ? doneSorts.last.toInt()
+        : currentProgress;
   }
 
   Future<int?> _showSortPicker(
@@ -308,7 +339,9 @@ class _BookProgressSelector extends StatelessWidget {
                       ),
                       FilledButton(
                         onPressed: () {
-                          final value = int.tryParse(textController.text.trim());
+                          final value = int.tryParse(
+                            textController.text.trim(),
+                          );
                           Navigator.pop(context, value);
                         },
                         child: const Text('\u786e\u5b9a'),
@@ -368,7 +401,8 @@ class _BookProgressSelector extends StatelessWidget {
                             childDelegate: ListWheelChildBuilderDelegate(
                               childCount: sorts.length,
                               builder: (context, index) {
-                                if (index < 0 || index >= sorts.length) return null;
+                                if (index < 0 || index >= sorts.length)
+                                  return null;
                                 final isSelected = index == selectedIndex;
                                 return Center(
                                   child: Text(
@@ -381,12 +415,12 @@ class _BookProgressSelector extends StatelessWidget {
                                               ? FontWeight.w700
                                               : FontWeight.w400,
                                           color: isSelected
-                                              ? Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                              : Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
+                                              ? Theme.of(
+                                                  context,
+                                                ).colorScheme.primary
+                                              : Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
                                         ),
                                   ),
                                 );
@@ -395,7 +429,9 @@ class _BookProgressSelector extends StatelessWidget {
                           ),
                           IgnorePointer(
                             child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 24),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
                               height: 44,
                               decoration: BoxDecoration(
                                 border: Border.all(
@@ -454,7 +490,9 @@ class _BookProgressSelector extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final sorts = _availableSorts();
     final currentDoneSort = _currentDoneSort();
-    final knownMax = (maxProgress != null && maxProgress! > 0) ? maxProgress : null;
+    final knownMax = (maxProgress != null && maxProgress! > 0)
+        ? maxProgress
+        : null;
     final displayMax = knownMax?.toString() ?? '??';
     final progressText = '$currentDoneSort/$displayMax';
     final enabled = onWatchUpTo != null && sorts.isNotEmpty;
@@ -539,6 +577,9 @@ class _BookProgressSelector extends StatelessWidget {
 }
 
 class _EpisodeCell extends StatelessWidget {
+  static const int _menuWatchUpTo = -1;
+  static const int _menuOpenDiscussion = -2;
+
   final UserEpisodeCollection episode;
   final void Function(int episodeId, int newType)? onSetStatus;
   final void Function(int episodeSort)? onWatchUpTo;
@@ -636,12 +677,24 @@ class _EpisodeCell extends StatelessWidget {
 
     items.add(
       PopupMenuItem(
-        value: -1,
+        value: _menuWatchUpTo,
         height: 40,
         child: _MenuRow(
           icon: Icons.fast_forward,
           label: '\u770b\u5230 EP.${ep.episode.sortLabel}',
           color: Colors.teal,
+        ),
+      ),
+    );
+
+    items.add(
+      const PopupMenuItem(
+        value: _menuOpenDiscussion,
+        height: 40,
+        child: _MenuRow(
+          icon: Icons.forum_outlined,
+          label: '\u5355\u96c6\u8ba8\u8bba',
+          color: Colors.indigo,
         ),
       ),
     );
@@ -665,7 +718,11 @@ class _EpisodeCell extends StatelessWidget {
         const PopupMenuItem(
           value: BgmConst.episodeDropped,
           height: 40,
-          child: _MenuRow(icon: Icons.block, label: '\u629b\u5f03', color: Colors.red),
+          child: _MenuRow(
+            icon: Icons.block,
+            label: '\u629b\u5f03',
+            color: Colors.red,
+          ),
         ),
       );
     }
@@ -676,7 +733,11 @@ class _EpisodeCell extends StatelessWidget {
         const PopupMenuItem(
           value: BgmConst.episodeNotCollected,
           height: 40,
-          child: _MenuRow(icon: Icons.undo, label: '\u64a4\u9500', color: Colors.grey),
+          child: _MenuRow(
+            icon: Icons.undo,
+            label: '\u64a4\u9500',
+            color: Colors.grey,
+          ),
         ),
       );
     }
@@ -690,14 +751,39 @@ class _EpisodeCell extends StatelessWidget {
         position.dy + 1,
       ),
       items: items,
-    ).then((value) {
+    ).then((value) async {
       if (value == null) return;
-      if (value == -1) {
+      if (value == _menuWatchUpTo) {
         onWatchUpTo?.call(ep.episode.sort.toInt());
+      } else if (value == _menuOpenDiscussion) {
+        await _openEpisodeDiscussion(context, ep.episode);
       } else {
         onSetStatus?.call(ep.episode.id, value);
       }
     });
+  }
+
+  Future<void> _openEpisodeDiscussion(
+    BuildContext context,
+    Episode episodeInfo,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    try {
+      final topic = await context.read<ApiClient>().resolveRakuenTopic(
+        input: 'ep/${episodeInfo.id}',
+      );
+      if (!context.mounted) return;
+      await navigator.push(
+        MaterialPageRoute(
+          builder: (_) => RakuenTopicPage(topic: topic, episode: episodeInfo),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('加载单集讨论失败: $e')));
+    }
   }
 
   String _tooltipText() {
@@ -709,7 +795,9 @@ class _EpisodeCell extends StatelessWidget {
       BgmConst.episodeDropped => '\u629b\u5f03',
       _ => '\u672a\u6536\u85cf',
     };
-    final airedStatus = _isAired() ? '\u5df2\u653e\u9001' : '\u672a\u653e\u9001';
+    final airedStatus = _isAired()
+        ? '\u5df2\u653e\u9001'
+        : '\u672a\u653e\u9001';
     return 'EP.${ep.sortLabel} $name [$status] [$airedStatus]';
   }
 }
@@ -776,15 +864,15 @@ class _IndeterminateProgressOverlayState
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final baseColor = widget.enabled ? colorScheme.primary : colorScheme.onSurface;
+    final baseColor = widget.enabled
+        ? colorScheme.primary
+        : colorScheme.onSurface;
 
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: _opacityAnim,
         builder: (context, child) {
-          return Container(
-            color: baseColor.withOpacity(_opacityAnim.value),
-          );
+          return Container(color: baseColor.withOpacity(_opacityAnim.value));
         },
       ),
     );

@@ -6,6 +6,8 @@ class RakuenTopicDetail {
   final String? sourceUrl;
   final String? sectionTitle;
   final String? coverUrl;
+  final String? episodeTip;
+  final String? episodeDescription;
   final String? replyAuthor;
   final bool canReply;
   final RakuenPost? originalPost;
@@ -19,6 +21,8 @@ class RakuenTopicDetail {
     this.sourceUrl,
     this.sectionTitle,
     this.coverUrl,
+    this.episodeTip,
+    this.episodeDescription,
     this.replyAuthor,
     this.canReply = false,
     this.originalPost,

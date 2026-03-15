@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/episode.dart';
 import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../pages/subject_page.dart';
@@ -10,8 +11,9 @@ import '../services/api_client.dart';
 
 class RakuenTopicPage extends StatefulWidget {
   final RakuenTopic topic;
+  final Episode? episode;
 
-  const RakuenTopicPage({super.key, required this.topic});
+  const RakuenTopicPage({super.key, required this.topic, this.episode});
 
   @override
   State<RakuenTopicPage> createState() => _RakuenTopicPageState();
@@ -21,12 +23,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   RakuenTopicDetail? _detail;
   bool _loading = true;
   String? _error;
-  bool _replySubmitting = false;
-  RakuenPost? _replyTarget;
   final ScrollController _scrollController = ScrollController();
-  final ScrollController _replyScrollController = ScrollController();
-  final TextEditingController _replyController = TextEditingController();
-  final FocusNode _replyFocusNode = FocusNode();
   final GlobalKey _headerKey = GlobalKey();
   double _headerRevealOffset = 160;
   bool _showCollapsedTitle = false;
@@ -42,9 +39,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   void dispose() {
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
-    _replyScrollController.dispose();
-    _replyController.dispose();
-    _replyFocusNode.dispose();
     super.dispose();
   }
 
@@ -92,174 +86,26 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     }
   }
 
-  bool get _canShowReplyAction {
-    final detail = _detail;
-    return detail != null && detail.canReply;
-  }
-
-  String _replyDraftPrefixFor(RakuenPost post) {
-    final username = post.username.trim();
-    if (username.isNotEmpty) {
-      return '@$username ';
-    }
-    final nickname = post.nickname.trim();
-    if (nickname.isNotEmpty) {
-      return '回复 ${post.floor} $nickname：\n';
-    }
-    return '回复 ${post.floor}：\n';
-  }
-
-  String _replyTargetTitle(RakuenPost? post) {
-    if (post == null) return '添加新回复';
-    final nickname = post.nickname.trim();
-    final label = nickname.isNotEmpty ? nickname : post.username.trim();
-    return label.isNotEmpty ? '回复 ${post.floor} $label' : '回复 ${post.floor}';
-  }
-
-  String? _replyTargetSubtitle(RakuenPost? post) {
-    if (post == null) return null;
-    final username = post.username.trim();
-    if (username.isNotEmpty) {
-      return '@$username';
-    }
-    final nickname = post.nickname.trim();
-    return nickname.isNotEmpty ? '发送给 $nickname' : null;
-  }
-
-  void _prepareReplyDraft(RakuenPost? target) {
-    final previousTarget = _replyTarget;
-    final previousPrefix = previousTarget == null
-        ? ''
-        : _replyDraftPrefixFor(previousTarget);
-    final nextPrefix = target == null ? '' : _replyDraftPrefixFor(target);
-
-    var nextText = _replyController.text;
-    if (nextText.isEmpty) {
-      nextText = nextPrefix;
-    } else if (previousPrefix.isNotEmpty &&
-        nextText.startsWith(previousPrefix)) {
-      nextText = '$nextPrefix${nextText.substring(previousPrefix.length)}';
-    } else if (nextPrefix.isNotEmpty && !nextText.startsWith(nextPrefix)) {
-      nextText = '$nextPrefix$nextText';
+  String _displayTitle(RakuenTopicDetail? detail) {
+    final ep = widget.episode;
+    if (ep != null) {
+      final name = ep.displayName.trim().isEmpty
+          ? '章节讨论'
+          : ep.displayName.trim();
+      return 'EP.${ep.sortLabel} $name';
     }
 
-    _replyTarget = target;
-    _replyController.value = TextEditingValue(
-      text: nextText,
-      selection: TextSelection.collapsed(offset: nextText.length),
-    );
-  }
-
-  Future<void> _openReplyComposer([RakuenPost? target]) async {
-    final detail = _detail;
-    if (detail == null) return;
-    if (!context.read<ApiClient>().hasWebCookie) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')));
-      return;
+    final raw = (detail?.title ?? widget.topic.title).trim();
+    if (raw.isEmpty || raw == '主题详情') {
+      final fallback = widget.topic.title.trim();
+      return fallback.isEmpty ? '讨论详情' : fallback;
     }
-    if (!detail.canReply) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('当前主题没有可用的回复表单')));
-      return;
-    }
-    _prepareReplyDraft(target);
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: _RakuenInlineReplyCard(
-              title: _replyTargetTitle(target),
-              subtitle: _replyTargetSubtitle(target),
-              controller: _replyController,
-              focusNode: _replyFocusNode,
-              submitting: _replySubmitting,
-              onSubmit: () async {
-                final ok = await _submitInlineReply();
-                if (ok && sheetContext.mounted) {
-                  Navigator.of(sheetContext).pop();
-                }
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<bool> _submitInlineReply() async {
-    if (_replySubmitting) return false;
-    if (!context.read<ApiClient>().hasWebCookie) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')));
-      return false;
-    }
-
-    final content = _replyController.text.trim();
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('回复内容不能为空')));
-      return false;
-    }
-
-    setState(() => _replySubmitting = true);
-
-    try {
-      final submitTopicUrl = _detail?.canonicalUrl ?? widget.topic.topicUrl;
-      await context.read<ApiClient>().submitRakuenReply(
-        topicUrl: submitTopicUrl,
-        content: content,
-        replyToPost: _replyTarget,
-      );
-      if (!mounted) return false;
-      _replyTarget = null;
-      _replyController.clear();
-      FocusScope.of(context).unfocus();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('回复已发送')));
-      await _load();
-      return true;
-    } catch (e) {
-      if (!mounted) return false;
-      final msg = e.toString();
-      var displayMsg = '发送回复失败: $e';
-      if (msg.contains('login_required') || msg.contains('未登录')) {
-        displayMsg = '当前网页会话未登录或已过期，请在设置中重新登录';
-      } else if (msg.contains('form_missing') || msg.contains('没有可用的回复表单')) {
-        displayMsg = '当前主题没有可用的回复表单';
-      } else if (msg.contains('网页回复超时')) {
-        displayMsg = '回复超时，请检查网络后重试';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(displayMsg),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      return false;
-    } finally {
-      if (mounted) setState(() => _replySubmitting = false);
-    }
+    return raw;
   }
 
   @override
   Widget build(BuildContext context) {
-    final title = _detail?.title ?? widget.topic.title;
+    final title = _displayTitle(_detail);
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     return Scaffold(
@@ -282,19 +128,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: _canShowReplyAction
-          ? FloatingActionButton.extended(
-              onPressed: _replySubmitting ? null : () => _openReplyComposer(),
-              icon: _replySubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.reply_rounded),
-              label: Text(_replySubmitting ? '发送中' : '回复'),
-            )
-          : null,
     );
   }
 
@@ -344,6 +177,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     final horizontalPadding = maxWidth > 800
         ? (maxWidth - 900).clamp(0, maxWidth) / 2
         : 12.0;
+    final displayTitle = _displayTitle(detail);
 
     return CustomScrollView(
       controller: _scrollController,
@@ -362,6 +196,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
               child: _RakuenTopicHeader(
                 detail: detail,
                 fallbackTopic: widget.topic,
+                episode: widget.episode,
+                displayTitle: displayTitle,
               ),
             ),
           ),
@@ -392,7 +228,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
               child: _RakuenPostCard(
                 post: detail.originalPost!,
                 emphasize: true,
-                onReply: (post) => _openReplyComposer(post),
               ),
             ),
           ),
@@ -433,7 +268,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) => _RakuenPostCard(
                   post: detail.replies[index],
-                  onReply: (post) => _openReplyComposer(post),
                 ),
                 childCount: detail.replies.length,
               ),
@@ -448,6 +282,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     final outerPadding = maxWidth >= 1320 ? 20.0 : 12.0;
     const paneGap = 16.0;
     const gutter = 14.0;
+    final displayTitle = _displayTitle(detail);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(outerPadding, 12, outerPadding, 12),
@@ -470,8 +305,9 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                         child: _RakuenLeadPane(
                           detail: detail,
                           fallbackTopic: widget.topic,
+                          episode: widget.episode,
+                          displayTitle: displayTitle,
                           originalPost: detail.originalPost,
-                          onReply: (post) => _openReplyComposer(post),
                         ),
                       ),
                     ),
@@ -487,7 +323,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
             child: RefreshIndicator(
               onRefresh: _load,
               child: CustomScrollView(
-                controller: _replyScrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverPadding(
@@ -511,7 +346,6 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                         delegate: SliverChildBuilderDelegate(
                           (context, index) => _RakuenPostCard(
                             post: detail.replies[index],
-                            onReply: (post) => _openReplyComposer(post),
                           ),
                           childCount: detail.replies.length,
                         ),
@@ -548,70 +382,101 @@ class _EmptyReplyCard extends StatelessWidget {
 class _RakuenTopicHeader extends StatelessWidget {
   final RakuenTopicDetail detail;
   final RakuenTopic fallbackTopic;
+  final Episode? episode;
+  final String displayTitle;
 
-  const _RakuenTopicHeader({required this.detail, required this.fallbackTopic});
+  const _RakuenTopicHeader({
+    required this.detail,
+    required this.fallbackTopic,
+    this.episode,
+    required this.displayTitle,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final subjectId = _extractSubjectId(detail.sourceUrl);
     final coverUrl = detail.coverUrl ?? fallbackTopic.avatarUrl;
+    final showEpisodeInfo = detail.episodeDescription?.isNotEmpty == true;
 
     return Card(
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _CoverImage(url: coverUrl, size: 60, icon: Icons.article_outlined),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    detail.title,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.sourceTitle?.isNotEmpty == true)
-                    Text(
-                      detail.sourceTitle!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  if (detail.sectionTitle?.isNotEmpty == true) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      detail.sectionTitle!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  if (subjectId != null)
-                    _HeaderAction(
-                      icon: Icons.movie_outlined,
-                      label: '条目',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SubjectPage(subjectId: subjectId),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _CoverImage(
+                  url: coverUrl,
+                  size: 60,
+                  icon: Icons.article_outlined,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayTitle,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
                         ),
                       ),
-                    ),
-                ],
-              ),
+                      if (episode != null) ...[
+                        const SizedBox(height: 6),
+                        _TitleMetaLine(
+                          airdate: episode!.airdate,
+                          duration: episode!.duration,
+                          commentCount: episode!.comment,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      if (detail.sourceTitle?.isNotEmpty == true)
+                        Text(
+                          detail.sourceTitle!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      if (detail.sectionTitle?.isNotEmpty == true) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          detail.sectionTitle!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      if (subjectId != null)
+                        _HeaderAction(
+                          icon: Icons.movie_outlined,
+                          label: '条目',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SubjectPage(subjectId: subjectId),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            if (showEpisodeInfo) ...[
+              const SizedBox(height: 12),
+              Divider(color: colorScheme.outlineVariant, height: 1),
+              const SizedBox(height: 12),
+              _EpisodeInfoBlock(episode: episode, detail: detail),
+            ],
           ],
         ),
       ),
@@ -627,14 +492,16 @@ class _RakuenTopicHeader extends StatelessWidget {
 class _RakuenLeadPane extends StatelessWidget {
   final RakuenTopicDetail detail;
   final RakuenTopic fallbackTopic;
+  final Episode? episode;
+  final String displayTitle;
   final RakuenPost? originalPost;
-  final ValueChanged<RakuenPost>? onReply;
 
   const _RakuenLeadPane({
     required this.detail,
     required this.fallbackTopic,
+    this.episode,
+    required this.displayTitle,
     required this.originalPost,
-    this.onReply,
   });
 
   @override
@@ -642,6 +509,7 @@ class _RakuenLeadPane extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final subjectId = _RakuenTopicHeader._extractSubjectId(detail.sourceUrl);
     final coverUrl = detail.coverUrl ?? fallbackTopic.avatarUrl;
+    final showEpisodeInfo = detail.episodeDescription?.isNotEmpty == true;
 
     return Container(
       decoration: BoxDecoration(
@@ -667,13 +535,21 @@ class _RakuenLeadPane extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      detail.title,
+                      displayTitle,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         height: 1.35,
                       ),
                     ),
+                    if (episode != null) ...[
+                      const SizedBox(height: 8),
+                      _TitleMetaLine(
+                        airdate: episode!.airdate,
+                        duration: episode!.duration,
+                        commentCount: episode!.comment,
+                      ),
+                    ],
                     if (detail.sourceTitle?.isNotEmpty == true) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -711,6 +587,12 @@ class _RakuenLeadPane extends StatelessWidget {
               ),
             ),
           ],
+          if (showEpisodeInfo) ...[
+            const SizedBox(height: 16),
+            Divider(color: colorScheme.outlineVariant, height: 1),
+            const SizedBox(height: 14),
+            _EpisodeInfoBlock(episode: episode, detail: detail),
+          ],
           if (originalPost != null) ...[
             const SizedBox(height: 18),
             Divider(color: colorScheme.outlineVariant, height: 1),
@@ -722,7 +604,6 @@ class _RakuenLeadPane extends StatelessWidget {
               metaFontSize: 11,
               contentFontSize: 15,
               contentHeight: 1.5,
-              onReply: onReply,
             ),
           ],
         ],
@@ -734,12 +615,10 @@ class _RakuenLeadPane extends StatelessWidget {
 class _RakuenPostCard extends StatelessWidget {
   final RakuenPost post;
   final bool emphasize;
-  final ValueChanged<RakuenPost>? onReply;
 
   const _RakuenPostCard({
     required this.post,
     this.emphasize = false,
-    this.onReply,
   });
 
   @override
@@ -760,8 +639,106 @@ class _RakuenPostCard extends StatelessWidget {
           metaFontSize: 11,
           contentFontSize: 14,
           contentHeight: 1.42,
-          onReply: onReply,
         ),
+      ),
+    );
+  }
+}
+
+class _EpisodeInfoBlock extends StatelessWidget {
+  final Episode? episode;
+  final RakuenTopicDetail detail;
+
+  const _EpisodeInfoBlock({this.episode, required this.detail});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final desc = detail.episodeDescription?.trim();
+    final hasDesc = desc != null && desc.isNotEmpty;
+    if (!hasDesc) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              desc,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.42,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TitleMetaLine extends StatelessWidget {
+  final String airdate;
+  final String duration;
+  final int commentCount;
+
+  const _TitleMetaLine({
+    required this.airdate,
+    required this.duration,
+    required this.commentCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeAirdate = airdate.trim().isEmpty ? '未知' : airdate.trim();
+    final safeDuration = duration.trim().isEmpty ? '未知' : duration.trim();
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _MetaTag(
+          icon: Icons.calendar_today_outlined,
+          label: '首播: $safeAirdate',
+        ),
+        _MetaTag(icon: Icons.timer_outlined, label: '时长: $safeDuration'),
+        _MetaTag(icon: Icons.forum_outlined, label: '讨论: $commentCount'),
+      ],
+    );
+  }
+}
+
+class _MetaTag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _MetaTag({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: colorScheme.onSecondaryContainer),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -774,7 +751,6 @@ class _RakuenPostBlock extends StatelessWidget {
   final double metaFontSize;
   final double contentFontSize;
   final double contentHeight;
-  final ValueChanged<RakuenPost>? onReply;
 
   const _RakuenPostBlock({
     required this.post,
@@ -783,7 +759,6 @@ class _RakuenPostBlock extends StatelessWidget {
     required this.metaFontSize,
     required this.contentFontSize,
     required this.contentHeight,
-    this.onReply,
   });
 
   @override
@@ -809,7 +784,6 @@ class _RakuenPostBlock extends StatelessWidget {
                 contentFontSize: contentFontSize,
                 contentHeight: contentHeight,
                 colorScheme: colorScheme,
-                onReply: onReply == null ? null : () => onReply!(post),
               ),
             ),
           ],
@@ -845,9 +819,6 @@ class _RakuenPostBlock extends StatelessWidget {
                           contentFontSize: 13,
                           contentHeight: 1.4,
                           colorScheme: colorScheme,
-                          onReply: onReply == null
-                              ? null
-                              : () => onReply!(reply),
                         ),
                       ),
                     ],
@@ -858,117 +829,6 @@ class _RakuenPostBlock extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _RakuenInlineReplyCard extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool submitting;
-  final Future<void> Function() onSubmit;
-
-  const _RakuenInlineReplyCard({
-    required this.title,
-    this.subtitle,
-    required this.controller,
-    required this.focusNode,
-    required this.submitting,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              focusNode: focusNode,
-              minLines: 8,
-              maxLines: 12,
-              textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
-                hintText: '输入回复内容',
-                filled: true,
-                fillColor: colorScheme.surfaceContainerLowest,
-                contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(color: colorScheme.outlineVariant),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(color: colorScheme.outlineVariant),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(
-                    color: colorScheme.primary,
-                    width: 1.4,
-                  ),
-                ),
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: submitting ? null : onSubmit,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: submitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('发送回复'),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -984,7 +844,6 @@ class _PostBody extends StatelessWidget {
   final double contentFontSize;
   final double contentHeight;
   final ColorScheme colorScheme;
-  final VoidCallback? onReply;
 
   const _PostBody({
     required this.nickname,
@@ -997,7 +856,6 @@ class _PostBody extends StatelessWidget {
     required this.contentFontSize,
     required this.contentHeight,
     required this.colorScheme,
-    this.onReply,
   });
 
   @override
@@ -1048,20 +906,6 @@ class _PostBody extends StatelessWidget {
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-                if (onReply != null)
-                  TextButton(
-                    onPressed: onReply,
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    child: Text('回复', style: TextStyle(fontSize: metaFontSize)),
-                  ),
               ],
             ),
           ],

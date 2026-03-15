@@ -12,7 +12,6 @@ import '../models/rakuen_topic_detail.dart';
 import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
-import 'web_reply_service.dart';
 
 /// Bangumi API 客户端
 class ApiClient {
@@ -332,17 +331,6 @@ class ApiClient {
         data: [],
       );
     }
-  }
-
-  /// 发布条目吐槽/评论（暂未实现）
-  Future<Comment?> createSubjectComment({
-    required int subjectId,
-    required String content,
-    int rating = 0,
-    int spoiler = 0,
-  }) async {
-    // 暂时不支持发布吐槽
-    return null;
   }
 
   /// 从 HTML 中解析吐槽/评论
@@ -776,9 +764,7 @@ class ApiClient {
     );
   }
 
-  Future<RakuenTopic> resolveRakuenTopic({
-    required String input,
-  }) async {
+  Future<RakuenTopic> resolveRakuenTopic({required String input}) async {
     final normalized = input.trim();
     if (normalized.isEmpty) {
       throw Exception('请输入帖子 ID');
@@ -816,235 +802,6 @@ class ApiClient {
     }
 
     throw Exception('未找到对应帖子');
-  }
-
-  Future<void> createRakuenReply({
-    required String topicUrl,
-    required String content,
-  }) async {
-    if (kDebugMode) {
-      print('[ApiClient] 开始回复流程');
-      print('[ApiClient] 目标URL: $topicUrl');
-      print('[ApiClient] 内容长度: ${content.length}');
-      print('[ApiClient] Cookie已设置: ${_webCookie != null}');
-    }
-
-    var normalizedTopicUrl = _normalizeWebUrl(topicUrl);
-    String? redirectUrl;
-
-    // 必须先访问主题页面来建立会话，否则 new_reply 会被重定向到首页
-    if (kDebugMode) {
-      print('[ApiClient] 先访问主题页面来建立会话');
-    }
-    final topicResponse = await _fetchWebResponse(normalizedTopicUrl);
-    final topicHtml = topicResponse.data as String;
-
-    if (kDebugMode) {
-      print('[ApiClient] 主题页面响应 - 状态码: ${topicResponse.statusCode}');
-      print('[ApiClient] 主题页面响应 - 最终URL: ${topicResponse.realUri}');
-      final headLen = topicHtml.length > 200 ? 200 : topicHtml.length;
-      final tailStart = topicHtml.length > 200 ? topicHtml.length - 200 : 0;
-      print('[ApiClient] 主题页面响应 - HTML 开头: ${topicHtml.substring(0, headLen)}');
-      print('[ApiClient] 主题页面响应 - HTML 结尾: ${topicHtml.substring(tailStart)}');
-      print(
-        '[ApiClient] 主题页面响应 - 是否包含 <title>: ${topicHtml.contains('<title>')}',
-      );
-      if (topicHtml.contains('<title>')) {
-        final titleMatch = RegExp(
-          r'<title>([^<]+)</title>',
-        ).firstMatch(topicHtml);
-        if (titleMatch != null) {
-          print('[ApiClient] 页面标题: ${titleMatch.group(1)}');
-        }
-      }
-      print(
-        '[ApiClient] 主题页面响应 - 是否包含 "topic": ${topicHtml.contains('topic')}',
-      );
-      print(
-        '[ApiClient] 主题页面响应 - 是否包含 "login": ${topicHtml.toLowerCase().contains('login')}',
-      );
-      print('[ApiClient] 主题页面响应 - 是否包含 "最近浏览": ${topicHtml.contains('最近浏览')}');
-    }
-
-    // 如果是 rakuen 主题，尝试获取规范URL
-    if (normalizedTopicUrl.contains('/rakuen/topic/')) {
-      redirectUrl = _parseRakuenCanonicalUrl(topicHtml);
-      if (redirectUrl != null && redirectUrl != normalizedTopicUrl) {
-        normalizedTopicUrl = redirectUrl;
-        if (kDebugMode) {
-          print('[ApiClient] 重定向到规范URL: $normalizedTopicUrl');
-        }
-      }
-    }
-
-    // 直接从主题页面的 HTML 中解析回复表单，而不是访问 /new_reply 页面
-    if (kDebugMode) {
-      print('[ApiClient] 从主题页面解析回复表单');
-    }
-    final form = _parseRakuenReplyForm(topicHtml);
-    final html = topicHtml;
-    if (form == null) {
-      final session = _parseWebSessionInfo(html);
-      final finalUrl = _normalizeWebUrl(normalizedTopicUrl);
-      if (kDebugMode) {
-        print('[ApiClient] 未找到回复表单');
-        print('[ApiClient] HTML 长度: ${html.length}');
-        print('[ApiClient] 包含 ReplyForm: ${html.contains('id="ReplyForm"')}');
-        print('[ApiClient] 包含 textarea: ${html.contains('textarea')}');
-        print('[ApiClient] 包含 formhash: ${html.contains('formhash')}');
-        print('[ApiClient] 最终URL: $finalUrl');
-        print('[ApiClient] 登录状态: ${session != null}');
-        if (session != null) {
-          print('[ApiClient] 登录用户: ${session.username}');
-        }
-      }
-      if (session == null &&
-          (finalUrl == BgmConst.webBaseUrl ||
-              finalUrl == '${BgmConst.webBaseUrl}/')) {
-        throw Exception('当前网页 Cookie 未登录，请先在设置中重新自动获取 Bangumi 网页 Cookie');
-      }
-      throw Exception(
-        '当前主题暂时没有可用的回复表单'
-        ' | url=$normalizedTopicUrl'
-        ' | finalUrl=$finalUrl'
-        ' | redirect=${redirectUrl ?? '-'}'
-        ' | loggedIn=${session != null}',
-      );
-    }
-
-    if (kDebugMode) {
-      print('[ApiClient] 找到回复表单，准备提交');
-      print('[ApiClient] formhash: ${form.formhash}');
-      print('[ApiClient] actionUrl: ${form.actionUrl}');
-      print('[ApiClient] 表单字段: ${form.hiddenFields.keys.toList()}');
-    }
-
-    final data = <String, dynamic>{
-      ...form.hiddenFields,
-      'content': content.trim(),
-      if (form.hiddenFields['related_photo'] == null) 'related_photo': '0',
-    };
-
-    if (kDebugMode) {
-      print('[ApiClient] 最终提交字段: ${data.keys.toList()}');
-      print('[ApiClient] submit 值: ${data['submit']}');
-    }
-
-    final submitResponse = await _submitRakuenForm(
-      actionUrl: form.actionUrl,
-      data: data,
-      refererUrl: normalizedTopicUrl,
-    );
-
-    // 检查响应状态
-    if (kDebugMode) {
-      print('[ApiClient] 提交响应状态码: ${submitResponse.statusCode}');
-    }
-
-    // 检查是否是重定向
-    if (submitResponse.statusCode == 302 || submitResponse.statusCode == 301) {
-      final location = submitResponse.headers.value('location');
-      if (kDebugMode) {
-        print('[ApiClient] 服务器返回重定向: $location');
-      }
-      // 重定向通常表示提交成功
-    } else if (submitResponse.statusCode != null &&
-        submitResponse.statusCode! >= 400) {
-      throw Exception('提交表单失败: HTTP ${submitResponse.statusCode}');
-    }
-
-    if (kDebugMode) {
-      print('[ApiClient] 回复提交完成');
-    }
-  }
-
-  Future<void> submitRakuenReply({
-    required String topicUrl,
-    required String content,
-    RakuenPost? replyToPost,
-  }) async {
-    final trimmed = content.trim();
-    if (trimmed.isEmpty) {
-      throw Exception('回复内容不能为空');
-    }
-    if (!hasWebSession) {
-      throw Exception('当前网页会话未登录，请先重新登录 Bangumi 网页');
-    }
-
-    var normalizedTopicUrl = _normalizeWebUrl(topicUrl);
-    if (replyToPost?.subReplyAction != null) {
-      await _submitRakuenReplyFallback(
-        topicUrl: normalizedTopicUrl,
-        content: trimmed,
-        replyToPost: replyToPost,
-      );
-      return;
-    }
-    try {
-      final topicResponse = await _fetchWebResponse(normalizedTopicUrl);
-      final topicHtml = topicResponse.data as String;
-      final redirectUrl = normalizedTopicUrl.contains('/rakuen/topic/')
-          ? _parseRakuenCanonicalUrl(topicHtml)
-          : null;
-      if (redirectUrl != null && redirectUrl != normalizedTopicUrl) {
-        normalizedTopicUrl = redirectUrl;
-      }
-
-      final form = _parseRakuenReplyForm(topicHtml);
-      if (form == null) {
-        throw Exception('form_missing');
-      }
-
-      final data = <String, dynamic>{
-        ...form.hiddenFields,
-        'content': trimmed,
-        if (form.hiddenFields['related_photo'] == null) 'related_photo': '0',
-      };
-
-      final response = await _submitRakuenForm(
-        actionUrl: form.actionUrl,
-        data: data,
-        refererUrl: normalizedTopicUrl,
-      );
-      if (response.statusCode == 301 || response.statusCode == 302) {
-        final location = response.headers.value('location');
-        if (location != null) {
-          final target = _normalizeWebUrl(location);
-          if (target == BgmConst.webBaseUrl ||
-              target == '${BgmConst.webBaseUrl}/' ||
-              target.contains('/login')) {
-            throw Exception('login_required');
-          }
-        }
-        return;
-      }
-      if (response.statusCode != null && response.statusCode! >= 400) {
-        throw Exception('http_${response.statusCode}');
-      }
-    } catch (_) {
-      await _submitRakuenReplyFallback(
-        topicUrl: normalizedTopicUrl,
-        content: trimmed,
-        replyToPost: replyToPost,
-      );
-    }
-  }
-
-  Future<void> _submitRakuenReplyFallback({
-    required String topicUrl,
-    required String content,
-    RakuenPost? replyToPost,
-  }) {
-    final session = _webSession;
-    if (session == null || !session.isValid) {
-      throw Exception('当前网页会话未登录，请先重新登录 Bangumi 网页');
-    }
-    return WebReplyService.submitReply(
-      topicUrl: topicUrl,
-      content: content,
-      session: session,
-      replyToPost: replyToPost,
-    );
   }
 
   Future<String> createRakuenTopic({
@@ -1432,6 +1189,27 @@ class ApiClient {
         ? _normalizeWebUrl(canonicalUrlMatch.group(1) ?? '')
         : null;
 
+    final episodeDescMatch = RegExp(
+      r'<div\s+class="[^"]*epDesc[^"]*"[^>]*>([\s\S]*?)</div>',
+      caseSensitive: false,
+    ).firstMatch(html);
+    final episodeDescHtml = episodeDescMatch?.group(1) ?? '';
+    final episodeTipMatch = RegExp(
+      r'<span\s+class="[^"]*tip[^"]*"[^>]*>([\s\S]*?)</span>',
+      caseSensitive: false,
+    ).firstMatch(episodeDescHtml);
+    final episodeTip = _decodeHtml(
+      _stripTags(episodeTipMatch?.group(1) ?? ''),
+    ).trim();
+    final episodeBodyHtml = episodeDescHtml.replaceFirst(
+      RegExp(
+        r'<span\s+class="[^"]*tip[^"]*"[^>]*>[\s\S]*?</span>',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    final episodeDescription = _htmlBlockToText(episodeBodyHtml).trim();
+
     final session = _parseWebSessionInfo(html);
     final replyForm = _parseRakuenReplyForm(html);
     final originalPost = _parseOriginalPost(html);
@@ -1445,6 +1223,10 @@ class ApiClient {
       sourceUrl: sourceUrl?.isEmpty == true ? null : sourceUrl,
       sectionTitle: sectionTitle?.isEmpty == true ? null : sectionTitle,
       coverUrl: coverUrl?.isEmpty == true ? null : coverUrl,
+      episodeTip: episodeTip.isEmpty ? null : episodeTip,
+      episodeDescription: episodeDescription.isEmpty
+          ? null
+          : episodeDescription,
       replyAuthor: session?.username,
       canReply: session != null && replyForm != null,
       originalPost: originalPost,
@@ -1645,9 +1427,7 @@ class ApiClient {
         0;
     final uidFromAlt =
         int.tryParse(
-          RegExp(
-            r'CHOBITS_USER_UID\s*=\s*(\d+)',
-          ).firstMatch(html)?.group(1) ??
+          RegExp(r'CHOBITS_USER_UID\s*=\s*(\d+)').firstMatch(html)?.group(1) ??
               '0',
         ) ??
         0;
@@ -1658,10 +1438,11 @@ class ApiClient {
         ).firstMatch(html)?.group(1)?.trim() ??
         '';
 
-    final headerUserLinkMatch = RegExp(
-      r'idBadgerNeue[\s\S]{0,1200}?href="/user/([^"/?#]+)"',
-      caseSensitive: false,
-    ).firstMatch(html) ??
+    final headerUserLinkMatch =
+        RegExp(
+          r'idBadgerNeue[\s\S]{0,1200}?href="/user/([^"/?#]+)"',
+          caseSensitive: false,
+        ).firstMatch(html) ??
         RegExp(
           r'id="dock"[\s\S]{0,1200}?href="/user/([^"/?#]+)"',
           caseSensitive: false,
@@ -1691,10 +1472,7 @@ class ApiClient {
       return null;
     }
 
-    return WebSessionInfo(
-      uid: fallbackUid,
-      username: fallbackUsername,
-    );
+    return WebSessionInfo(uid: fallbackUid, username: fallbackUsername);
   }
 
   static _RakuenReplyForm? _parseRakuenReplyForm(String html) {
@@ -1830,15 +1608,6 @@ class ApiClient {
     );
   }
 
-  static String? _parseRakuenCanonicalUrl(String html) {
-    final match = RegExp(
-      r'rakuen_redirect_url\s*=\s*"([^"]+)"',
-    ).firstMatch(html);
-    if (match == null) return null;
-    final url = _normalizeWebUrl(match.group(1) ?? '');
-    return url.isEmpty ? null : url;
-  }
-
   static String? _buildRakuenNewTopicUrl(String sourceUrl) {
     final normalized = _normalizeWebUrl(sourceUrl);
     final groupMatch = RegExp(r'/group/([^/?#]+)').firstMatch(normalized);
@@ -1945,8 +1714,9 @@ class ApiClient {
     }
 
     final path = uri.path;
-    if (RegExp(r'^/rakuen/topic/(group|subject|ep|crt|prsn)/\d+$')
-        .hasMatch(path)) {
+    if (RegExp(
+      r'^/rakuen/topic/(group|subject|ep|crt|prsn)/\d+$',
+    ).hasMatch(path)) {
       return Uri(
         scheme: 'https',
         host: BgmConst.webBaseUrl.replaceFirst(RegExp(r'^https?://'), ''),
@@ -2068,10 +1838,7 @@ class ApiClient {
     );
   }
 
-  String? _buildCookieHeaderForUri(
-    Uri uri, {
-    BangumiWebSession? session,
-  }) {
+  String? _buildCookieHeaderForUri(Uri uri, {BangumiWebSession? session}) {
     final candidate = session ?? _webSession;
     if (candidate == null || !candidate.isValid) return null;
     return candidate.buildCookieHeaderForUri(uri);
