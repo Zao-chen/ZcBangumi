@@ -63,6 +63,18 @@ class _ProgressPageState extends State<ProgressPage>
     ).push(MaterialPageRoute(builder: (_) => const SearchPage()));
   }
 
+  Future<void> _refreshCurrentTab() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn || auth.username == null) return;
+
+    final subjectType = _tabs[_tabController.index].type;
+    await context.read<CollectionProvider>().loadDoingCollections(
+      username: auth.username!,
+      subjectType: subjectType,
+      refresh: true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -91,6 +103,12 @@ class _ProgressPageState extends State<ProgressPage>
         title: const Text('进度'),
         centerTitle: false,
         actions: [
+          if (isLandscape)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: '刷新当前分区',
+              onPressed: _refreshCurrentTab,
+            ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: '搜索条目',

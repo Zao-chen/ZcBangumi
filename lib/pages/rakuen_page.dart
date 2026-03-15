@@ -177,6 +177,12 @@ class _RakuenPageState extends State<RakuenPage>
         title: const Text('超展开'),
         centerTitle: false,
         actions: [
+          if (isLandscape)
+            IconButton(
+              tooltip: '刷新当前分区',
+              onPressed: () => _load(_currentTab),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
           IconButton(
             tooltip: '按帖子 ID 跳转',
             onPressed: _openJumpDialog,
@@ -284,9 +290,9 @@ class _RakuenPageState extends State<RakuenPage>
     controller.dispose();
 
     if (topic == null || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RakuenTopicPage(topic: topic)),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => RakuenTopicPage(topic: topic)));
   }
 
   Widget _buildLandscapeLayout() {

@@ -342,15 +342,34 @@ class _TimelinePageState extends State<TimelinePage> {
     _ensureLoadedForTab(tab);
   }
 
+  Future<void> _refreshCurrentTab() {
+    switch (_currentTab) {
+      case _TimelineTab.global:
+        return _loadGlobal();
+      case _TimelineTab.friends:
+        return _loadFriends();
+      case _TimelineTab.mine:
+        return _loadMine();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('动态'),
         centerTitle: false,
         actions: [
+          if (isLandscape)
+            IconButton(
+              tooltip: '刷新当前列表',
+              onPressed: _refreshCurrentTab,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: SegmentedButton<_TimelineTab>(

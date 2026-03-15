@@ -128,14 +128,16 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
 
   void _prepareReplyDraft(RakuenPost? target) {
     final previousTarget = _replyTarget;
-    final previousPrefix =
-        previousTarget == null ? '' : _replyDraftPrefixFor(previousTarget);
+    final previousPrefix = previousTarget == null
+        ? ''
+        : _replyDraftPrefixFor(previousTarget);
     final nextPrefix = target == null ? '' : _replyDraftPrefixFor(target);
 
     var nextText = _replyController.text;
     if (nextText.isEmpty) {
       nextText = nextPrefix;
-    } else if (previousPrefix.isNotEmpty && nextText.startsWith(previousPrefix)) {
+    } else if (previousPrefix.isNotEmpty &&
+        nextText.startsWith(previousPrefix)) {
       nextText = '$nextPrefix${nextText.substring(previousPrefix.length)}';
     } else if (nextPrefix.isNotEmpty && !nextText.startsWith(nextPrefix)) {
       nextText = '$nextPrefix$nextText';
@@ -152,15 +154,15 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     final detail = _detail;
     if (detail == null) return;
     if (!context.read<ApiClient>().hasWebCookie) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')));
       return;
     }
     if (!detail.canReply) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前主题没有可用的回复表单')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前主题没有可用的回复表单')));
       return;
     }
     _prepareReplyDraft(target);
@@ -200,9 +202,9 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   Future<bool> _submitInlineReply() async {
     if (_replySubmitting) return false;
     if (!context.read<ApiClient>().hasWebCookie) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先在设置中登录 Bangumi 网页会话')));
       return false;
     }
 
@@ -244,7 +246,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         displayMsg = '回复超时，请检查网络后重试';
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(displayMsg), duration: const Duration(seconds: 4)),
+        SnackBar(
+          content: Text(displayMsg),
+          duration: const Duration(seconds: 4),
+        ),
       );
       return false;
     } finally {
@@ -255,12 +260,20 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   @override
   Widget build(BuildContext context) {
     final title = _detail?.title ?? widget.topic.title;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     return Scaffold(
       appBar: AppBar(
         title: _showCollapsedTitle
             ? Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)
             : null,
         actions: [
+          if (isLandscape)
+            IconButton(
+              tooltip: '刷新帖子',
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
           IconButton(
             tooltip: '浏览器打开',
             onPressed: () => _openExternal(widget.topic.topicUrl),
@@ -314,7 +327,8 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       builder: (context, constraints) {
         final mediaQuery = MediaQuery.of(context);
         final useSplitLayout =
-            mediaQuery.orientation == Orientation.landscape && constraints.maxWidth >= 960;
+            mediaQuery.orientation == Orientation.landscape &&
+            constraints.maxWidth >= 960;
         if (useSplitLayout) {
           return _buildSplitBody(detail, constraints.maxWidth);
         }
@@ -325,6 +339,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       },
     );
   }
+
   Widget _buildSingleColumnBody(RakuenTopicDetail detail, double maxWidth) {
     final horizontalPadding = maxWidth > 800
         ? (maxWidth - 900).clamp(0, maxWidth) / 2
@@ -335,46 +350,85 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            12,
+            horizontalPadding,
+            0,
+          ),
           sliver: SliverToBoxAdapter(
             child: KeyedSubtree(
               key: _headerKey,
-              child: _RakuenTopicHeader(detail: detail, fallbackTopic: widget.topic),
+              child: _RakuenTopicHeader(
+                detail: detail,
+                fallbackTopic: widget.topic,
+              ),
             ),
           ),
         ),
         if (detail.originalPost != null) ...[
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              0,
+            ),
             sliver: SliverToBoxAdapter(
-              child: _SectionTitle(label: '楼主', trailing: detail.originalPost!.timeText),
+              child: _SectionTitle(
+                label: '楼主',
+                trailing: detail.originalPost!.timeText,
+              ),
             ),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              8,
+              horizontalPadding,
+              0,
+            ),
             sliver: SliverToBoxAdapter(
-                child: _RakuenPostCard(
-                  post: detail.originalPost!,
-                  emphasize: true,
-                  onReply: (post) => _openReplyComposer(post),
-                ),
+              child: _RakuenPostCard(
+                post: detail.originalPost!,
+                emphasize: true,
+                onReply: (post) => _openReplyComposer(post),
+              ),
             ),
           ),
         ],
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 0),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            12,
+            horizontalPadding,
+            0,
+          ),
           sliver: SliverToBoxAdapter(
-            child: _SectionTitle(label: '回复', trailing: '${detail.replies.length} 条'),
+            child: _SectionTitle(
+              label: '回复',
+              trailing: '${detail.replies.length} 条',
+            ),
           ),
         ),
         if (detail.replies.isEmpty)
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              8,
+              horizontalPadding,
+              0,
+            ),
             sliver: const SliverToBoxAdapter(child: _EmptyReplyCard()),
           )
         else
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              8,
+              horizontalPadding,
+              0,
+            ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) => _RakuenPostCard(
@@ -439,7 +493,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                   SliverPadding(
                     padding: const EdgeInsets.only(right: gutter),
                     sliver: SliverToBoxAdapter(
-                      child: _SectionTitle(label: '回复', trailing: '${detail.replies.length} 条'),
+                      child: _SectionTitle(
+                        label: '回复',
+                        trailing: '${detail.replies.length} 条',
+                      ),
                     ),
                   ),
                   if (detail.replies.isEmpty)
@@ -452,11 +509,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
                       padding: const EdgeInsets.only(top: 8, right: gutter),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) =>
-                              _RakuenPostCard(
-                                post: detail.replies[index],
-                                onReply: (post) => _openReplyComposer(post),
-                              ),
+                          (context, index) => _RakuenPostCard(
+                            post: detail.replies[index],
+                            onReply: (post) => _openReplyComposer(post),
+                          ),
                           childCount: detail.replies.length,
                         ),
                       ),
@@ -484,13 +540,11 @@ class _EmptyReplyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('暂无回复'),
-      ),
+      child: Padding(padding: EdgeInsets.all(16), child: Text('暂无回复')),
     );
   }
 }
+
 class _RakuenTopicHeader extends StatelessWidget {
   final RakuenTopicDetail detail;
   final RakuenTopic fallbackTopic;
@@ -517,13 +571,32 @@ class _RakuenTopicHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(detail.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.35)),
+                  Text(
+                    detail.title,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   if (detail.sourceTitle?.isNotEmpty == true)
-                    Text(detail.sourceTitle!, style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      detail.sourceTitle!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   if (detail.sectionTitle?.isNotEmpty == true) ...[
                     const SizedBox(height: 2),
-                    Text(detail.sectionTitle!, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      detail.sectionTitle!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 10),
                   if (subjectId != null)
@@ -531,7 +604,9 @@ class _RakuenTopicHeader extends StatelessWidget {
                       icon: Icons.movie_outlined,
                       label: '条目',
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)),
+                        MaterialPageRoute(
+                          builder: (_) => SubjectPage(subjectId: subjectId),
+                        ),
                       ),
                     ),
                 ],
@@ -581,20 +656,43 @@ class _RakuenLeadPane extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _CoverImage(url: coverUrl, size: 72, icon: Icons.article_outlined),
+              _CoverImage(
+                url: coverUrl,
+                size: 72,
+                icon: Icons.article_outlined,
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(detail.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.35)),
+                    Text(
+                      detail.title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        height: 1.35,
+                      ),
+                    ),
                     if (detail.sourceTitle?.isNotEmpty == true) ...[
                       const SizedBox(height: 8),
-                      Text(detail.sourceTitle!, style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        detail.sourceTitle!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                     if (detail.sectionTitle?.isNotEmpty == true) ...[
                       const SizedBox(height: 2),
-                      Text(detail.sectionTitle!, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        detail.sectionTitle!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -607,7 +705,9 @@ class _RakuenLeadPane extends StatelessWidget {
               icon: Icons.movie_outlined,
               label: '条目',
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)),
+                MaterialPageRoute(
+                  builder: (_) => SubjectPage(subjectId: subjectId),
+                ),
               ),
             ),
           ],
@@ -648,7 +748,9 @@ class _RakuenPostCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 0,
-      color: emphasize ? colorScheme.primaryContainer.withValues(alpha: 0.35) : colorScheme.surfaceContainerLow,
+      color: emphasize
+          ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+          : colorScheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: _RakuenPostBlock(
@@ -743,7 +845,9 @@ class _RakuenPostBlock extends StatelessWidget {
                           contentFontSize: 13,
                           contentHeight: 1.4,
                           colorScheme: colorScheme,
-                          onReply: onReply == null ? null : () => onReply!(reply),
+                          onReply: onReply == null
+                              ? null
+                              : () => onReply!(reply),
                         ),
                       ),
                     ],
@@ -757,6 +861,7 @@ class _RakuenPostBlock extends StatelessWidget {
     );
   }
 }
+
 class _RakuenInlineReplyCard extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -798,17 +903,17 @@ class _RakuenInlineReplyCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
               Text(
                 subtitle!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
             const SizedBox(height: 14),
@@ -833,7 +938,10 @@ class _RakuenInlineReplyCard extends StatelessWidget {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 1.4,
+                  ),
                 ),
                 alignLabelWithHint: true,
               ),
@@ -907,14 +1015,22 @@ class _PostBody extends StatelessWidget {
                 text: TextSpan(
                   style: DefaultTextStyle.of(context).style,
                   children: [
-                    TextSpan(text: nickname, style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.w700)),
+                    TextSpan(
+                      text: nickname,
+                      style: TextStyle(
+                        fontSize: titleFontSize,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     if (sign?.isNotEmpty == true)
                       TextSpan(
                         text: ' ($sign)',
                         style: TextStyle(
                           fontSize: metaFontSize,
                           fontWeight: FontWeight.w400,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.72,
+                          ),
                         ),
                       ),
                   ],
@@ -944,17 +1060,17 @@ class _PostBody extends StatelessWidget {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
                     ),
-                    child: Text(
-                      '回复',
-                      style: TextStyle(fontSize: metaFontSize),
-                    ),
+                    child: Text('回复', style: TextStyle(fontSize: metaFontSize)),
                   ),
               ],
             ),
           ],
         ),
         const SizedBox(height: 4),
-        SelectableText(content.isEmpty ? ' ' : content, style: TextStyle(fontSize: contentFontSize, height: contentHeight)),
+        SelectableText(
+          content.isEmpty ? ' ' : content,
+          style: TextStyle(fontSize: contentFontSize, height: contentHeight),
+        ),
       ],
     );
   }
@@ -965,7 +1081,11 @@ class _CoverImage extends StatelessWidget {
   final double size;
   final IconData icon;
 
-  const _CoverImage({required this.url, required this.size, required this.icon});
+  const _CoverImage({
+    required this.url,
+    required this.size,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -979,10 +1099,17 @@ class _CoverImage extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Container(color: colorScheme.surfaceContainerHighest),
-                errorWidget: (context, url, error) => Container(color: colorScheme.surfaceContainerHighest, child: Icon(icon)),
+                placeholder: (context, url) =>
+                    Container(color: colorScheme.surfaceContainerHighest),
+                errorWidget: (context, url, error) => Container(
+                  color: colorScheme.surfaceContainerHighest,
+                  child: Icon(icon),
+                ),
               )
-            : Container(color: colorScheme.surfaceContainerHighest, child: Icon(icon)),
+            : Container(
+                color: colorScheme.surfaceContainerHighest,
+                child: Icon(icon),
+              ),
       ),
     );
   }
@@ -1006,7 +1133,8 @@ class _Avatar extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Container(color: colorScheme.surfaceContainerHighest),
+                placeholder: (context, url) =>
+                    Container(color: colorScheme.surfaceContainerHighest),
                 errorWidget: (context, url, error) => Container(
                   color: colorScheme.surfaceContainerHighest,
                   child: Icon(Icons.person_outline, size: size * 0.45),
@@ -1032,9 +1160,15 @@ class _SectionTitle extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         const Spacer(),
-        Text(trailing, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+        Text(
+          trailing,
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
       ],
     );
   }
@@ -1045,10 +1179,18 @@ class _HeaderAction extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _HeaderAction({required this.icon, required this.label, required this.onTap});
+  const _HeaderAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(avatar: Icon(icon, size: 16), label: Text(label), onPressed: onTap);
+    return ActionChip(
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      onPressed: onTap,
+    );
   }
 }
