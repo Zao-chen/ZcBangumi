@@ -1124,10 +1124,9 @@ class _SubjectPageState extends State<SubjectPage>
       final clampedDeltaDy = scrollEvent.scrollDelta.dy.clamp(-64.0, 64.0);
       final currentScale = _mindMapTransformController.value
           .getMaxScaleOnAxis();
-      final targetScale =
-          (currentScale * math.exp(-clampedDeltaDy / 420))
-              .clamp(_mindMapMinScale, _mindMapMaxScale)
-              .toDouble();
+      final targetScale = (currentScale * math.exp(-clampedDeltaDy / 420))
+          .clamp(_mindMapMinScale, _mindMapMaxScale)
+          .toDouble();
       final scaleChange = targetScale / currentScale;
       if ((scaleChange - 1).abs() < 0.0001) {
         return;
