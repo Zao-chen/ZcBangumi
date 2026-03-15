@@ -31,7 +31,7 @@ class _SubjectPageState extends State<SubjectPage>
   static const _tabItems = [
     _SubjectTabItem(label: '概述', icon: Icons.article_outlined),
     _SubjectTabItem(label: '角色', icon: Icons.groups_outlined),
-    _SubjectTabItem(label: '关联条目', icon: Icons.link_outlined),
+    _SubjectTabItem(label: '关联', icon: Icons.link_outlined),
     _SubjectTabItem(label: '吐槽', icon: Icons.chat_bubble_outline),
   ];
 
@@ -436,6 +436,99 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
+  Widget _buildSubjectSkeleton({required bool isLandscape}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final content = ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: 5,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        return Container(
+          height: index == 0 ? 120 : 88,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        );
+      },
+    );
+
+    return NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) {
+        return [
+          SliverAppBar(
+            pinned: true,
+            expandedHeight: 200,
+            flexibleSpace: FlexibleSpaceBar(
+              background: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    12,
+                    kToolbarHeight + 2,
+                    12,
+                    0,
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (!isLandscape)
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _TabBarHeaderDelegate(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    border: Border(
+                      bottom: BorderSide(color: Theme.of(context).dividerColor),
+                    ),
+                  ),
+                  child: const TabBar(
+                    tabs: [
+                      Tab(text: '概述'),
+                      Tab(text: '角色'),
+                      Tab(text: '关联'),
+                      Tab(text: '吐槽'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ];
+      },
+      body: isLandscape
+          ? Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedTabIndex,
+                  onDestinationSelected: (_) {},
+                  backgroundColor: colorScheme.surface,
+                  indicatorColor: colorScheme.primaryContainer,
+                  labelType: NavigationRailLabelType.all,
+                  destinations: _tabItems
+                      .map(
+                        (tab) => NavigationRailDestination(
+                          icon: Icon(tab.icon),
+                          label: Text(tab.label),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: content),
+              ],
+            )
+          : content,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLandscape =
@@ -443,8 +536,10 @@ class _SubjectPageState extends State<SubjectPage>
 
     if (_loading && _subject == null) {
       return Scaffold(
-        appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: DefaultTabController(
+          length: _tabItems.length,
+          child: _buildSubjectSkeleton(isLandscape: isLandscape),
+        ),
       );
     }
 
@@ -873,7 +968,7 @@ class _SubjectPageState extends State<SubjectPage>
     if (_relatedSubjects.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadAllData,
-        child: const Center(child: Text('暂无关联条目')),
+        child: const Center(child: Text('暂无关联')),
       );
     }
 
@@ -1026,10 +1121,11 @@ class _SubjectPageState extends State<SubjectPage>
       PointerSignalEvent signal,
     ) {
       final scrollEvent = signal as PointerScrollEvent;
+      final clampedDeltaDy = scrollEvent.scrollDelta.dy.clamp(-64.0, 64.0);
       final currentScale = _mindMapTransformController.value
           .getMaxScaleOnAxis();
       final targetScale =
-          (currentScale * math.exp(-scrollEvent.scrollDelta.dy / 220))
+          (currentScale * math.exp(-clampedDeltaDy / 420))
               .clamp(_mindMapMinScale, _mindMapMaxScale)
               .toDouble();
       final scaleChange = targetScale / currentScale;
@@ -1224,7 +1320,7 @@ class _SubjectPageState extends State<SubjectPage>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('加载下一级关联条目失败')));
+      ).showSnackBar(const SnackBar(content: Text('加载下一级关联失败')));
     } finally {
       if (mounted) {
         setState(() => _expandingRelatedNodes.remove(related.id));
@@ -1271,7 +1367,7 @@ class _SubjectPageState extends State<SubjectPage>
             ),
             const SizedBox(height: 4),
             Text(
-              '关联条目 ${_relatedSubjects.length}',
+              '关联 ${_relatedSubjects.length}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: colorScheme.onPrimaryContainer.withOpacity(0.85),
               ),

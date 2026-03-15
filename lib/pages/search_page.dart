@@ -199,7 +199,7 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildResultContent(double horizontalPadding) {
     if (_isSearching) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildSearchSkeletonList(horizontalPadding);
     }
 
     if (_searchError != null) {
@@ -253,6 +253,73 @@ class _SearchPageState extends State<SearchPage> {
       itemBuilder: (context, index) {
         final subject = _searchResults[index];
         return _SearchResultCard(subject: subject);
+      },
+    );
+  }
+
+  Widget _buildSearchSkeletonList(double horizontalPadding) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding > 16 ? horizontalPadding : 12,
+      ),
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 60,
+                  height: 84,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 160,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: 190,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       },
     );
   }

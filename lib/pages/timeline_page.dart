@@ -470,7 +470,7 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     if (loading && items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildTimelineSkeletonList();
     }
 
     if (error != null && items.isEmpty) {

@@ -349,7 +349,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
 
   Widget _buildList(ColorScheme colorScheme) {
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildCollectionSkeletonList(colorScheme);
     }
 
     if (_error != null && _items.isEmpty) {
@@ -361,10 +361,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
             const SizedBox(height: 8),
             Text(_error!, style: TextStyle(color: Colors.grey[600])),
             const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: _loadData,
-              child: const Text('重试'),
-            ),
+            FilledButton.tonal(onPressed: _loadData, child: const Text('重试')),
           ],
         ),
       );
@@ -417,6 +414,91 @@ class _CollectionListPageState extends State<CollectionListPage> {
             subjectType: _subjectType,
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildCollectionSkeletonList(ColorScheme colorScheme) {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: 6,
+      separatorBuilder: (_, __) => const SizedBox(height: 0),
+      itemBuilder: (context, index) =>
+          _buildCollectionSkeletonCard(colorScheme),
+    );
+  }
+
+  Widget _buildCollectionSkeletonCard(ColorScheme colorScheme) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 56,
+              height: 80,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 150,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 180,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: List.generate(
+                      3,
+                      (_) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Container(
+                          width: 46,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

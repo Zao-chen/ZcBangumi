@@ -133,7 +133,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
 
   Widget _buildBody() {
     if (_loading && _detail == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildTopicSkeleton();
     }
     if (_error != null && _detail == null) {
       return Center(
@@ -170,6 +170,97 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
           child: _buildSingleColumnBody(detail, constraints.maxWidth),
         );
       },
+    );
+  }
+
+  Widget _buildTopicSkeleton() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mediaQuery = MediaQuery.of(context);
+        final useSplitLayout =
+            mediaQuery.orientation == Orientation.landscape &&
+            constraints.maxWidth >= 960;
+        if (useSplitLayout) {
+          return _buildTopicSplitSkeleton(constraints.maxWidth);
+        }
+        final colorScheme = Theme.of(context).colorScheme;
+        return ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          itemCount: 6,
+          itemBuilder: (context, index) {
+            final height = index == 0 ? 168.0 : 112.0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                height: height,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTopicSplitSkeleton(double maxWidth) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final outerPadding = maxWidth >= 1320 ? 20.0 : 12.0;
+    const paneGap = 16.0;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(outerPadding, 12, outerPadding, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 15,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                Container(
+                  height: 240,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  height: 170,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: paneGap),
+          Expanded(
+            flex: 11,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: 5,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Container(
+                    height: 104,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 

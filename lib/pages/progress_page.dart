@@ -389,7 +389,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     }
 
     if (isLoading && collections.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildProgressSkeletonList();
     }
 
     if (error != null && collections.isEmpty) {
