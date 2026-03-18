@@ -54,7 +54,7 @@ class _TimelinePageState extends State<TimelinePage> {
     super.initState();
     // 从 AppStateProvider 恢复之前选中的标签
     final appState = context.read<AppStateProvider>();
-    _currentTab = _TimelineTab.values[appState.timelineTabIndex];
+    _currentTab = _TimelineTab.values[appState.initialTimelineTabIndex];
     _ensureLoadedForTab(_currentTab);
   }
 
@@ -129,8 +129,14 @@ class _TimelinePageState extends State<TimelinePage> {
 
   StorageService get _storage => context.read<StorageService>();
 
-  Future<void> _loadGlobal({bool refresh = true}) async {
+  Future<void> _loadGlobal({
+    bool refresh = true,
+    bool forceNetwork = true,
+  }) async {
     if (refresh) {
+      if (!forceNetwork && _globalItems.isNotEmpty) {
+        return;
+      }
       // 无感加载：若列表为空则先从缓存恢复
       if (_globalItems.isEmpty) {
         final cached = _parseCachedTimeline(
@@ -189,11 +195,17 @@ class _TimelinePageState extends State<TimelinePage> {
 
   // ========== 好友动态 加载 ==========
 
-  Future<void> _loadFriends({bool refresh = true}) async {
+  Future<void> _loadFriends({
+    bool refresh = true,
+    bool forceNetwork = true,
+  }) async {
     final auth = context.read<AuthProvider>();
     if (!auth.isLoggedIn) return;
 
     if (refresh) {
+      if (!forceNetwork && _friendItems.isNotEmpty) {
+        return;
+      }
       // 无感加载：先从缓存恢复
       if (_friendItems.isEmpty) {
         final cached = _parseCachedTimeline(
@@ -254,11 +266,17 @@ class _TimelinePageState extends State<TimelinePage> {
 
   // ========== 我的动态 加载 ==========
 
-  Future<void> _loadMine({bool refresh = true}) async {
+  Future<void> _loadMine({
+    bool refresh = true,
+    bool forceNetwork = true,
+  }) async {
     final auth = context.read<AuthProvider>();
     if (!auth.isLoggedIn || auth.username == null) return;
 
     if (refresh) {
+      if (!forceNetwork && _myItems.isNotEmpty) {
+        return;
+      }
       // 无感加载：先从缓存恢复
       if (_myItems.isEmpty) {
         final cached = _parseCachedTimeline(
@@ -343,13 +361,16 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   Future<void> _refreshCurrentTab() {
+    final forceNetwork = context
+        .read<AppStateProvider>()
+        .pullToRefreshForceNetwork;
     switch (_currentTab) {
       case _TimelineTab.global:
-        return _loadGlobal();
+        return _loadGlobal(forceNetwork: forceNetwork);
       case _TimelineTab.friends:
-        return _loadFriends();
+        return _loadFriends(forceNetwork: forceNetwork);
       case _TimelineTab.mine:
-        return _loadMine();
+        return _loadMine(forceNetwork: forceNetwork);
     }
   }
 

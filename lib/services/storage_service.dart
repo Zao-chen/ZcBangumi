@@ -91,8 +91,8 @@ class StorageService {
     final hasLegacyCookie = (_prefs.getString(_keyWebCookie) ?? '').isNotEmpty;
     final hasLegacyCookieJar =
         (_prefs.getString(_keyWebCookieJar) ?? '').isNotEmpty;
-    final hasStructuredSession = (_prefs.getString(_keyWebSession) ?? '')
-        .isNotEmpty;
+    final hasStructuredSession =
+        (_prefs.getString(_keyWebSession) ?? '').isNotEmpty;
 
     if (hasLegacyCookie || hasLegacyCookieJar) {
       await _prefs.remove(_keyWebCookie);
@@ -133,6 +133,17 @@ class StorageService {
   /// 清除所有缓存
   Future<void> clearAllCache() async {
     final keys = _prefs.getKeys().where((k) => k.startsWith('cache_')).toList();
+    for (final key in keys) {
+      await _prefs.remove(key);
+    }
+  }
+
+  /// 清除业务数据缓存（保留 app_state 配置）
+  Future<void> clearDataCache() async {
+    final keys = _prefs
+        .getKeys()
+        .where((k) => k.startsWith('cache_') && k != 'cache_app_state')
+        .toList();
     for (final key in keys) {
       await _prefs.remove(key);
     }

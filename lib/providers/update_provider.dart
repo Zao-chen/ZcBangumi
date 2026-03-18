@@ -52,7 +52,13 @@ class UpdateProvider extends ChangeNotifier {
     if (!silent) notifyListeners();
 
     try {
-      final result = await _updateService.checkForUpdateDetailed();
+      final appStateData =
+          _storage.getCache('app_state') as Map<String, dynamic>?;
+      final updateStableOnly =
+          appStateData?['updateStableOnly'] as bool? ?? true;
+      final result = await _updateService.checkForUpdateDetailed(
+        allowPrerelease: !updateStableOnly,
+      );
 
       if (result.hasUpdate && result.updateInfo != null) {
         _updateInfo = result.updateInfo;
@@ -171,13 +177,21 @@ class UpdateProvider extends ChangeNotifier {
 
   /// 检查是否应该自动检查更新
   Future<bool> shouldAutoCheck() async {
+    final appStateData =
+        _storage.getCache('app_state') as Map<String, dynamic>?;
+    final configuredHours =
+        appStateData?['updateCheckIntervalHours'] as int? ?? 24;
+    if (configuredHours <= 0) {
+      return false;
+    }
+
     final lastCheck = _storage.getLastUpdateCheckTime();
     if (lastCheck == null) return true;
 
-    // 每天自动检查一次
+    // 根据用户设置的频率检查
     final now = DateTime.now();
     final difference = now.difference(lastCheck);
-    return difference.inHours >= 24;
+    return difference.inHours >= configuredHours;
   }
 
   /// 自动检查更新（静默）

@@ -54,7 +54,6 @@ class UpdateService {
   static const String githubRepo = 'ZcBangumi';
   static const String apkAssetNameKeyword = 'app-release';
   static const String windowsAssetNameKeyword = 'windows';
-  static const bool allowPrerelease = false;
 
   UpdateService(Dio dio, this._storage)
     : _updateDio = Dio(
@@ -79,13 +78,17 @@ class UpdateService {
   }
 
   /// 检查是否有新版本
-  Future<UpdateInfo?> checkForUpdate() async {
-    final result = await checkForUpdateDetailed();
+  Future<UpdateInfo?> checkForUpdate({bool allowPrerelease = false}) async {
+    final result = await checkForUpdateDetailed(
+      allowPrerelease: allowPrerelease,
+    );
     return result.updateInfo;
   }
 
   /// 检查更新（返回详细结果）
-  Future<UpdateCheckResult> checkForUpdateDetailed() async {
+  Future<UpdateCheckResult> checkForUpdateDetailed({
+    bool allowPrerelease = false,
+  }) async {
     try {
       if (!Platform.isAndroid && !Platform.isWindows) {
         return const UpdateCheckResult(

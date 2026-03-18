@@ -71,6 +71,7 @@ class CollectionProvider extends ChangeNotifier {
     required String username,
     required int subjectType,
     bool refresh = false,
+    bool forceNetwork = true,
   }) async {
     if (_loadingMap[subjectType] == true && !refresh) return;
 
@@ -90,6 +91,12 @@ class CollectionProvider extends ChangeNotifier {
     _loadingMap[subjectType] = (_collections[subjectType] ?? []).isEmpty;
     _errorMap[subjectType] = null;
     notifyListeners();
+
+    if (!forceNetwork && (_collections[subjectType] ?? []).isNotEmpty) {
+      _loadingMap[subjectType] = false;
+      notifyListeners();
+      return;
+    }
 
     try {
       final result = await api.getUserCollections(
@@ -342,7 +349,7 @@ class CollectionProvider extends ChangeNotifier {
     _totalMap.clear();
     _episodeProgress.clear();
     _episodeLoadingMap.clear();
-    storage.clearAllCache();
+    storage.clearDataCache();
     notifyListeners();
   }
 }

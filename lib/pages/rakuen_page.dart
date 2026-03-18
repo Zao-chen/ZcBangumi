@@ -45,7 +45,7 @@ class _RakuenPageState extends State<RakuenPage>
   @override
   void initState() {
     super.initState();
-    final initialIndex = context.read<AppStateProvider>().rakuenTabIndex;
+    final initialIndex = context.read<AppStateProvider>().initialRakuenTabIndex;
     _tabController = TabController(
       length: _tabs.length,
       vsync: this,
@@ -78,9 +78,14 @@ class _RakuenPageState extends State<RakuenPage>
     await _load(tab);
   }
 
-  Future<void> _load(_RakuenTab tab, {bool refresh = true}) async {
+  Future<void> _load(
+    _RakuenTab tab, {
+    bool refresh = true,
+    bool forceNetwork = true,
+  }) async {
     final state = _tabStates[tab]!;
     if (state.loading || state.loadingMore) return;
+    if (refresh && !forceNetwork && state.items.isNotEmpty) return;
 
     setState(() {
       if (refresh) {
@@ -180,7 +185,12 @@ class _RakuenPageState extends State<RakuenPage>
           if (isLandscape)
             IconButton(
               tooltip: '刷新当前分区',
-              onPressed: () => _load(_currentTab),
+              onPressed: () => _load(
+                _currentTab,
+                forceNetwork: context
+                    .read<AppStateProvider>()
+                    .pullToRefreshForceNetwork,
+              ),
               icon: const Icon(Icons.refresh_rounded),
             ),
           IconButton(
@@ -358,7 +368,12 @@ class _RakuenPageState extends State<RakuenPage>
 
     if (state.items.isEmpty) {
       return RefreshIndicator(
-        onRefresh: () => _load(tab),
+        onRefresh: () => _load(
+          tab,
+          forceNetwork: context
+              .read<AppStateProvider>()
+              .pullToRefreshForceNetwork,
+        ),
         child: ListView(
           children: const [
             SizedBox(height: 180),
@@ -369,7 +384,12 @@ class _RakuenPageState extends State<RakuenPage>
     }
 
     return RefreshIndicator(
-      onRefresh: () => _load(tab),
+      onRefresh: () => _load(
+        tab,
+        forceNetwork: context
+            .read<AppStateProvider>()
+            .pullToRefreshForceNetwork,
+      ),
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         itemCount: state.items.length + 1,

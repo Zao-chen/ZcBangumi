@@ -34,7 +34,18 @@ class _CollectionItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final appState = context.watch<AppStateProvider>();
     final subject = collection.subject;
+    final densityScale = switch (appState.listDensityMode) {
+      0 => 0.88,
+      2 => 1.12,
+      _ => 1.0,
+    };
+    final cardPadding = 10.0 * densityScale;
+    final coverWidth = 56.0 * densityScale;
+    final coverHeight = 80.0 * densityScale;
+    final coverRadius = appState.coverCornerRadius;
+    final showSecondary = appState.showSecondaryInfo;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
@@ -44,15 +55,15 @@ class _CollectionItemCard extends StatelessWidget {
       child: InkWell(
         onTap: () => _openSubjectPage(context, collection.subjectId),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(cardPadding),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(coverRadius),
                 child: SizedBox(
-                  width: 56,
-                  height: 80,
+                  width: coverWidth,
+                  height: coverHeight,
                   child: subject?.images?.common.isNotEmpty == true
                       ? CachedNetworkImage(
                           imageUrl: subject!.images!.common,
@@ -74,30 +85,32 @@ class _CollectionItemCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: SizedBox(
-                  height: 80,
+                  height: coverHeight,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         subject?.displayName ?? 'ID: ${collection.subjectId}',
-                        style: const TextStyle(
-                          fontSize: 14,
+                        style: TextStyle(
+                          fontSize: 14 * densityScale,
                           fontWeight: FontWeight.w600,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4 * densityScale),
                       if (collection.epStatus > 0)
                         Text(
                           'EP ${collection.epStatus}${subject != null && subject.eps > 0 ? ' / ${subject.eps}' : ''}',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 11 * densityScale,
                             color: Colors.grey[500],
                           ),
                         ),
-                      const Spacer(),
-                      _buildBottomRow(context, colorScheme),
+                      if (showSecondary) ...[
+                        const Spacer(),
+                        _buildBottomRow(context, colorScheme, densityScale),
+                      ],
                     ],
                   ),
                 ),
@@ -109,7 +122,11 @@ class _CollectionItemCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomRow(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildBottomRow(
+    BuildContext context,
+    ColorScheme colorScheme,
+    double densityScale,
+  ) {
     final subject = collection.subject;
 
     return Row(
@@ -120,7 +137,7 @@ class _CollectionItemCard extends StatelessWidget {
           Text(
             subject.score.toStringAsFixed(1),
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 12 * densityScale,
               fontWeight: FontWeight.w600,
               color: Colors.amber[800],
             ),
@@ -146,7 +163,10 @@ class _CollectionItemCard extends StatelessWidget {
           const SizedBox(width: 2),
           Text(
             '${collection.rate}',
-            style: TextStyle(fontSize: 11, color: Colors.blue[600]),
+            style: TextStyle(
+              fontSize: 11 * densityScale,
+              color: Colors.blue[600],
+            ),
           ),
           const SizedBox(width: 10),
         ],
@@ -154,7 +174,7 @@ class _CollectionItemCard extends StatelessWidget {
           Text(
             '#${subject.rank}',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 11 * densityScale,
               color: colorScheme.primary,
               fontWeight: FontWeight.w600,
             ),
@@ -164,7 +184,10 @@ class _CollectionItemCard extends StatelessWidget {
         const Spacer(),
         Text(
           _formatDate(collection.updatedAt),
-          style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+          style: TextStyle(
+            fontSize: 11 * densityScale,
+            color: Colors.grey[400],
+          ),
         ),
       ],
     );

@@ -5,6 +5,7 @@ import '../constants.dart';
 import '../models/collection.dart';
 import '../pages/search_page.dart';
 import '../pages/subject_page.dart';
+import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
 import '../widgets/progress_grid.dart';
@@ -66,12 +67,16 @@ class _ProgressPageState extends State<ProgressPage>
   Future<void> _refreshCurrentTab() async {
     final auth = context.read<AuthProvider>();
     if (!auth.isLoggedIn || auth.username == null) return;
+    final forceNetwork = context
+        .read<AppStateProvider>()
+        .pullToRefreshForceNetwork;
 
     final subjectType = _tabs[_tabController.index].type;
     await context.read<CollectionProvider>().loadDoingCollections(
       username: auth.username!,
       subjectType: subjectType,
       refresh: true,
+      forceNetwork: forceNetwork,
     );
   }
 
@@ -449,10 +454,14 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     return RefreshIndicator(
       onRefresh: () async {
         if (auth.isLoggedIn && auth.username != null) {
+          final forceNetwork = context
+              .read<AppStateProvider>()
+              .pullToRefreshForceNetwork;
           await provider.loadDoingCollections(
             username: auth.username!,
             subjectType: widget.subjectType,
             refresh: true,
+            forceNetwork: forceNetwork,
           );
         }
       },
@@ -569,12 +578,28 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final provider = context.watch<CollectionProvider>();
+    final appState = context.watch<AppStateProvider>();
     final subject = widget.collection.subject;
     final episodes = provider.getEpisodeProgress(widget.collection.subjectId);
     final epLoading = provider.isEpisodeLoading(widget.collection.subjectId);
+    final densityScale = switch (appState.listDensityMode) {
+      0 => 0.88,
+      2 => 1.12,
+      _ => 1.0,
+    };
+    final horizontalMargin = 12.0 * densityScale;
+    final verticalMargin = 5.0 * densityScale;
+    final cardPadding = 12.0 * densityScale;
+    final coverWidth = 56.0 * densityScale;
+    final coverHeight = 80.0 * densityScale;
+    final coverRadius = appState.coverCornerRadius;
+    final showSecondary = appState.showSecondaryInfo;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      margin: EdgeInsets.symmetric(
+        horizontal: horizontalMargin,
+        vertical: verticalMargin,
+      ),
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
       clipBehavior: Clip.antiAlias,
@@ -588,7 +613,7 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(cardPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -598,10 +623,10 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                 children: [
                   // 封面
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(coverRadius),
                     child: SizedBox(
-                      width: 56,
-                      height: 80,
+                      width: coverWidth,
+                      height: coverHeight,
                       child: subject?.images?.grid.isNotEmpty == true
                           ? CachedNetworkImage(
                               imageUrl: subject!.images!.common.isNotEmpty
@@ -630,14 +655,14 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                       children: [
                         Text(
                           subject?.displayName ?? '未知条目',
-                          style: const TextStyle(
-                            fontSize: 14,
+                          style: TextStyle(
+                            fontSize: 14 * densityScale,
                             fontWeight: FontWeight.w600,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4 * densityScale),
                         if (epLoading)
                           const SizedBox(
                             width: 16,
@@ -699,10 +724,20 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                                 ? 'EP ${widget.collection.epStatus}'
                                 : '暂无章节',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 12 * densityScale,
                               color: Colors.grey[500],
                             ),
                           ),
+                        if (showSecondary) ...[
+                          SizedBox(height: 6 * densityScale),
+                          Text(
+                            '更新时间 ${_formatDate(widget.collection.updatedAt)}',
+                            style: TextStyle(
+                              fontSize: 11 * densityScale,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -713,5 +748,9 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
