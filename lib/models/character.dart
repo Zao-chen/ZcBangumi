@@ -34,7 +34,12 @@ class Character {
     final typeValue = json['type'];
     if (typeValue is int) {
       // 1=角色, 2=机体, 3=舰船, 4=组织
-      typeStr = {1: '角色', 2: '机体', 3: '舰船', 4: '组织'}[typeValue] ?? '';
+      typeStr = {
+        1: '角色',
+        2: '机体',
+        3: '舰船',
+        4: '组织',
+      }[typeValue] ?? '';
     } else if (typeValue is String) {
       typeStr = typeValue;
     }
@@ -68,18 +73,18 @@ class Character {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'type': type,
-    'images': images.map((e) => e.toJson()).toList(),
-    'comment': comment,
-    'collects': collects,
-    'relation': relation,
-    'summary': summary,
-    'infobox': infobox.entries
-        .map((e) => {'key': e.key, 'value': e.value})
-        .toList(),
-  };
+        'id': id,
+        'name': name,
+        'type': type,
+        'images': images.map((e) => e.toJson()).toList(),
+        'comment': comment,
+        'collects': collects,
+        'relation': relation,
+        'summary': summary,
+        'infobox': infobox.entries
+            .map((e) => {'key': e.key, 'value': e.value})
+            .toList(),
+      };
 }
 
 class CharacterImage {
@@ -105,11 +110,11 @@ class CharacterImage {
   }
 
   Map<String, dynamic> toJson() => {
-    'large': large,
-    'medium': medium,
-    'small': small,
-    'grid': grid,
-  };
+        'large': large,
+        'medium': medium,
+        'small': small,
+        'grid': grid,
+      };
 }
 
 /// 角色出演条目
@@ -147,14 +152,14 @@ class CharacterSubject {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'type': type,
-    'name': name,
-    'name_cn': nameCn,
-    'image': image,
-    'staff': staff,
-    'eps': eps,
-  };
+        'id': id,
+        'type': type,
+        'name': name,
+        'name_cn': nameCn,
+        'image': image,
+        'staff': staff,
+        'eps': eps,
+      };
 }
 
 /// 关联条目
@@ -199,11 +204,11 @@ class RelatedSubject {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'type': type,
-    'name': name,
-    'name_cn': nameCn,
-    'relation': relation,
-    'images': images,
-  };
+        'id': id,
+        'type': type,
+        'name': name,
+        'name_cn': nameCn,
+        'relation': relation,
+        'images': images,
+      };
 }

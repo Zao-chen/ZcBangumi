@@ -199,12 +199,7 @@ class _CharacterPageState extends State<CharacterPage>
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     if (_loading && _character == null) {
-      return Scaffold(
-        body: DefaultTabController(
-          length: _tabItems.length,
-          child: _buildSkeleton(isLandscape),
-        ),
-      );
+      return Scaffold(appBar: AppBar(), body: _buildSkeleton(isLandscape));
     }
 
     if (_error != null && _character == null) {

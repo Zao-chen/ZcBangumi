@@ -324,26 +324,24 @@ class ApiClient {
             .map(_normalizeCommentPayload)
             .map(Comment.fromJson)
             .toList();
-        if (comments.isNotEmpty || total > 0) {
-          return PagedResult<Comment>(
-            total: total,
-            limit: limit,
-            offset: offset,
-            data: comments,
-          );
-        }
+        return PagedResult<Comment>(
+          total: total,
+          limit: limit,
+          offset: offset,
+          data: comments,
+        );
       }
     } catch (_) {}
 
     try {
       final resp = await _webDio.get('/character/$characterId');
       final html = resp.data as String;
-      final comments = _parseCharacterCommentsFromHtml(html);
+      final comments = _parseCommentsFromHtml(html);
       final start = offset;
       final end = (offset + limit).clamp(0, comments.length);
       final List<Comment> paged = start < comments.length
           ? comments.sublist(start, end)
-          : <Comment>[];
+          : const <Comment>[];
       return PagedResult<Comment>(
         total: comments.length,
         limit: limit,
@@ -590,125 +588,6 @@ class ApiClient {
     }
 
     return comments;
-  }
-
-  /// 从角色页 HTML 中解析吐槽/评论
-  static List<Comment> _parseCharacterCommentsFromHtml(String html) {
-    final comments = <Comment>[];
-
-    try {
-      final listStart = html.indexOf('id="comment_list"');
-      if (listStart == -1) return comments;
-
-      final listEnd = html.indexOf(
-        '<template id="likes_reaction_menu"',
-        listStart,
-      );
-      final region = html.substring(
-        listStart,
-        listEnd > listStart ? listEnd : html.length,
-      );
-
-      final itemPattern = RegExp(
-        r'<div id="post_(\d+)" class="[^"]*row row_reply[^"]*"[^>]*>[\s\S]*?(?=<div id="post_\d+" class="[^"]*row row_reply|$)',
-      );
-
-      for (final match in itemPattern.allMatches(region)) {
-        final itemHtml = match.group(0) ?? '';
-        final postId = int.tryParse(match.group(1) ?? '') ?? 0;
-        if (itemHtml.isEmpty || postId <= 0) {
-          continue;
-        }
-
-        final avatarMatch = RegExp(
-          r'''background-image:url\((['"]?)([^)'\"]+)\1\)''',
-        ).firstMatch(itemHtml);
-        var avatarUrl = avatarMatch?.group(2)?.trim() ?? '';
-        if (avatarUrl.startsWith('//')) {
-          avatarUrl = 'https:$avatarUrl';
-        }
-
-        final userMatch = RegExp(
-          r'<strong>\s*<a[^>]*href="/user/[^"]+"[^>]*>([\s\S]*?)</a>',
-          caseSensitive: false,
-        ).firstMatch(itemHtml);
-        final userName = _decodeHtml(
-          _stripTags(userMatch?.group(1) ?? ''),
-        ).trim();
-
-        final timeMatch = RegExp(
-          r'class="floor-anchor">[^<]+</a>\s*-\s*([^<]+)</small>',
-        ).firstMatch(itemHtml);
-        final timeText = (timeMatch?.group(1) ?? '').trim();
-
-        final contentMatch = RegExp(
-          r'<div class="message clearit">([\s\S]*?)</div>',
-          caseSensitive: false,
-        ).firstMatch(itemHtml);
-        final content = _htmlBlockToText(contentMatch?.group(1) ?? '').trim();
-
-        final replies = RegExp(
-          r'class="sub_reply_bg\b',
-          caseSensitive: false,
-        ).allMatches(itemHtml).length;
-
-        if (content.isEmpty || userName.isEmpty) {
-          continue;
-        }
-
-        final parsedTime = _parseCharacterCommentTime(timeText);
-
-        comments.add(
-          Comment(
-            id: postId,
-            content: content,
-            rating: 0,
-            spoiler: 0,
-            state: 0,
-            createdAt: parsedTime,
-            updatedAt: parsedTime,
-            user: {
-              'username': userName,
-              'nickname': userName,
-              'avatar': avatarUrl,
-            },
-            usable: 1,
-            replies: replies,
-          ),
-        );
-      }
-    } catch (_) {
-      return comments;
-    }
-
-    return comments;
-  }
-
-  static DateTime _parseCharacterCommentTime(String value) {
-    final text = value.trim();
-    if (text.isEmpty) {
-      return DateTime.now();
-    }
-
-    final absMatch = RegExp(
-      r'^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})$',
-    ).firstMatch(text);
-    if (absMatch != null) {
-      final year = int.tryParse(absMatch.group(1) ?? '0') ?? 0;
-      final month = int.tryParse(absMatch.group(2) ?? '1') ?? 1;
-      final day = int.tryParse(absMatch.group(3) ?? '1') ?? 1;
-      final hour = int.tryParse(absMatch.group(4) ?? '0') ?? 0;
-      final minute = int.tryParse(absMatch.group(5) ?? '0') ?? 0;
-      if (year > 0) {
-        return DateTime(year, month, day, hour, minute);
-      }
-    }
-
-    if (text.contains('前') || text.contains('ago')) {
-      return _parseRelativeTime(text);
-    }
-
-    return DateTime.now();
   }
 
   /// 解析相对时间字符串，返回对应的 DateTime
