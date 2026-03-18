@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../constants.dart';
 import '../models/episode.dart';
+import '../models/rakuen_topic.dart';
 import '../pages/rakuen_topic_page.dart';
-import '../services/api_client.dart';
 
 class ProgressGrid extends StatelessWidget {
   final List<UserEpisodeCollection> episodes;
@@ -768,23 +767,25 @@ class _EpisodeCell extends StatelessWidget {
     BuildContext context,
     Episode episodeInfo,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final topic = RakuenTopic(
+      id: 'ep_${episodeInfo.id}',
+      type: 'ep',
+      title: episodeInfo.displayName,
+      topicUrl: '${BgmConst.webBaseUrl}/rakuen/topic/ep/${episodeInfo.id}',
+      avatarUrl: '',
+      replyCount: 0,
+      timeText: '',
+      sourceTitle: null,
+      sourceUrl: null,
+      authorName: null,
+    );
 
-    try {
-      final topic = await context.read<ApiClient>().resolveRakuenTopic(
-        input: 'ep/${episodeInfo.id}',
-      );
-      if (!context.mounted) return;
-      await navigator.push(
-        MaterialPageRoute(
-          builder: (_) => RakuenTopicPage(topic: topic, episode: episodeInfo),
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('加载单集讨论失败: $e')));
-    }
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => RakuenTopicPage(topic: topic, episode: episodeInfo),
+      ),
+    );
   }
 
   String _tooltipText() {
