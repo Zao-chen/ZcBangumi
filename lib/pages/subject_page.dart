@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../constants.dart';
 import '../models/character.dart';
 import '../models/collection.dart';
@@ -436,6 +437,16 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
+  Future<void> _openSubjectWebPage() async {
+    final uri = Uri.parse('${BgmConst.webBaseUrl}/subject/${widget.subjectId}');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('打开网页失败')));
+    }
+  }
+
   Widget _buildSubjectSkeleton({required bool isLandscape}) {
     final colorScheme = Theme.of(context).colorScheme;
     final content = ListView.separated(
@@ -582,6 +593,13 @@ class _SubjectPageState extends State<SubjectPage>
               elevation: 0,
               scrolledUnderElevation: 0,
               expandedHeight: 200,
+              actions: [
+                IconButton(
+                  tooltip: '打开网页',
+                  onPressed: _openSubjectWebPage,
+                  icon: const Icon(Icons.open_in_new),
+                ),
+              ],
               title: _showCollapsedTitle
                   ? Text(
                       _subject!.displayName,

@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../constants.dart';
 import '../models/character.dart';
 import '../models/comment.dart';
 import '../services/api_client.dart';
@@ -20,6 +22,8 @@ class CharacterPage extends StatefulWidget {
 
 class _CharacterPageState extends State<CharacterPage>
     with TickerProviderStateMixin {
+  static const double _headerExpandedHeight = 188;
+
   static const _tabItems = [
     _CharacterTabItem(label: '概述', icon: Icons.article_outlined),
     _CharacterTabItem(label: '出演', icon: Icons.movie_outlined),
@@ -193,6 +197,20 @@ class _CharacterPageState extends State<CharacterPage>
     }
   }
 
+  Future<void> _openCharacterWebPage() async {
+    final characterId = _activeCharacterId;
+    if (characterId == null) {
+      return;
+    }
+    final uri = Uri.parse('${BgmConst.webBaseUrl}/character/$characterId');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('打开网页失败')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLandscape =
@@ -242,7 +260,14 @@ class _CharacterPageState extends State<CharacterPage>
           return [
             SliverAppBar(
               pinned: true,
-              expandedHeight: 220,
+              expandedHeight: _headerExpandedHeight,
+              actions: [
+                IconButton(
+                  tooltip: '打开网页',
+                  onPressed: _openCharacterWebPage,
+                  icon: const Icon(Icons.open_in_new),
+                ),
+              ],
               title: _showCollapsedTitle
                   ? Text(
                       _character!.name,
@@ -261,7 +286,10 @@ class _CharacterPageState extends State<CharacterPage>
                       12,
                       0,
                     ),
-                    child: _buildHeaderCard(),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: _buildHeaderCard(),
+                    ),
                   ),
                 ),
               ),
@@ -386,6 +414,7 @@ class _CharacterPageState extends State<CharacterPage>
             const SizedBox(width: 12),
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -997,7 +1026,7 @@ class _CharacterPageState extends State<CharacterPage>
         return [
           SliverAppBar(
             pinned: true,
-            expandedHeight: 220,
+            expandedHeight: _headerExpandedHeight,
             flexibleSpace: FlexibleSpaceBar(
               background: SafeArea(
                 bottom: false,
@@ -1008,10 +1037,13 @@ class _CharacterPageState extends State<CharacterPage>
                     12,
                     0,
                   ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
