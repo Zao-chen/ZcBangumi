@@ -148,6 +148,25 @@ class Subject {
 
   String get displayName => nameCn.isNotEmpty ? nameCn : name;
 
+  factory Subject.fromSlimSubject(SlimSubject slim) {
+    return Subject(
+      id: slim.id,
+      type: slim.type,
+      name: slim.name,
+      nameCn: slim.nameCn,
+      summary: slim.shortSummary,
+      images: slim.images,
+      eps: slim.eps,
+      volumes: slim.volumes,
+      score: slim.score,
+      rank: slim.rank,
+      collectionTotal: slim.collectionTotal,
+      date: '',
+      tags: const [],
+      infobox: const {},
+    );
+  }
+
   factory Subject.fromJson(Map<String, dynamic> json) {
     // 解析 tags
     final tagsList = <String>[];

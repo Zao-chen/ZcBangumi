@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/collection.dart';
+import '../models/subject.dart';
 import '../pages/search_page.dart';
 import '../pages/subject_page.dart';
 import '../providers/app_state_provider.dart';
@@ -606,8 +607,12 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) =>
-                  SubjectPage(subjectId: widget.collection.subjectId),
+              builder: (_) => SubjectPage(
+                subjectId: widget.collection.subjectId,
+                subject: subject != null
+                    ? Subject.fromSlimSubject(subject)
+                    : null,
+              ),
             ),
           );
         },

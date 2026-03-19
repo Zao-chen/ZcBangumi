@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bangumi_web_session.dart';
+import '../models/subject.dart';
 
 /// 本地存储服务
 class StorageService {
@@ -14,6 +15,7 @@ class StorageService {
       'legacy_web_session_invalidated';
   static const String _keyLastUpdateCheck = 'last_update_check';
   static const String _keyIgnoredVersion = 'ignored_version';
+  static const String _keyRecentSubjectDetails = 'recent_subject_details';
 
   late final SharedPreferences _prefs;
 
@@ -147,6 +149,76 @@ class StorageService {
     for (final key in keys) {
       await _prefs.remove(key);
     }
+  }
+
+  /// 保存最近浏览的条目详情（去重并限制数量）
+  Future<void> saveRecentSubjectDetail(
+    Subject subject, {
+    int maxItems = 50,
+  }) async {
+    if (maxItems <= 0) return;
+
+    final raw = getCache(_keyRecentSubjectDetails);
+    final items = <Map<String, dynamic>>[];
+
+    if (raw is List) {
+      for (final entry in raw) {
+        if (entry is! Map) continue;
+        final map = entry.map((k, v) => MapEntry('$k', v));
+        final subjectObj = map['subject'];
+        if (subjectObj is! Map) continue;
+        final subjectMap = subjectObj.map((k, v) => MapEntry('$k', v));
+        if (subjectMap['id'] is int) {
+          items.add({
+            'subject': subjectMap,
+            'updated_at': map['updated_at']?.toString() ?? '',
+          });
+        }
+      }
+    }
+
+    items.removeWhere((entry) {
+      final subjectObj = entry['subject'];
+      if (subjectObj is! Map) return false;
+      return subjectObj['id'] == subject.id;
+    });
+
+    items.insert(0, {
+      'subject': subject.toJson(),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+
+    if (items.length > maxItems) {
+      items.removeRange(maxItems, items.length);
+    }
+
+    await setCache(_keyRecentSubjectDetails, items);
+  }
+
+  /// 获取最近浏览的条目详情列表
+  List<Subject> getRecentSubjectDetails({int limit = 20}) {
+    final raw = getCache(_keyRecentSubjectDetails);
+    if (raw is! List || raw.isEmpty || limit <= 0) {
+      return const [];
+    }
+
+    final result = <Subject>[];
+    for (final entry in raw) {
+      if (result.length >= limit) break;
+      if (entry is! Map) continue;
+      final map = entry.map((k, v) => MapEntry('$k', v));
+      final subjectObj = map['subject'];
+      if (subjectObj is! Map) continue;
+
+      try {
+        final subjectMap = subjectObj.map((k, v) => MapEntry('$k', v));
+        result.add(Subject.fromJson(subjectMap));
+      } catch (_) {
+        // 忽略损坏的缓存项
+      }
+    }
+
+    return result;
   }
 
   // ==================== 更新管理 ====================

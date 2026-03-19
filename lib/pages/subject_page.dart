@@ -55,6 +55,7 @@ class _SubjectPageState extends State<SubjectPage>
   List<UserEpisodeCollection> _episodes = [];
   List<Comment> _comments = [];
   bool _loading = true;
+  bool _charactersLoading = false;
   bool _episodesLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
@@ -136,19 +137,33 @@ class _SubjectPageState extends State<SubjectPage>
   String get _relatedCacheName => 'subject_related_${widget.subjectId}';
   String get _episodesCacheName => 'subject_episodes_${widget.subjectId}';
   String get _commentsCacheName => 'subject_comments_${widget.subjectId}';
+  String get _userCollectionCacheName =>
+      'subject_user_collection_${widget.subjectId}';
   String get _relatedViewModeCacheName => 'subject_related_view_mode';
+
+  Subject? _readSubjectFromCache(StorageService storage) {
+    final cached = storage.getCache(_cacheName);
+    if (cached is Map<String, dynamic>) {
+      try {
+        return Subject.fromJson(cached);
+      } catch (_) {}
+    }
+
+    final recent = storage.getRecentSubjectDetails(limit: 50);
+    for (final item in recent) {
+      if (item.id == widget.subjectId) {
+        return item;
+      }
+    }
+    return null;
+  }
 
   Future<void> _loadAllData() async {
     final storage = context.read<StorageService>();
     final api = context.read<ApiClient>();
 
     if (_subject == null) {
-      final cached = storage.getCache(_cacheName);
-      if (cached is Map<String, dynamic>) {
-        try {
-          _subject = Subject.fromJson(cached);
-        } catch (_) {}
-      }
+      _subject = _readSubjectFromCache(storage);
     }
 
     if (_characters.isEmpty) {
@@ -199,8 +214,23 @@ class _SubjectPageState extends State<SubjectPage>
       }
     }
 
+    if (_userCollection == null) {
+      final userCollectionCached = storage.getCache(_userCollectionCacheName);
+      if (userCollectionCached is Map<String, dynamic>) {
+        try {
+          _userCollection = UserCollection.fromJson(userCollectionCached);
+        } catch (_) {}
+      }
+    }
+
+    if (_subject != null) {
+      storage.setCache(_cacheName, _subject!.toJson());
+      storage.saveRecentSubjectDetail(_subject!);
+    }
+
     setState(() {
       _loading = _subject == null;
+      _charactersLoading = _characters.isEmpty;
       _error = null;
     });
 
@@ -246,11 +276,13 @@ class _SubjectPageState extends State<SubjectPage>
           final commentsResult = results[2] as PagedResult<Comment>;
           _comments = commentsResult.data;
         }
+        _charactersLoading = false;
         _error = null;
       });
 
       if (_subject != null) {
         storage.setCache(_cacheName, _subject!.toJson());
+        storage.saveRecentSubjectDetail(_subject!);
       }
       storage.setCache(
         _charsCacheName,
@@ -273,7 +305,10 @@ class _SubjectPageState extends State<SubjectPage>
       }
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _charactersLoading = false;
+        });
       }
     }
   }
@@ -287,7 +322,10 @@ class _SubjectPageState extends State<SubjectPage>
       return;
     }
 
-    setState(() => _episodesLoading = true);
+    final shouldShowLoading = _episodes.isEmpty;
+    if (_episodesLoading != shouldShowLoading) {
+      setState(() => _episodesLoading = shouldShowLoading);
+    }
 
     try {
       final result = await api.getUserEpisodeCollections(
@@ -304,7 +342,7 @@ class _SubjectPageState extends State<SubjectPage>
       );
     } catch (e) {
     } finally {
-      if (mounted) {
+      if (mounted && _episodesLoading) {
         setState(() => _episodesLoading = false);
       }
     }
@@ -313,6 +351,7 @@ class _SubjectPageState extends State<SubjectPage>
   Future<void> _loadUserCollection() async {
     final api = context.read<ApiClient>();
     final authProvider = context.read<AuthProvider>();
+    final storage = context.read<StorageService>();
 
     if (!authProvider.isLoggedIn) {
       return;
@@ -331,6 +370,12 @@ class _SubjectPageState extends State<SubjectPage>
         setState(() {
           _userCollection = collections.data[index];
         });
+        storage.setCache(
+          _userCollectionCacheName,
+          collections.data[index].toJson(),
+        );
+      } else {
+        storage.removeCache(_userCollectionCacheName);
       }
     } catch (e) {}
   }
@@ -733,7 +778,7 @@ class _SubjectPageState extends State<SubjectPage>
                 ),
                 child: ProgressGrid(
                   episodes: _episodes,
-                  loading: _episodesLoading,
+                  loading: _episodesLoading && _episodes.isEmpty,
                   onSetStatus: _setEpisodeStatus,
                   onWatchUpTo: _watchUpTo,
                   useNumberPicker: _subject!.type == BgmConst.subjectBook,
@@ -872,6 +917,10 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   Widget _buildCharactersTab() {
+    if (_charactersLoading && _characters.isEmpty) {
+      return _buildCharactersSkeletonList();
+    }
+
     if (_characters.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadAllData,
@@ -979,6 +1028,73 @@ class _SubjectPageState extends State<SubjectPage>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildCharactersSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 80,
+                  height: 104,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 140,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 90,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 180,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
