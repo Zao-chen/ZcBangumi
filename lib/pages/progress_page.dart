@@ -593,7 +593,6 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
     final coverWidth = 56.0 * densityScale;
     final coverHeight = 80.0 * densityScale;
     final coverRadius = appState.coverCornerRadius;
-    final showSecondary = appState.showSecondaryInfo;
 
     return Card(
       margin: EdgeInsets.symmetric(
@@ -728,16 +727,6 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                               color: Colors.grey[500],
                             ),
                           ),
-                        if (showSecondary) ...[
-                          SizedBox(height: 6 * densityScale),
-                          Text(
-                            '更新时间 ${_formatDate(widget.collection.updatedAt)}',
-                            style: TextStyle(
-                              fontSize: 11 * densityScale,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -748,9 +737,5 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
