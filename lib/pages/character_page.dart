@@ -7,6 +7,7 @@ import '../models/character.dart';
 import '../models/comment.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
+import '../widgets/copyable_text.dart';
 import 'subject_page.dart';
 
 /// 角色详情页
@@ -418,7 +419,7 @@ class _CharacterPageState extends State<CharacterPage>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  ShortCopyableText(
                     character.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -501,25 +502,27 @@ class _CharacterPageState extends State<CharacterPage>
             if (character.comment.isNotEmpty)
               _buildSection(
                 title: '简介',
-                child: Text(
+                child: CopyableText(
                   character.comment,
                   style: TextStyle(
                     color: Colors.grey[700],
                     fontSize: 14,
                     height: 1.6,
                   ),
+                  enableLongPressCopy: false,
                 ),
               ),
             if (character.summary.isNotEmpty)
               _buildSection(
                 title: '详细描述',
-                child: Text(
+                child: CopyableText(
                   character.summary,
                   style: TextStyle(
                     color: Colors.grey[700],
                     fontSize: 14,
                     height: 1.6,
                   ),
+                  enableLongPressCopy: false,
                 ),
               ),
             if (character.infobox.isNotEmpty)
@@ -534,16 +537,17 @@ class _CharacterPageState extends State<CharacterPage>
                         children: [
                           SizedBox(
                             width: 80,
-                            child: Text(
+                            child: CopyableText(
                               entry.key,
                               style: TextStyle(
                                 color: Colors.grey[600],
                                 fontSize: 13,
                               ),
+                              maxLines: 1,
                             ),
                           ),
                           Expanded(
-                            child: Text(
+                            child: CopyableText(
                               entry.value,
                               style: const TextStyle(fontSize: 13),
                             ),

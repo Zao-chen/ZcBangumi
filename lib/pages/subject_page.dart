@@ -15,6 +15,8 @@ import '../services/api_client.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
 import '../widgets/subject_action_buttons.dart';
+import '../widgets/copyable_text.dart';
+import '../widgets/copyable_chip.dart';
 import 'character_page.dart';
 
 class SubjectPage extends StatefulWidget {
@@ -830,9 +832,10 @@ class _SubjectPageState extends State<SubjectPage>
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
+                    CopyableText(
                       _subject!.summary,
                       style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      enableLongPressCopy: false,
                     ),
                   ],
                 ),
@@ -857,11 +860,9 @@ class _SubjectPageState extends State<SubjectPage>
                       spacing: 8,
                       runSpacing: 8,
                       children: _subject!.tags.map((tag) {
-                        return Chip(
-                          label: Text(
-                            tag,
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                        return CopyableChip(
+                          label: tag,
+                          labelStyle: const TextStyle(fontSize: 12),
                           backgroundColor: colorScheme.surfaceContainerHigh,
                         );
                       }).toList(),
@@ -896,16 +897,17 @@ class _SubjectPageState extends State<SubjectPage>
                           children: [
                             SizedBox(
                               width: 80,
-                              child: Text(
+                              child: CopyableText(
                                 key,
                                 style: TextStyle(
                                   color: Colors.grey[600],
                                   fontSize: 14,
                                 ),
+                                maxLines: 1,
                               ),
                             ),
                             Expanded(
-                              child: Text(
+                              child: CopyableText(
                                 value,
                                 style: const TextStyle(fontSize: 14),
                               ),
@@ -2465,7 +2467,7 @@ class _SubjectPageState extends State<SubjectPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  ShortCopyableText(
                     _subject!.displayName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -2476,7 +2478,7 @@ class _SubjectPageState extends State<SubjectPage>
                   const SizedBox(height: 4),
                   if (_subject!.name != _subject!.nameCn &&
                       _subject!.name.isNotEmpty)
-                    Text(
+                    ShortCopyableText(
                       _subject!.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

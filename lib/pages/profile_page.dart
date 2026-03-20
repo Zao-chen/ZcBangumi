@@ -11,6 +11,7 @@ import '../providers/auth_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
+import '../widgets/copyable_text.dart';
 
 enum _SortMode {
   updatedAt('最近操作'),
@@ -1088,7 +1089,7 @@ class _ProfileContentState extends State<_ProfileContent> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  ShortCopyableText(
                     widget.user.nickname,
                     style: const TextStyle(
                       fontSize: 16,
@@ -1098,7 +1099,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  ShortCopyableText(
                     '@${widget.user.username}',
                     style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                   ),
