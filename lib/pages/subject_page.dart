@@ -56,6 +56,8 @@ class _SubjectPageState extends State<SubjectPage>
   List<Comment> _comments = [];
   bool _loading = true;
   bool _charactersLoading = false;
+  bool _relatedLoading = false;
+  bool _commentsLoading = false;
   bool _episodesLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
@@ -231,6 +233,8 @@ class _SubjectPageState extends State<SubjectPage>
     setState(() {
       _loading = _subject == null;
       _charactersLoading = _characters.isEmpty;
+      _relatedLoading = _relatedSubjects.isEmpty;
+      _commentsLoading = _comments.isEmpty;
       _error = null;
     });
 
@@ -277,6 +281,8 @@ class _SubjectPageState extends State<SubjectPage>
           _comments = commentsResult.data;
         }
         _charactersLoading = false;
+        _relatedLoading = false;
+        _commentsLoading = false;
         _error = null;
       });
 
@@ -308,6 +314,8 @@ class _SubjectPageState extends State<SubjectPage>
         setState(() {
           _loading = false;
           _charactersLoading = false;
+          _relatedLoading = false;
+          _commentsLoading = false;
         });
       }
     }
@@ -1098,7 +1106,160 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
+  Widget _buildRelatedSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 80,
+                  height: 104,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 140,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 90,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 70,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: colorScheme.surfaceContainerHighest,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCommentsSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 100,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: 80,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  width: 200,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildRelatedTab() {
+    if (_relatedLoading && _relatedSubjects.isEmpty) {
+      return _buildRelatedSkeletonList();
+    }
+
     if (_relatedSubjects.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadAllData,
@@ -2398,6 +2559,10 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   Widget _buildCommentsTab() {
+    if (_commentsLoading && _comments.isEmpty) {
+      return _buildCommentsSkeletonList();
+    }
+
     if (_comments.isEmpty) {
       return RefreshIndicator(
         onRefresh: _loadAllData,
