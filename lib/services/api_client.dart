@@ -742,20 +742,29 @@ class ApiClient {
   }
 
   /// 修改条目收藏
+  /// 使用 POST 方法：不存在则创建，存在则修改
+  /// 这是修改条目收藏的标准方法，无需异常处理
   Future<void> patchCollection({
     required int subjectId,
     int? type,
     int? rate,
     int? epStatus,
     int? volStatus,
+    String? comment,
+    bool? private_,
+    List<String>? tags,
   }) async {
     final data = <String, dynamic>{};
     if (type != null) data['type'] = type;
     if (rate != null) data['rate'] = rate;
     if (epStatus != null) data['ep_status'] = epStatus;
     if (volStatus != null) data['vol_status'] = volStatus;
+    if (comment != null) data['comment'] = comment;
+    if (private_ != null) data['private'] = private_;
+    if (tags != null) data['tags'] = tags;
 
-    await _dio.patch('/v0/users/-/collections/$subjectId', data: data);
+    // 使用 POST 方法，自动处理不存在则创建、存在则修改的情况
+    await _dio.post('/v0/users/-/collections/$subjectId', data: data);
   }
 
   // ========== 时间线 ==========
