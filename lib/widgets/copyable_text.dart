@@ -29,7 +29,7 @@ class CopyableText extends StatefulWidget {
 class _CopyableTextState extends State<CopyableText> {
   void _copyToClipboard() {
     Clipboard.setData(ClipboardData(text: widget.text));
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -46,7 +46,7 @@ class _CopyableTextState extends State<CopyableText> {
   Widget build(BuildContext context) {
     // 判断是否是短文本（长度 < 50 字符或不超过2行）
     final isShortText = widget.text.length < 50;
-    
+
     // 使用SelectableText以支持鼠标选取和触屏选取
     return GestureDetector(
       onLongPress: widget.enableLongPressCopy && isShortText
@@ -92,7 +92,7 @@ class ShortCopyableText extends StatefulWidget {
 class _ShortCopyableTextState extends State<ShortCopyableText> {
   void _copyToClipboard() {
     Clipboard.setData(ClipboardData(text: widget.text));
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -22,7 +22,7 @@ class CopyableChip extends StatelessWidget {
 
   void _copyToClipboard(BuildContext context) {
     Clipboard.setData(ClipboardData(text: label));
-    
+
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -43,10 +43,7 @@ class CopyableChip extends StatelessWidget {
       child: Tooltip(
         message: '长按复制',
         child: Chip(
-          label: Text(
-            label,
-            style: labelStyle,
-          ),
+          label: Text(label, style: labelStyle),
           backgroundColor: backgroundColor,
           padding: padding,
         ),
