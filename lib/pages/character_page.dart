@@ -392,6 +392,7 @@ class _CharacterPageState extends State<CharacterPage>
                       width: 86,
                       height: 112,
                       fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
                       placeholder: (context, url) => Container(
                         width: 86,
                         height: 112,
@@ -677,6 +678,7 @@ class _CharacterPageState extends State<CharacterPage>
                               width: 74,
                               height: 98,
                               fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
                               placeholder: (context, url) => Container(
                                 width: 74,
                                 height: 98,

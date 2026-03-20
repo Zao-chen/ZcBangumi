@@ -975,6 +975,7 @@ class _SubjectPageState extends State<SubjectPage>
                               width: 80,
                               height: 104,
                               fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
                               placeholder: (context, url) => Container(
                                 width: 80,
                                 height: 104,
