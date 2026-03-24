@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/collection.dart';
 import '../models/subject.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 
 /// 条目操作按钮组件
-/// 包含：编辑按钮，打开统一对话框修改收藏、评分、吐槽
+/// 包含编辑按钮，打开统一对话框修改收藏、评分、评论。
 class SubjectActionButtons extends StatefulWidget {
   final Subject subject;
   final UserCollection? existingCollection;
@@ -40,17 +41,18 @@ class _SubjectActionButtonsState extends State<SubjectActionButtons> {
     }
   }
 
-  /// 打开统一编辑对话框
   void _showEditDialog() {
     final authProvider = context.read<AuthProvider>();
     if (!authProvider.isLoggedIn) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('请先登录')));
+      ).showSnackBar(
+        const SnackBar(content: Text('\u8bf7\u5148\u767b\u5f55')),
+      );
       return;
     }
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => _UnifiedEditDialog(
         subject: widget.subject,
@@ -66,17 +68,17 @@ class _SubjectActionButtonsState extends State<SubjectActionButtons> {
   String _getCollectionTypeLabel(int? type) {
     switch (type) {
       case 1:
-        return '想看';
+        return '\u60f3\u770b';
       case 2:
-        return '看过';
+        return '\u770b\u8fc7';
       case 3:
-        return '在看';
+        return '\u5728\u770b';
       case 4:
-        return '搁置';
+        return '\u6401\u7f6e';
       case 5:
-        return '抛弃';
+        return '\u629b\u5f03';
       default:
-        return '编辑';
+        return '\u7f16\u8f91';
     }
   }
 
@@ -103,7 +105,6 @@ class _SubjectActionButtonsState extends State<SubjectActionButtons> {
   }
 }
 
-/// 统一编辑对话框
 class _UnifiedEditDialog extends StatefulWidget {
   final Subject subject;
   final UserCollection? collection;
@@ -142,11 +143,12 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
   }
 
   Future<void> _saveChanges() async {
-    // 必须选择收藏状态
     if (_selectedType == 0) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('请选择收藏状态')));
+      ).showSnackBar(
+        const SnackBar(content: Text('\u8bf7\u9009\u62e9\u6536\u85cf\u72b6\u6001')),
+      );
       return;
     }
 
@@ -156,7 +158,6 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
       final comment = _commentController.text.trim();
       final existingComment = widget.collection?.comment?.trim() ?? '';
 
-      // 更新收藏信息
       await api.patchCollection(
         subjectId: widget.subject.id,
         type: _selectedType,
@@ -164,19 +165,19 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
         comment: comment != existingComment ? comment : null,
       );
 
-      if (mounted) {
-        widget.onChanged();
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已保存')));
-      }
+      if (!mounted) return;
+      widget.onChanged();
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('\u5df2\u4fdd\u5b58')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(content: Text('\u4fdd\u5b58\u5931\u8d25: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -184,116 +185,236 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     }
   }
 
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('编辑 ${widget.subject.displayName}'),
-      content: SingleChildScrollView(
+    final size = MediaQuery.sizeOf(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: size.width * 0.1,
+        vertical: size.height * 0.1,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: size.width * 0.8,
+        height: size.height * 0.8,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 收藏状态
-            Text(
-              '收藏状态',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SegmentedButton<int>(
-                showSelectedIcon: false,
-                onSelectionChanged: _loading
-                    ? null
-                    : (Set<int> newSelection) {
-                        setState(() => _selectedType = newSelection.first);
-                      },
-                selected: <int>{_selectedType},
-                segments: const <ButtonSegment<int>>[
-                  ButtonSegment<int>(value: 1, label: Text('想看')),
-                  ButtonSegment<int>(value: 2, label: Text('看过')),
-                  ButtonSegment<int>(value: 3, label: Text('在看')),
-                  ButtonSegment<int>(value: 4, label: Text('搁置')),
-                  ButtonSegment<int>(value: 5, label: Text('抛弃')),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '\u7f16\u8f91\u6536\u85cf',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.subject.displayName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _loading ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: '\u5173\u95ed',
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // 评分
-            Text(
-              '评分',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 2,
-                runSpacing: 2,
-                children: List.generate(10, (index) {
-                  final rating = index + 1;
-                  return GestureDetector(
-                    onTap: _loading
-                        ? null
-                        : () {
-                            setState(() => _selectedRating = rating);
-                          },
-                    child: Icon(
-                      Icons.star,
-                      color: rating <= _selectedRating
-                          ? Colors.amber
-                          : Colors.grey[300],
-                      size: 22,
+            const Divider(height: 1),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionTitle(
+                      context,
+                      '\u6536\u85cf\u72b6\u6001',
                     ),
-                  );
-                }),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<int>(
+                        showSelectedIcon: false,
+                        onSelectionChanged: _loading
+                            ? null
+                            : (Set<int> newSelection) {
+                                setState(() => _selectedType = newSelection.first);
+                              },
+                        selected: <int>{_selectedType},
+                        segments: const <ButtonSegment<int>>[
+                          ButtonSegment<int>(
+                            value: 1,
+                            label: Text('\u60f3\u770b'),
+                          ),
+                          ButtonSegment<int>(
+                            value: 2,
+                            label: Text('\u770b\u8fc7'),
+                          ),
+                          ButtonSegment<int>(
+                            value: 3,
+                            label: Text('\u5728\u770b'),
+                          ),
+                          ButtonSegment<int>(
+                            value: 4,
+                            label: Text('\u6401\u7f6e'),
+                          ),
+                          ButtonSegment<int>(
+                            value: 5,
+                            label: Text('\u629b\u5f03'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        _buildSectionTitle(context, '\u8bc4\u5206'),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _loading || _selectedRating == 0
+                              ? null
+                              : () => setState(() => _selectedRating = 0),
+                          child: const Text('\u6e05\u9664\u8bc4\u5206'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withOpacity(
+                          0.45,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: List.generate(10, (index) {
+                                  final rating = index + 1;
+                                  final selected = rating <= _selectedRating;
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      right: index == 9 ? 0 : 4,
+                                    ),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(24),
+                                      onTap: _loading
+                                          ? null
+                                          : () {
+                                              setState(
+                                                () => _selectedRating = rating,
+                                              );
+                                            },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(2),
+                                        child: Icon(
+                                          selected
+                                              ? Icons.star
+                                              : Icons.star_border,
+                                          color: selected
+                                              ? Colors.amber.shade700
+                                              : colorScheme.outline,
+                                          size: 24,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _selectedRating > 0
+                                ? '\u5f53\u524d\u8bc4\u5206 $_selectedRating / 10'
+                                : '\u5f53\u524d\u672a\u8bc4\u5206',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionTitle(context, '\u8bc4\u8bba'),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        enabled: !_loading,
+                        expands: true,
+                        minLines: null,
+                        maxLines: null,
+                        maxLength: 380,
+                        textAlignVertical: TextAlignVertical.top,
+                        decoration: const InputDecoration(
+                          hintText:
+                              '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-
-            Text(
-              '评论',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _commentController,
-              enabled: !_loading,
-              minLines: 3,
-              maxLines: 5,
-              maxLength: 380,
-              decoration: const InputDecoration(
-                hintText: '写点收藏感想，可留空',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _loading ? null : () => Navigator.pop(context),
+                    child: const Text('\u53d6\u6d88'),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: _loading ? null : _saveChanges,
+                    child: _loading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('\u4fdd\u5b58'),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _loading ? null : () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: _loading ? null : _saveChanges,
-          child: _loading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('保存'),
-        ),
-      ],
     );
   }
 }
