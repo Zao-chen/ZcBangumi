@@ -8,7 +8,7 @@ class CopyableText extends StatefulWidget {
   final String text;
   final TextStyle? style;
   final TextAlign? textAlign;
-  final int maxLines;
+  final int? maxLines;
   final TextOverflow overflow;
   final bool enableLongPressCopy;
 
@@ -17,7 +17,7 @@ class CopyableText extends StatefulWidget {
     super.key,
     this.style,
     this.textAlign,
-    this.maxLines = 2147483647,
+    this.maxLines,
     this.overflow = TextOverflow.clip,
     this.enableLongPressCopy = true,
   });

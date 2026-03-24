@@ -61,6 +61,7 @@ class _SubjectPageState extends State<SubjectPage>
   bool _relatedLoading = false;
   bool _commentsLoading = false;
   bool _episodesLoading = false;
+  bool _subjectDetailLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
   _RelatedViewMode _relatedViewMode = _RelatedViewMode.list;
@@ -240,6 +241,10 @@ class _SubjectPageState extends State<SubjectPage>
       _error = null;
     });
 
+    if (mounted) {
+      setState(() => _subjectDetailLoading = true);
+    }
+
     try {
       Subject? subject;
       try {
@@ -315,6 +320,7 @@ class _SubjectPageState extends State<SubjectPage>
       if (mounted) {
         setState(() {
           _loading = false;
+          _subjectDetailLoading = false;
           _charactersLoading = false;
           _relatedLoading = false;
           _commentsLoading = false;
@@ -767,8 +773,28 @@ class _SubjectPageState extends State<SubjectPage>
   bool get _shouldLockTabSwipeForMindMap =>
       _selectedTabIndex == 2 && _relatedViewMode == _RelatedViewMode.mindMap;
 
+  String _normalizeSummary(String text) {
+    final withoutZeroWidth = text.replaceAll(
+      RegExp(r'[\u200B-\u200D\uFEFF]'),
+      '',
+    );
+    final normalizedLineBreaks = withoutZeroWidth
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
+    final collapsedBlankLines = normalizedLineBreaks.replaceAll(
+      RegExp(r'\n\s*\n\s*\n+'),
+      '\n\n',
+    );
+    return collapsedBlankLines.trim();
+  }
+
   Widget _buildOverviewTab() {
     final colorScheme = Theme.of(context).colorScheme;
+    final summaryText = _normalizeSummary(_subject!.summary);
+    final shouldShowMetaSkeleton =
+        _subjectDetailLoading &&
+        _subject!.tags.isEmpty &&
+        _subject!.infobox.isEmpty;
 
     return RefreshIndicator(
       onRefresh: _loadAllData,
@@ -816,7 +842,7 @@ class _SubjectPageState extends State<SubjectPage>
                   },
                 ),
               ),
-            if (_subject!.summary.isNotEmpty)
+            if (summaryText.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -833,14 +859,14 @@ class _SubjectPageState extends State<SubjectPage>
                     ),
                     const SizedBox(height: 8),
                     CopyableText(
-                      _subject!.summary,
+                      summaryText,
                       style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       enableLongPressCopy: false,
                     ),
                   ],
                 ),
               ),
-            if (_subject!.tags.isNotEmpty)
+            if (shouldShowMetaSkeleton)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -859,18 +885,90 @@ class _SubjectPageState extends State<SubjectPage>
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _subject!.tags.map((tag) {
-                        return CopyableChip(
-                          label: tag,
-                          labelStyle: const TextStyle(fontSize: 12),
-                          backgroundColor: colorScheme.surfaceContainerHigh,
+                      children: List.generate(6, (index) {
+                        return Container(
+                          width: 48 + (index % 3) * 16,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         );
-                      }).toList(),
+                      }),
                     ),
+                    const SizedBox(height: 18),
+                    Text(
+                      '详情',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(4, (index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 16,
+                              margin: const EdgeInsets.only(top: 2),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Container(
+                                height: index.isEven ? 16 : 34,
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '标签',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_subject!.tags.isEmpty)
+                      Text('暂无标签', style: TextStyle(color: Colors.grey[600]))
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _subject!.tags.map((tag) {
+                          return CopyableChip(
+                            label: tag,
+                            labelStyle: const TextStyle(fontSize: 12),
+                            backgroundColor: colorScheme.surfaceContainerHigh,
+                          );
+                        }).toList(),
+                      ),
                   ],
                 ),
               ),
-            if (_subject!.infobox.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -886,39 +984,43 @@ class _SubjectPageState extends State<SubjectPage>
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ...List.generate(_subject!.infobox.length, (index) {
-                      final entries = _subject!.infobox.entries.toList();
-                      final key = entries[index].key;
-                      final value = entries[index].value;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 80,
-                              child: CopyableText(
-                                key,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
+                    if (_subject!.infobox.isEmpty)
+                      Text('暂无详情', style: TextStyle(color: Colors.grey[600]))
+                    else
+                      ...List.generate(_subject!.infobox.length, (index) {
+                        final entries = _subject!.infobox.entries.toList();
+                        final key = entries[index].key;
+                        final value = entries[index].value;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 80,
+                                child: CopyableText(
+                                  key,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
                                 ),
-                                maxLines: 1,
                               ),
-                            ),
-                            Expanded(
-                              child: CopyableText(
-                                value,
-                                style: const TextStyle(fontSize: 14),
+                              Expanded(
+                                child: CopyableText(
+                                  value,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
+                            ],
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),
+            ],
             const SizedBox(height: 16),
           ],
         ),
