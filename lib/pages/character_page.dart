@@ -37,6 +37,9 @@ class _CharacterPageState extends State<CharacterPage>
   List<CharacterSubject> _characterSubjects = [];
   List<Comment> _comments = [];
   bool _loading = true;
+  bool _overviewLoading = false;
+  bool _subjectsLoading = false;
+  bool _commentsLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
   String? _error;
@@ -135,6 +138,14 @@ class _CharacterPageState extends State<CharacterPage>
 
     setState(() {
       _loading = _character == null;
+      _overviewLoading =
+          _character == null ||
+          (_character!.comment.isEmpty &&
+              _character!.summary.isEmpty &&
+              _character!.infobox.isEmpty &&
+              _character!.collects <= 0);
+      _subjectsLoading = _characterSubjects.isEmpty;
+      _commentsLoading = _comments.isEmpty;
       _error = null;
     });
 
@@ -166,12 +177,15 @@ class _CharacterPageState extends State<CharacterPage>
       setState(() {
         if (latestCharacter != null) {
           _character = latestCharacter;
+          _overviewLoading = false;
         }
         if (latestSubjects != null) {
           _characterSubjects = latestSubjects;
+          _subjectsLoading = false;
         }
         if (latestComments != null) {
           _comments = latestComments;
+          _commentsLoading = false;
         }
         _error = null;
       });
@@ -193,7 +207,12 @@ class _CharacterPageState extends State<CharacterPage>
       }
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _overviewLoading = false;
+          _subjectsLoading = false;
+          _commentsLoading = false;
+        });
       }
     }
   }
@@ -487,6 +506,14 @@ class _CharacterPageState extends State<CharacterPage>
   Widget _buildOverviewTab() {
     final character = _character!;
 
+    if (_overviewLoading &&
+        character.comment.isEmpty &&
+        character.summary.isEmpty &&
+        character.infobox.isEmpty &&
+        character.collects <= 0) {
+      return _buildOverviewSkeleton();
+    }
+
     return RefreshIndicator(
       onRefresh: () async {
         final id = _activeCharacterId;
@@ -610,6 +637,10 @@ class _CharacterPageState extends State<CharacterPage>
   }
 
   Widget _buildAppearancesTab() {
+    if (_subjectsLoading && _characterSubjects.isEmpty) {
+      return _buildAppearancesSkeletonList();
+    }
+
     if (_characterSubjects.isEmpty) {
       return RefreshIndicator(
         onRefresh: () async {
@@ -790,6 +821,10 @@ class _CharacterPageState extends State<CharacterPage>
   }
 
   Widget _buildCommentsTab() {
+    if (_commentsLoading && _comments.isEmpty) {
+      return _buildCommentsSkeletonList();
+    }
+
     if (_comments.isEmpty) {
       return RefreshIndicator(
         onRefresh: () async {
@@ -1102,6 +1137,240 @@ class _CharacterPageState extends State<CharacterPage>
               ],
             )
           : content,
+    );
+  }
+
+  Widget _buildOverviewSkeleton() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 72,
+            height: 18,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...List.generate(5, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                width: index == 4 ? 220 : double.infinity,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 18),
+          Container(
+            width: 72,
+            height: 18,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...List.generate(3, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppearancesSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 74,
+                  height: 98,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 160,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 120,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Container(
+                            width: 70,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 80,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCommentsSkeletonList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          elevation: 0,
+          color: colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: 80,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  width: 200,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
