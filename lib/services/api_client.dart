@@ -2035,6 +2035,14 @@ class ApiClient {
     );
   }
 
+  Future<UserCollection> getUserCollection({
+    required String username,
+    required int subjectId,
+  }) async {
+    final resp = await _dio.get('/v0/users/$username/collections/$subjectId');
+    return UserCollection.fromJson(resp.data as Map<String, dynamic>);
+  }
+
   String? _buildCookieHeaderForUri(Uri uri, {BangumiWebSession? session}) {
     final candidate = session ?? _webSession;
     if (candidate == null || !candidate.isValid) return null;

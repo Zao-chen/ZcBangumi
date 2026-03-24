@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:dio/dio.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -375,23 +376,23 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     try {
-      final collections = await api.getUserCollections(
+      final collection = await api.getUserCollection(
         username: authProvider.user!.username,
+        subjectId: widget.subjectId,
       );
-
-      final index = collections.data.indexWhere(
-        (c) => c.subjectId == widget.subjectId,
-      );
-
-      if (index != -1) {
+      if (mounted) {
         setState(() {
-          _userCollection = collections.data[index];
+          _userCollection = collection;
         });
-        storage.setCache(
-          _userCollectionCacheName,
-          collections.data[index].toJson(),
-        );
-      } else {
+      }
+      storage.setCache(_userCollectionCacheName, collection.toJson());
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        if (mounted) {
+          setState(() {
+            _userCollection = null;
+          });
+        }
         storage.removeCache(_userCollectionCacheName);
       }
     } catch (e) {}

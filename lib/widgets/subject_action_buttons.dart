@@ -122,6 +122,7 @@ class _UnifiedEditDialog extends StatefulWidget {
 class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
   late int _selectedType;
   late int _selectedRating;
+  late final TextEditingController _commentController;
   bool _loading = false;
 
   @override
@@ -129,6 +130,15 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     super.initState();
     _selectedType = widget.collection?.type ?? 0;
     _selectedRating = widget.collection?.rate ?? 0;
+    _commentController = TextEditingController(
+      text: widget.collection?.comment ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
   }
 
   Future<void> _saveChanges() async {
@@ -143,12 +153,15 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     setState(() => _loading = true);
     try {
       final api = context.read<ApiClient>();
+      final comment = _commentController.text.trim();
+      final existingComment = widget.collection?.comment?.trim() ?? '';
 
       // 更新收藏信息
       await api.patchCollection(
         subjectId: widget.subject.id,
         type: _selectedType,
         rate: _selectedRating > 0 ? _selectedRating : null,
+        comment: comment != existingComment ? comment : null,
       );
 
       if (mounted) {
@@ -239,6 +252,27 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                     ),
                   );
                 }),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Text(
+              '评论',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _commentController,
+              enabled: !_loading,
+              minLines: 3,
+              maxLines: 5,
+              maxLength: 380,
+              decoration: const InputDecoration(
+                hintText: '写点收藏感想，可留空',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
               ),
             ),
           ],
