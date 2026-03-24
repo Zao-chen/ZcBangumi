@@ -1,6 +1,5 @@
 ﻿import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,6 +8,7 @@ import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../pages/subject_page.dart';
 import '../services/api_client.dart';
+import '../widgets/bangumi_content_view.dart';
 
 class RakuenTopicPage extends StatefulWidget {
   final RakuenTopic topic;
@@ -1006,54 +1006,13 @@ class _PostBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        if (contentHtml?.trim().isNotEmpty == true)
-          Html(
-            data: _wrapHtml(contentHtml!),
-            style: {
-              'body': Style(
-                margin: Margins.zero,
-                padding: HtmlPaddings.zero,
-                fontSize: FontSize(contentFontSize),
-                lineHeight: LineHeight(contentHeight),
-              ),
-              'p': Style(margin: Margins.only(bottom: 6)),
-              'a': Style(
-                color: colorScheme.primary,
-                textDecoration: TextDecoration.underline,
-              ),
-              '.text_mask': Style(
-                color: colorScheme.onSurfaceVariant,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-              ),
-              '.inner': Style(
-                color: colorScheme.onSurfaceVariant,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-              ),
-            },
-            onLinkTap: (url, attributes, element) {
-              if (url == null || url.trim().isEmpty) return;
-              _openExternal(url.trim());
-            },
-          )
-        else
-          SelectableText(
-            content.isEmpty ? ' ' : content,
-            style: baseContentStyle,
-          ),
+        BangumiContentView(
+          text: content,
+          html: contentHtml,
+          style: baseContentStyle,
+        ),
       ],
     );
-  }
-
-  static String _wrapHtml(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return ' ';
-    return '<div>$trimmed</div>';
-  }
-
-  static Future<void> _openExternal(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 

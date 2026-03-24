@@ -7,6 +7,7 @@ import '../models/character.dart';
 import '../models/comment.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
+import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
 import 'subject_page.dart';
 
@@ -984,8 +985,9 @@ class _CharacterPageState extends State<CharacterPage>
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              comment.content,
+            BangumiContentView(
+              text: comment.content,
+              html: comment.contentHtml,
               style: TextStyle(color: Colors.grey[700], fontSize: 14),
             ),
             const SizedBox(height: 8),

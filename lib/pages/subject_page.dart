@@ -15,6 +15,7 @@ import '../services/api_client.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
 import '../widgets/subject_action_buttons.dart';
+import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/copyable_chip.dart';
 import 'character_page.dart';
@@ -2817,8 +2818,9 @@ class _SubjectPageState extends State<SubjectPage>
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              comment.content,
+            BangumiContentView(
+              text: comment.content,
+              html: comment.contentHtml,
               style: TextStyle(color: Colors.grey[700], fontSize: 14),
             ),
             const SizedBox(height: 8),

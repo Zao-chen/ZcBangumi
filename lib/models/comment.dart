@@ -2,6 +2,7 @@
 class Comment {
   final int id;
   final String content;
+  final String? contentHtml;
   final int rating;
   final int spoiler;
   final int state;
@@ -14,6 +15,7 @@ class Comment {
   Comment({
     required this.id,
     required this.content,
+    this.contentHtml,
     required this.rating,
     required this.spoiler,
     required this.state,
@@ -64,6 +66,7 @@ class Comment {
     return Comment(
       id: toInt(json['id']),
       content: (json['content'] as String?) ?? '',
+      contentHtml: (json['content_html'] as String?) ?? (json['contentHtml'] as String?),
       rating: toInt(json['rating']),
       spoiler: toInt(json['spoiler']),
       state: toInt(json['state']),
@@ -82,6 +85,7 @@ class Comment {
   Map<String, dynamic> toJson() => {
     'id': id,
     'content': content,
+    'content_html': contentHtml,
     'rating': rating,
     'spoiler': spoiler,
     'state': state,

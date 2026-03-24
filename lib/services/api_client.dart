@@ -549,9 +549,15 @@ class ApiClient {
 
           // 提取内容：<p class="comment">【评分】内容</p>
           final contentMatch = RegExp(
-            r'<p class="comment">([^<]*)</p>',
+            r'<p class="comment">([\s\S]*?)</p>|<div class="message(?: clearit)?">([\s\S]*?)</div>',
+            caseSensitive: false,
           ).firstMatch(itemHtml);
-          var content = contentMatch?.group(1)?.trim() ?? '';
+          final rawContentHtml =
+              contentMatch?.group(1)?.trim() ??
+              contentMatch?.group(2)?.trim() ??
+              '';
+          final normalizedContentHtml = _normalizePostHtml(rawContentHtml);
+          var content = _htmlBlockToText(rawContentHtml);
 
           // 从内容中提取评分（如果内容以【数字】开头）
           final contentRatingMatch = RegExp(
@@ -610,6 +616,9 @@ class ApiClient {
               Comment(
                 id: commentId++,
                 content: content,
+                contentHtml: normalizedContentHtml.isEmpty
+                    ? null
+                    : normalizedContentHtml,
                 rating: rating,
                 spoiler: 0,
                 state: 0,
