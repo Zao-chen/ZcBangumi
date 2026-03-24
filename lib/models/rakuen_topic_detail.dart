@@ -39,6 +39,7 @@ class RakuenPost {
   final String avatarUrl;
   final String? sign;
   final String content;
+  final String? contentHtml;
   final String? subReplyAction;
   final List<RakuenPost> subReplies;
 
@@ -51,6 +52,7 @@ class RakuenPost {
     required this.avatarUrl,
     this.sign,
     required this.content,
+    this.contentHtml,
     this.subReplyAction,
     this.subReplies = const [],
   });

@@ -1461,7 +1461,9 @@ class ApiClient {
     final contentMatch = RegExp(
       '<div class="$contentClassName[^"]*">([\\s\\S]*?)</div>',
     ).firstMatch(blockHtml);
-    final content = _htmlBlockToText(contentMatch?.group(1) ?? '');
+    final rawContentHtml = contentMatch?.group(1) ?? '';
+    final content = _htmlBlockToText(rawContentHtml);
+    final contentHtml = _normalizePostHtml(rawContentHtml);
     final subReplyActionMatch = RegExp(
       r'''onclick="(subReply\([^\"]+\))"''',
       caseSensitive: false,
@@ -1500,29 +1502,70 @@ class ApiClient {
       avatarUrl: avatarUrl,
       sign: sign.isEmpty ? null : sign,
       content: content,
+      contentHtml: contentHtml.isEmpty ? null : contentHtml,
       subReplyAction: subReplyAction?.isEmpty == true ? null : subReplyAction,
       subReplies: subReplies,
     );
   }
 
-  static String _htmlBlockToText(String html) {
+  static String _normalizePostHtml(String html) {
     if (html.isEmpty) return '';
     var value = html;
     value = value.replaceAllMapped(
-      RegExp(r'<img[^>]*alt="([^"]*)"[^>]*>'),
-      (match) => match.group(1) ?? '',
+      RegExp(
+        r'''(href|src)=("|')([^"']+)("|')''',
+        caseSensitive: false,
+      ),
+      (match) {
+        final name = match.group(1) ?? '';
+        final quote = match.group(2) ?? '"';
+        final url = _normalizeWebUrl(_decodeHtml(match.group(3) ?? ''));
+        return '$name=$quote$url$quote';
+      },
     );
+    return value.trim();
+  }
+
+  static String _htmlBlockToText(
+    String html,
+  ) {
+    if (html.isEmpty) return '';
+    var value = html;
+
+    value = value.replaceAllMapped(
+      RegExp(
+        r'<img[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>|<img[^>]*alt="([^"]*)"[^>]*src="([^"]+)"[^>]*>|<img[^>]*src="([^"]+)"[^>]*>',
+        caseSensitive: false,
+      ),
+      (match) {
+        final srcRaw =
+            match.group(1) ?? match.group(4) ?? match.group(5) ?? '';
+        final altRaw = match.group(2) ?? match.group(3) ?? '';
+        final src = _normalizeWebUrl(_decodeHtml(srcRaw));
+        final alt = _decodeHtml(altRaw).trim();
+        return alt.isNotEmpty ? alt : src;
+      },
+    );
+
     value = value.replaceAllMapped(
       RegExp(
         r'<span class="text_mask"[\s\S]*?<span class="inner">([\s\S]*?)</span>[\s\S]*?</span>',
+        caseSensitive: false,
       ),
-      (match) => _decodeHtml(_stripTags(match.group(1) ?? '')),
+      (match) {
+        final inner = _decodeHtml(_stripTags(match.group(1) ?? '')).trim();
+        return inner;
+      },
     );
+
     value = value.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
     value = value.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n\n');
     value = value.replaceAllMapped(
-      RegExp(r'<a\s+href="([^"]+)"[^>]*>([\s\S]*?)</a>'),
-      (match) => _decodeHtml(_stripTags(match.group(2) ?? '')),
+      RegExp(r'<a\s+href="([^"]+)"[^>]*>([\s\S]*?)</a>', caseSensitive: false),
+      (match) {
+        final label = _decodeHtml(_stripTags(match.group(2) ?? '')).trim();
+        return label;
+      },
     );
     value = _decodeHtml(_stripTags(value));
     value = value.replaceAll('\r', '');

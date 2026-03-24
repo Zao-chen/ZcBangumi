@@ -1,5 +1,6 @@
 ﻿import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -865,6 +866,7 @@ class _RakuenPostBlock extends StatelessWidget {
                 floorText: post.floor,
                 timeText: post.timeText,
                 content: post.content,
+                contentHtml: post.contentHtml,
                 titleFontSize: titleFontSize,
                 metaFontSize: metaFontSize,
                 contentFontSize: contentFontSize,
@@ -900,6 +902,7 @@ class _RakuenPostBlock extends StatelessWidget {
                           floorText: reply.floor,
                           timeText: reply.timeText,
                           content: reply.content,
+                          contentHtml: reply.contentHtml,
                           titleFontSize: 13,
                           metaFontSize: 10,
                           contentFontSize: 13,
@@ -925,6 +928,7 @@ class _PostBody extends StatelessWidget {
   final String floorText;
   final String timeText;
   final String content;
+  final String? contentHtml;
   final double titleFontSize;
   final double metaFontSize;
   final double contentFontSize;
@@ -937,6 +941,7 @@ class _PostBody extends StatelessWidget {
     required this.floorText,
     required this.timeText,
     required this.content,
+    this.contentHtml,
     required this.titleFontSize,
     required this.metaFontSize,
     required this.contentFontSize,
@@ -946,6 +951,10 @@ class _PostBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseContentStyle = TextStyle(
+      fontSize: contentFontSize,
+      height: contentHeight,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -997,12 +1006,53 @@ class _PostBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        SelectableText(
-          content.isEmpty ? ' ' : content,
-          style: TextStyle(fontSize: contentFontSize, height: contentHeight),
-        ),
+        if (contentHtml?.trim().isNotEmpty == true)
+          Html(
+            data: _wrapHtml(contentHtml!),
+            style: {
+              'body': Style(
+                margin: Margins.zero,
+                padding: HtmlPaddings.zero,
+                fontSize: FontSize(contentFontSize),
+                lineHeight: LineHeight(contentHeight),
+              ),
+              'p': Style(margin: Margins.only(bottom: 6)),
+              'a': Style(
+                color: colorScheme.primary,
+                textDecoration: TextDecoration.underline,
+              ),
+              '.text_mask': Style(
+                color: colorScheme.onSurfaceVariant,
+                backgroundColor: colorScheme.surfaceContainerHighest,
+              ),
+              '.inner': Style(
+                color: colorScheme.onSurfaceVariant,
+                backgroundColor: colorScheme.surfaceContainerHighest,
+              ),
+            },
+            onLinkTap: (url, attributes, element) {
+              if (url == null || url.trim().isEmpty) return;
+              _openExternal(url.trim());
+            },
+          )
+        else
+          SelectableText(
+            content.isEmpty ? ' ' : content,
+            style: baseContentStyle,
+          ),
       ],
     );
+  }
+  static String _wrapHtml(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return ' ';
+    return '<div>$trimmed</div>';
+  }
+
+  static Future<void> _openExternal(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 
