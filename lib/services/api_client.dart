@@ -393,18 +393,21 @@ class ApiClient {
     String normalizeTimestamp(dynamic value) {
       if (value == null) return '';
       if (value is int) {
-        return DateTime.fromMillisecondsSinceEpoch(value * 1000)
-            .toIso8601String();
+        return DateTime.fromMillisecondsSinceEpoch(
+          value * 1000,
+        ).toIso8601String();
       }
       if (value is num) {
-        return DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000)
-            .toIso8601String();
+        return DateTime.fromMillisecondsSinceEpoch(
+          value.toInt() * 1000,
+        ).toIso8601String();
       }
       if (value is String) {
         final asInt = int.tryParse(value);
         if (asInt != null) {
-          return DateTime.fromMillisecondsSinceEpoch(asInt * 1000)
-              .toIso8601String();
+          return DateTime.fromMillisecondsSinceEpoch(
+            asInt * 1000,
+          ).toIso8601String();
         }
         return value;
       }
