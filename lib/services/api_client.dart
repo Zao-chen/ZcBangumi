@@ -1512,10 +1512,7 @@ class ApiClient {
     if (html.isEmpty) return '';
     var value = html;
     value = value.replaceAllMapped(
-      RegExp(
-        r'''(href|src)=("|')([^"']+)("|')''',
-        caseSensitive: false,
-      ),
+      RegExp(r'''(href|src)=("|')([^"']+)("|')''', caseSensitive: false),
       (match) {
         final name = match.group(1) ?? '';
         final quote = match.group(2) ?? '"';
@@ -1526,9 +1523,7 @@ class ApiClient {
     return value.trim();
   }
 
-  static String _htmlBlockToText(
-    String html,
-  ) {
+  static String _htmlBlockToText(String html) {
     if (html.isEmpty) return '';
     var value = html;
 
@@ -1538,8 +1533,7 @@ class ApiClient {
         caseSensitive: false,
       ),
       (match) {
-        final srcRaw =
-            match.group(1) ?? match.group(4) ?? match.group(5) ?? '';
+        final srcRaw = match.group(1) ?? match.group(4) ?? match.group(5) ?? '';
         final altRaw = match.group(2) ?? match.group(3) ?? '';
         final src = _normalizeWebUrl(_decodeHtml(srcRaw));
         final alt = _decodeHtml(altRaw).trim();

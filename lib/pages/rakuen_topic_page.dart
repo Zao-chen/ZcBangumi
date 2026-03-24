@@ -1043,6 +1043,7 @@ class _PostBody extends StatelessWidget {
       ],
     );
   }
+
   static String _wrapHtml(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return ' ';
