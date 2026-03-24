@@ -31,21 +31,51 @@ class Comment {
   String get userAvatar => user['avatar'] ?? '';
 
   factory Comment.fromJson(Map<String, dynamic> json) {
+    int toInt(dynamic value, {int fallback = 0}) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? fallback;
+      return fallback;
+    }
+
+    DateTime parseDateTime(dynamic value) {
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+      }
+      if (value is num) {
+        return DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000);
+      }
+      if (value is String) {
+        final asInt = int.tryParse(value);
+        if (asInt != null) {
+          return DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
+        }
+        return DateTime.tryParse(value) ?? DateTime.now();
+      }
+      return DateTime.now();
+    }
+
+    final rawReplies = json['replies'];
+    final replyCount = rawReplies is List
+        ? rawReplies.length
+        : toInt(rawReplies);
+
+    final rawUser = json['user'];
     return Comment(
-      id: json['id'] as int,
+      id: toInt(json['id']),
       content: (json['content'] as String?) ?? '',
-      rating: (json['rating'] as int?) ?? 0,
-      spoiler: (json['spoiler'] as int?) ?? 0,
-      state: (json['state'] as int?) ?? 0,
-      createdAt:
-          DateTime.tryParse(json['created_at'] as String? ?? '') ??
-          DateTime.now(),
-      updatedAt:
-          DateTime.tryParse(json['updated_at'] as String? ?? '') ??
-          DateTime.now(),
-      user: json['user'] as Map<String, dynamic>? ?? {},
-      usable: (json['usable'] as int?) ?? 0,
-      replies: (json['replies'] as int?) ?? 0,
+      rating: toInt(json['rating']),
+      spoiler: toInt(json['spoiler']),
+      state: toInt(json['state']),
+      createdAt: parseDateTime(json['created_at'] ?? json['createdAt']),
+      updatedAt: parseDateTime(json['updated_at'] ?? json['updatedAt']),
+      user: rawUser is Map<String, dynamic>
+          ? rawUser
+          : rawUser is Map
+          ? Map<String, dynamic>.from(rawUser)
+          : {},
+      usable: toInt(json['usable']),
+      replies: replyCount,
     );
   }
 

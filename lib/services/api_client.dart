@@ -316,14 +316,36 @@ class ApiClient {
         queryParameters: {'limit': limit, 'offset': offset},
       );
       final data = resp.data;
-      if (data is Map<String, dynamic>) {
-        final total = (data['total'] as int?) ?? 0;
-        final list = (data['data'] as List<dynamic>?) ?? const [];
-        final comments = list
-            .whereType<Map<String, dynamic>>()
-            .map(_normalizeCommentPayload)
+      if (data is List) {
+        final all = data
+            .whereType<Map>()
+            .map((e) => _normalizeCommentPayload(Map<String, dynamic>.from(e)))
             .map(Comment.fromJson)
             .toList();
+        final start = offset.clamp(0, all.length);
+        final end = (offset + limit).clamp(0, all.length);
+        return PagedResult<Comment>(
+          total: all.length,
+          limit: limit,
+          offset: offset,
+          data: all.sublist(start, end),
+        );
+      }
+      if (data is Map<String, dynamic>) {
+        final list =
+            (data['data'] as List<dynamic>?) ??
+            (data['list'] as List<dynamic>?) ??
+            (data['comments'] as List<dynamic>?) ??
+            const [];
+        final comments = list
+            .whereType<Map>()
+            .map((e) => _normalizeCommentPayload(Map<String, dynamic>.from(e)))
+            .map(Comment.fromJson)
+            .toList();
+        final total =
+            (data['total'] as int?) ??
+            (data['count'] as int?) ??
+            comments.length;
         return PagedResult<Comment>(
           total: total,
           limit: limit,
@@ -367,8 +389,30 @@ class ApiClient {
     final normalized = Map<String, dynamic>.from(json);
     final createdAt = normalized['created_at'] ?? normalized['createdAt'];
     final updatedAt = normalized['updated_at'] ?? normalized['updatedAt'];
-    normalized['created_at'] = createdAt?.toString() ?? '';
-    normalized['updated_at'] = updatedAt?.toString() ?? '';
+
+    String normalizeTimestamp(dynamic value) {
+      if (value == null) return '';
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value * 1000)
+            .toIso8601String();
+      }
+      if (value is num) {
+        return DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000)
+            .toIso8601String();
+      }
+      if (value is String) {
+        final asInt = int.tryParse(value);
+        if (asInt != null) {
+          return DateTime.fromMillisecondsSinceEpoch(asInt * 1000)
+              .toIso8601String();
+        }
+        return value;
+      }
+      return value.toString();
+    }
+
+    normalized['created_at'] = normalizeTimestamp(createdAt);
+    normalized['updated_at'] = normalizeTimestamp(updatedAt);
     normalized['user'] = _normalizeCommentUser(normalized['user']);
     return normalized;
   }
