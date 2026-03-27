@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/navigation_config.dart';
+import '../models/subject_tab_config.dart';
 import '../services/storage_service.dart';
 
 /// 应用全局状态管理 Provider
@@ -13,6 +14,8 @@ class AppStateProvider extends ChangeNotifier {
     AppNavigationConfig.defaultOrder,
   );
   Set<String> _hiddenBottomNavTabIds = <String>{};
+  List<String> _subjectTabOrder = List<String>.from(SubjectTabConfig.defaultOrder);
+  Set<String> _hiddenSubjectTabIds = <String>{};
 
   // ==================== 动态页面 ====================
   int _timelineTabIndex = 0; // 0=全站, 1=好友, 2=我的
@@ -50,6 +53,11 @@ class AppStateProvider extends ChangeNotifier {
   List<String> get enabledBottomNavTabIds => _bottomNavOrder
       .where((id) => !_hiddenBottomNavTabIds.contains(id))
       .toList(growable: false);
+  List<String> get subjectTabOrder => List.unmodifiable(_subjectTabOrder);
+  Set<String> get hiddenSubjectTabIds => Set.unmodifiable(_hiddenSubjectTabIds);
+  List<String> get enabledSubjectTabIds => _subjectTabOrder
+      .where((id) => !_hiddenSubjectTabIds.contains(id))
+      .toList(growable: false);
   int get timelineTabIndex => _timelineTabIndex;
   int get rakuenTabIndex => _rakuenTabIndex;
   int get profileSubjectType => _profileSubjectType;
@@ -84,6 +92,10 @@ class AppStateProvider extends ChangeNotifier {
 
   bool isBottomNavTabVisible(String tabId) {
     return !_hiddenBottomNavTabIds.contains(tabId);
+  }
+
+  bool isSubjectTabVisible(String tabId) {
+    return !_hiddenSubjectTabIds.contains(tabId);
   }
 
   void setBottomNavOrder(List<String> order) {
@@ -140,6 +152,61 @@ class AppStateProvider extends ChangeNotifier {
     _bottomNavOrder = defaultOrder;
     _hiddenBottomNavTabIds.clear();
     _normalizeCurrentNavIndex();
+    notifyListeners();
+    _saveState();
+  }
+
+  void setSubjectTabOrder(List<String> order) {
+    final normalizedOrder = _normalizeSubjectTabOrder(order);
+    if (listEquals(_subjectTabOrder, normalizedOrder)) {
+      return;
+    }
+
+    _subjectTabOrder = normalizedOrder;
+    _hiddenSubjectTabIds.removeWhere((id) => !_subjectTabOrder.contains(id));
+    if (enabledSubjectTabIds.isEmpty) {
+      _hiddenSubjectTabIds.clear();
+    }
+    notifyListeners();
+    _saveState();
+  }
+
+  void setSubjectTabVisible(String tabId, bool visible) {
+    if (!SubjectTabConfig.allTabIds.contains(tabId)) {
+      return;
+    }
+
+    final nextHidden = Set<String>.from(_hiddenSubjectTabIds);
+    if (visible) {
+      nextHidden.remove(tabId);
+    } else {
+      final enabledCount = _subjectTabOrder
+          .where((id) => !nextHidden.contains(id))
+          .length;
+      if (enabledCount <= 1) {
+        return;
+      }
+      nextHidden.add(tabId);
+    }
+
+    if (setEquals(_hiddenSubjectTabIds, nextHidden)) {
+      return;
+    }
+
+    _hiddenSubjectTabIds = nextHidden;
+    notifyListeners();
+    _saveState();
+  }
+
+  void resetSubjectTabConfig() {
+    final defaultOrder = List<String>.from(SubjectTabConfig.defaultOrder);
+    if (listEquals(_subjectTabOrder, defaultOrder) &&
+        _hiddenSubjectTabIds.isEmpty) {
+      return;
+    }
+
+    _subjectTabOrder = defaultOrder;
+    _hiddenSubjectTabIds.clear();
     notifyListeners();
     _saveState();
   }
@@ -292,6 +359,20 @@ class AppStateProvider extends ChangeNotifier {
           _hiddenBottomNavTabIds.clear();
         }
 
+        _subjectTabOrder = _normalizeSubjectTabOrder(
+          ((data['subjectTabOrder'] as List?) ?? SubjectTabConfig.defaultOrder)
+              .map((id) => '$id')
+              .toList(growable: false),
+        );
+        _hiddenSubjectTabIds =
+            ((data['hiddenSubjectTabIds'] as List?) ?? const <dynamic>[])
+                .map((id) => '$id')
+                .where((id) => _subjectTabOrder.contains(id))
+                .toSet();
+        if (enabledSubjectTabIds.isEmpty) {
+          _hiddenSubjectTabIds.clear();
+        }
+
         final cachedNavIndex = data['currentNavIndex'] as int? ?? 0;
         _currentNavIndex = cachedNavIndex;
         _normalizeCurrentNavIndex();
@@ -332,6 +413,8 @@ class AppStateProvider extends ChangeNotifier {
         'currentNavIndex': _currentNavIndex,
         'bottomNavOrder': _bottomNavOrder,
         'hiddenBottomNavTabIds': _hiddenBottomNavTabIds.toList(),
+        'subjectTabOrder': _subjectTabOrder,
+        'hiddenSubjectTabIds': _hiddenSubjectTabIds.toList(),
         'timelineTabIndex': _timelineTabIndex,
         'rakuenTabIndex': _rakuenTabIndex,
         'profileSubjectType': _profileSubjectType,
@@ -359,6 +442,8 @@ class AppStateProvider extends ChangeNotifier {
     _currentNavIndex = 0;
     _bottomNavOrder = List<String>.from(AppNavigationConfig.defaultOrder);
     _hiddenBottomNavTabIds.clear();
+    _subjectTabOrder = List<String>.from(SubjectTabConfig.defaultOrder);
+    _hiddenSubjectTabIds.clear();
     _timelineTabIndex = 0;
     _rakuenTabIndex = 0;
     _profileSubjectType = 2;
@@ -391,6 +476,25 @@ class AppStateProvider extends ChangeNotifier {
     }
 
     for (final id in AppNavigationConfig.allTabIds) {
+      if (seen.add(id)) {
+        normalized.add(id);
+      }
+    }
+
+    return normalized;
+  }
+
+  List<String> _normalizeSubjectTabOrder(List<String> order) {
+    final seen = <String>{};
+    final normalized = <String>[];
+
+    for (final id in order) {
+      if (SubjectTabConfig.allTabIds.contains(id) && seen.add(id)) {
+        normalized.add(id);
+      }
+    }
+
+    for (final id in SubjectTabConfig.allTabIds) {
       if (seen.add(id)) {
         normalized.add(id);
       }

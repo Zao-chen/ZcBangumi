@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../models/navigation_config.dart';
+import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
@@ -193,6 +194,20 @@ class _SettingsPageState extends State<SettingsPage> {
               builder: (ctx) {
                 final appState = ctx.watch<AppStateProvider>();
                 return [_buildDefaultTabSettingsCard(ctx, appState)];
+              },
+            ),
+          ),
+          const Divider(height: 1),
+          _CategoryEntryTile(
+            icon: Icons.dashboard_customize_outlined,
+            title: '\u6761\u76ee\u9875\u6807\u7b7e',
+            subtitle: '\u6392\u5e8f\u3001\u663e\u9690\u4e0e\u6062\u590d\u9ed8\u8ba4',
+            onTap: () => _openSectionPage(
+              context,
+              title: '\u6761\u76ee\u9875\u6807\u7b7e',
+              builder: (ctx) {
+                final appState = ctx.watch<AppStateProvider>();
+                return [_buildSubjectTabSettingsCard(ctx, appState)];
               },
             ),
           ),
@@ -518,12 +533,135 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildSubjectTabSettingsCard(
+    BuildContext context,
+    AppStateProvider appState,
+  ) {
+    final order = appState.subjectTabOrder;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.dashboard_customize_outlined),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '\u6761\u76ee\u9875\u6807\u7b7e',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed:
+                      appState.hiddenSubjectTabIds.isEmpty &&
+                          _isDefaultSubjectTabOrder(order)
+                      ? null
+                      : appState.resetSubjectTabConfig,
+                  child: const Text('\u6062\u590d\u9ed8\u8ba4'),
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '\u62d6\u52a8\u53ef\u6392\u5e8f\uff0c\u53f3\u4fa7\u5f00\u5173\u53ef\u9690\u85cf\u3002\u81f3\u5c11\u4fdd\u7559 1 \u4e2a\u6807\u7b7e\u3002',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: order.length,
+              onReorder: (oldIndex, newIndex) {
+                final next = List<String>.from(order);
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final moved = next.removeAt(oldIndex);
+                next.insert(newIndex, moved);
+                appState.setSubjectTabOrder(next);
+              },
+              itemBuilder: (context, index) {
+                final tabId = order[index];
+                final tab = SubjectTabConfig.getById(tabId);
+                if (tab == null) {
+                  return const SizedBox.shrink();
+                }
+
+                final isVisible = appState.isSubjectTabVisible(tabId);
+                final enabledCount = appState.enabledSubjectTabIds.length;
+                final canToggle = !isVisible || enabledCount > 1;
+                final hiddenColor = Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant;
+
+                return ListTile(
+                  key: ValueKey('subject-tab-$tabId'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: Icon(
+                    tab.icon,
+                    color: isVisible ? null : hiddenColor,
+                  ),
+                  title: Text(
+                    tab.label,
+                    style: TextStyle(color: isVisible ? null : hiddenColor),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: isVisible,
+                        onChanged: canToggle
+                            ? (value) {
+                                appState.setSubjectTabVisible(tabId, value);
+                              }
+                            : null,
+                      ),
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Icon(
+                            Icons.drag_handle_rounded,
+                            color: isVisible ? null : hiddenColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   bool _isDefaultOrder(List<String> order) {
     if (order.length != AppNavigationConfig.defaultOrder.length) {
       return false;
     }
     for (var i = 0; i < order.length; i++) {
       if (order[i] != AppNavigationConfig.defaultOrder[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _isDefaultSubjectTabOrder(List<String> order) {
+    if (order.length != SubjectTabConfig.defaultOrder.length) {
+      return false;
+    }
+    for (var i = 0; i < order.length; i++) {
+      if (order[i] != SubjectTabConfig.defaultOrder[i]) {
         return false;
       }
     }

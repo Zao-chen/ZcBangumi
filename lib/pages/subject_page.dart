@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -11,6 +12,8 @@ import '../models/collection.dart';
 import '../models/comment.dart';
 import '../models/episode.dart';
 import '../models/subject.dart';
+import '../models/subject_tab_config.dart';
+import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
@@ -20,6 +23,7 @@ import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/copyable_chip.dart';
 import 'character_page.dart';
+import 'web_page_viewer.dart';
 
 class SubjectPage extends StatefulWidget {
   final int subjectId;
@@ -33,12 +37,10 @@ class SubjectPage extends StatefulWidget {
 
 class _SubjectPageState extends State<SubjectPage>
     with TickerProviderStateMixin {
-  static const _tabItems = [
-    _SubjectTabItem(label: '概述', icon: Icons.article_outlined),
-    _SubjectTabItem(label: '角色', icon: Icons.groups_outlined),
-    _SubjectTabItem(label: '关联', icon: Icons.link_outlined),
-    _SubjectTabItem(label: '吐槽', icon: Icons.chat_bubble_outline),
-  ];
+  static final Map<String, _SubjectTabItem> _tabItemsById = {
+    for (final tab in SubjectTabConfig.allTabs)
+      tab.id: _SubjectTabItem(label: tab.label, icon: tab.icon),
+  };
 
   late TabController _tabController;
   final ScrollController _nestedScrollController = ScrollController();
@@ -66,13 +68,14 @@ class _SubjectPageState extends State<SubjectPage>
   bool _subjectDetailLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
+  List<String> _visibleTabIds = List<String>.from(SubjectTabConfig.defaultOrder);
   _RelatedViewMode _relatedViewMode = _RelatedViewMode.list;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabItems.length, vsync: this);
+    _tabController = TabController(length: _visibleTabIds.length, vsync: this);
     _tabController.addListener(_handleTabChanged);
     _nestedScrollController.addListener(_handleHeaderCollapse);
     _restoreRelatedViewMode();
@@ -84,6 +87,12 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncSubjectTabs(Provider.of<AppStateProvider>(context));
+  }
+
+  @override
   void dispose() {
     _nestedScrollController
       ..removeListener(_handleHeaderCollapse)
@@ -92,6 +101,42 @@ class _SubjectPageState extends State<SubjectPage>
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  List<_SubjectTabItem> get _visibleTabItems => _visibleTabIds
+      .map((id) => _tabItemsById[id])
+      .whereType<_SubjectTabItem>()
+      .toList(growable: false);
+
+  String? get _selectedTabId {
+    if (_visibleTabIds.isEmpty ||
+        _selectedTabIndex < 0 ||
+        _selectedTabIndex >= _visibleTabIds.length) {
+      return null;
+    }
+    return _visibleTabIds[_selectedTabIndex];
+  }
+
+  void _syncSubjectTabs(AppStateProvider appState) {
+    final nextVisibleIds = appState.enabledSubjectTabIds;
+    if (listEquals(_visibleTabIds, nextVisibleIds) || nextVisibleIds.isEmpty) {
+      return;
+    }
+
+    final currentTabId = _selectedTabId;
+    final nextIndex = currentTabId == null ? 0 : nextVisibleIds.indexOf(currentTabId);
+    final normalizedIndex = nextIndex >= 0 ? nextIndex : 0;
+
+    _tabController.removeListener(_handleTabChanged);
+    _tabController.dispose();
+    _visibleTabIds = List<String>.from(nextVisibleIds);
+    _selectedTabIndex = normalizedIndex;
+    _tabController = TabController(
+      length: _visibleTabIds.length,
+      vsync: this,
+      initialIndex: normalizedIndex,
+    );
+    _tabController.addListener(_handleTabChanged);
   }
 
   void _handleTabChanged() {
@@ -510,6 +555,22 @@ class _SubjectPageState extends State<SubjectPage>
     }
   }
 
+  Uri? _buildMoegirlUri() {
+    final subject = _subject;
+    if (subject == null) {
+      return null;
+    }
+
+    final keyword = subject.nameCn.trim().isNotEmpty
+        ? subject.nameCn.trim()
+        : subject.name.trim();
+    if (keyword.isEmpty) {
+      return null;
+    }
+
+    return Uri.https('zh.moegirl.org.cn', '/index.php', {'search': keyword});
+  }
+
   Widget _buildSubjectSkeleton({required bool isLandscape}) {
     final colorScheme = Theme.of(context).colorScheme;
     final content = ListView.separated(
@@ -564,13 +625,10 @@ class _SubjectPageState extends State<SubjectPage>
                       bottom: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                   ),
-                  child: const TabBar(
-                    tabs: [
-                      Tab(text: '概述'),
-                      Tab(text: '角色'),
-                      Tab(text: '关联'),
-                      Tab(text: '吐槽'),
-                    ],
+                  child: TabBar(
+                    tabs: _visibleTabItems
+                        .map((tab) => Tab(text: tab.label))
+                        .toList(),
                   ),
                 ),
               ),
@@ -586,7 +644,7 @@ class _SubjectPageState extends State<SubjectPage>
                   backgroundColor: colorScheme.surface,
                   indicatorColor: colorScheme.primaryContainer,
                   labelType: NavigationRailLabelType.all,
-                  destinations: _tabItems
+                  destinations: _visibleTabItems
                       .map(
                         (tab) => NavigationRailDestination(
                           icon: Icon(tab.icon),
@@ -611,7 +669,7 @@ class _SubjectPageState extends State<SubjectPage>
     if (_loading && _subject == null) {
       return Scaffold(
         body: DefaultTabController(
-          length: _tabItems.length,
+          length: _visibleTabIds.length,
           child: _buildSubjectSkeleton(isLandscape: isLandscape),
         ),
       );
@@ -711,7 +769,7 @@ class _SubjectPageState extends State<SubjectPage>
                     ),
                     child: TabBar(
                       controller: _tabController,
-                      tabs: _tabItems
+                      tabs: _visibleTabItems
                           .map((tab) => Tab(text: tab.label))
                           .toList(),
                     ),
@@ -741,7 +799,7 @@ class _SubjectPageState extends State<SubjectPage>
             backgroundColor: colorScheme.surface,
             indicatorColor: colorScheme.primaryContainer,
             labelType: NavigationRailLabelType.all,
-            destinations: _tabItems
+            destinations: _visibleTabItems
                 .map(
                   (tab) => NavigationRailDestination(
                     icon: Icon(tab.icon),
@@ -763,17 +821,44 @@ class _SubjectPageState extends State<SubjectPage>
       physics: _shouldLockTabSwipeForMindMap
           ? const NeverScrollableScrollPhysics()
           : null,
-      children: [
-        _buildOverviewTab(),
-        _buildCharactersTab(),
-        _buildRelatedTab(),
-        _buildCommentsTab(),
-      ],
+      children: _visibleTabIds.map(_buildTabById).toList(),
     );
   }
 
+  Widget _buildTabById(String tabId) {
+    switch (tabId) {
+      case SubjectTabConfig.overviewId:
+        return _buildOverviewTab();
+      case SubjectTabConfig.charactersId:
+        return _buildCharactersTab();
+      case SubjectTabConfig.relatedId:
+        return _buildRelatedTab();
+      case SubjectTabConfig.commentsId:
+        return _buildCommentsTab();
+      case SubjectTabConfig.moegirlId:
+        return _buildMoegirlTab();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildMoegirlTab() {
+    final uri = _buildMoegirlUri();
+    if (uri == null) {
+      return Center(
+        child: Text(
+          'No subject name',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+
+    return EmbeddedWebPageView(initialUri: uri);
+  }
+
   bool get _shouldLockTabSwipeForMindMap =>
-      _selectedTabIndex == 2 && _relatedViewMode == _RelatedViewMode.mindMap;
+      _selectedTabId == SubjectTabConfig.relatedId &&
+      _relatedViewMode == _RelatedViewMode.mindMap;
 
   String _normalizeSummary(String text) {
     final withoutZeroWidth = text.replaceAll(
