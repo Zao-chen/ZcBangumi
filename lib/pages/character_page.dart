@@ -139,12 +139,7 @@ class _CharacterPageState extends State<CharacterPage>
 
     setState(() {
       _loading = _character == null;
-      _overviewLoading =
-          _character == null ||
-          (_character!.comment.isEmpty &&
-              _character!.summary.isEmpty &&
-              _character!.infobox.isEmpty &&
-              _character!.collects <= 0);
+      _overviewLoading = _character == null || _character!.infobox.isEmpty;
       _subjectsLoading = _characterSubjects.isEmpty;
       _commentsLoading = _comments.isEmpty;
       _error = null;
@@ -506,13 +501,152 @@ class _CharacterPageState extends State<CharacterPage>
 
   Widget _buildOverviewTab() {
     final character = _character!;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     if (_overviewLoading &&
         character.comment.isEmpty &&
         character.summary.isEmpty &&
         character.infobox.isEmpty &&
         character.collects <= 0) {
-      return _buildOverviewSkeleton();
+      return _buildOverviewSkeleton(isLandscape: isLandscape);
+    }
+
+    if (isLandscape) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          final id = _activeCharacterId;
+          if (id != null) {
+            await _loadAllData(id);
+          }
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_overviewLoading ||
+                  character.comment.isNotEmpty ||
+                  character.summary.isNotEmpty ||
+                  character.infobox.isNotEmpty ||
+                  character.collects > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (character.comment.isNotEmpty)
+                              _buildSection(
+                                title: '\u7b80\u4ecb',
+                                padding: EdgeInsets.zero,
+                                child: CopyableText(
+                                  character.comment,
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
+                                    height: 1.6,
+                                  ),
+                                  enableLongPressCopy: false,
+                                ),
+                              ),
+                            if (character.comment.isNotEmpty &&
+                                (character.summary.isNotEmpty ||
+                                    character.collects > 0))
+                              const SizedBox(height: 24),
+                            if (character.summary.isNotEmpty)
+                              _buildSection(
+                                title: '\u8be6\u7ec6\u63cf\u8ff0',
+                                padding: EdgeInsets.zero,
+                                child: CopyableText(
+                                  character.summary,
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
+                                    height: 1.6,
+                                  ),
+                                  enableLongPressCopy: false,
+                                ),
+                              ),
+                            if (character.summary.isNotEmpty &&
+                                character.collects > 0)
+                              const SizedBox(height: 24),
+                            if (character.collects > 0)
+                              _buildSection(
+                                title: '\u4eba\u6c14',
+                                padding: EdgeInsets.zero,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.favorite_outline,
+                                      size: 18,
+                                      color: Colors.grey[600],
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${character.collects} \u6b21\u6536\u85cf',
+                                      style: TextStyle(
+                                        color: Colors.grey[700],
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (_overviewLoading || character.infobox.isNotEmpty) ...[
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 2,
+                          child: _buildSection(
+                            title: '\u8be6\u60c5',
+                            padding: EdgeInsets.zero,
+                            child: character.infobox.isNotEmpty
+                                ? _buildInfoboxContent(character)
+                                : _buildInfoboxSkeletonContent(),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              if (character.comment.isEmpty &&
+                  character.summary.isEmpty &&
+                  character.infobox.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 120,
+                    horizontal: 16,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inbox_outlined,
+                          size: 56,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '\u6682\u65e0\u6982\u89c8\u4fe1\u606f',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -1011,9 +1145,80 @@ class _CharacterPageState extends State<CharacterPage>
     );
   }
 
-  Widget _buildSection({required String title, required Widget child}) {
+  Widget _buildInfoboxContent(Character character) {
+    return Column(
+      children: character.infobox.entries.map((entry) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 80,
+                child: CopyableText(
+                  entry.key,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+              Expanded(
+                child: CopyableText(
+                  entry.value,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildInfoboxSkeletonContent() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Column(
+      children: List.generate(4, (index) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 80,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: index.isEven ? 14 : 30,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildSection({
+    required String title,
+    required Widget child,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1142,8 +1347,119 @@ class _CharacterPageState extends State<CharacterPage>
     );
   }
 
-  Widget _buildOverviewSkeleton() {
+  Widget _buildOverviewSkeleton({required bool isLandscape}) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    if (isLandscape) {
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...List.generate(5, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        width: index == 4 ? 220 : double.infinity,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: 88,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...List.generate(4, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        width: index == 3 ? 260 : double.infinity,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...List.generate(4, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Container(
+                              height: index.isEven ? 14 : 30,
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),

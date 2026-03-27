@@ -877,11 +877,129 @@ class _SubjectPageState extends State<SubjectPage>
 
   Widget _buildOverviewTab() {
     final colorScheme = Theme.of(context).colorScheme;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final summaryText = _normalizeSummary(_subject!.summary);
     final shouldShowMetaSkeleton =
         _subjectDetailLoading &&
         _subject!.tags.isEmpty &&
         _subject!.infobox.isEmpty;
+
+    if (isLandscape) {
+      return RefreshIndicator(
+        onRefresh: _loadAllData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_episodes.isNotEmpty ||
+                  _episodesLoading ||
+                  _subject!.type == BgmConst.subjectBook ||
+                  _subject!.type == BgmConst.subjectGame)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: ProgressGrid(
+                    episodes: _episodes,
+                    loading: _episodesLoading && _episodes.isEmpty,
+                    onSetStatus: _setEpisodeStatus,
+                    onWatchUpTo: _watchUpTo,
+                    useNumberPicker: _subject!.type == BgmConst.subjectBook,
+                    useCollectionTypePicker:
+                        _subject!.type == BgmConst.subjectGame,
+                    bookCurrentProgress: _userCollection?.epStatus ?? 0,
+                    bookMaxProgress: _subject!.eps > 0 ? _subject!.eps : null,
+                    collectionSubjectType: _subject!.type,
+                    collectionType: _userCollection?.type,
+                    onSetCollectionType: (newType) async {
+                      final api = context.read<ApiClient>();
+                      try {
+                        await api.patchCollection(
+                          subjectId: widget.subjectId,
+                          type: newType,
+                        );
+                        await _loadUserCollection();
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('更新收藏状态失败: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (summaryText.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '简介',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  CopyableText(
+                                    summaryText,
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                    enableLongPressCopy: false,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          shouldShowMetaSkeleton
+                              ? _buildOverviewTagsSkeletonSection(
+                                  colorScheme,
+                                  padding: EdgeInsets.zero,
+                                )
+                              : _buildOverviewTagsSection(
+                                  colorScheme,
+                                  padding: EdgeInsets.zero,
+                                ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      flex: 2,
+                      child: shouldShowMetaSkeleton
+                          ? _buildOverviewInfoboxSkeletonSection(
+                              colorScheme,
+                              padding: EdgeInsets.zero,
+                            )
+                          : _buildOverviewInfoboxSection(
+                              padding: EdgeInsets.zero,
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _loadAllData,
@@ -1111,6 +1229,175 @@ class _SubjectPageState extends State<SubjectPage>
             const SizedBox(height: 16),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewTagsSection(
+    ColorScheme colorScheme, {
+    required EdgeInsets padding,
+  }) {
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '标签',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (_subject!.tags.isEmpty)
+            Text('暂无标签', style: TextStyle(color: Colors.grey[600]))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _subject!.tags.map((tag) {
+                return CopyableChip(
+                  label: tag,
+                  labelStyle: const TextStyle(fontSize: 12),
+                  backgroundColor: colorScheme.surfaceContainerHigh,
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewTagsSkeletonSection(
+    ColorScheme colorScheme, {
+    required EdgeInsets padding,
+  }) {
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '标签',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: List.generate(6, (index) {
+              return Container(
+                width: 48 + (index % 3) * 16,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewInfoboxSection({required EdgeInsets padding}) {
+    final entries = _subject!.infobox.entries.toList();
+
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '详情',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (entries.isEmpty)
+            Text('暂无详情', style: TextStyle(color: Colors.grey[600]))
+          else
+            ...List.generate(entries.length, (index) {
+              final key = entries[index].key;
+              final value = entries[index].value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: CopyableText(
+                        key,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                        maxLines: 1,
+                      ),
+                    ),
+                    Expanded(
+                      child: CopyableText(
+                        value,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewInfoboxSkeletonSection(
+    ColorScheme colorScheme, {
+    required EdgeInsets padding,
+  }) {
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '详情',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          ...List.generate(4, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 16,
+                    margin: const EdgeInsets.only(top: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      height: index.isEven ? 16 : 34,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
