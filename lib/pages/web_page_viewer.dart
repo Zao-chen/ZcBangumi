@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -31,7 +30,10 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
     _dio = Dio(
       BaseOptions(
         responseType: ResponseType.plain,
-        headers: const {'User-Agent': 'ZCBangumi/0.1.0 (Flutter App)'},
+        headers: const {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        },
         validateStatus: (status) =>
             status != null && status >= 200 && status < 400,
       ),
@@ -61,7 +63,8 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
   Future<void> _loadContent({Uri? requestUri}) async {
     var effectiveUri = requestUri ?? _currentUri ?? widget.initialUri;
     if (_currentUri == null &&
-        (requestUri == null || requestUri.toString() == widget.initialUri.toString())) {
+        (requestUri == null ||
+            requestUri.toString() == widget.initialUri.toString())) {
       final rememberedUri = await _getRememberedSelectionUri();
       if (rememberedUri != null) {
         effectiveUri = rememberedUri;
@@ -240,7 +243,9 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
       r'<title\b[^>]*>([\s\S]*?)</title>',
       caseSensitive: false,
     ).firstMatch(html);
-    final pageTitle = _decodeHtml(_stripTags(titleMatch?.group(1) ?? '')).trim();
+    final pageTitle = _decodeHtml(
+      _stripTags(titleMatch?.group(1) ?? ''),
+    ).trim();
     if (pageTitle.isNotEmpty) {
       return pageTitle.replaceFirst(RegExp(r'\s*[-|].*$'), '').trim();
     }
@@ -257,7 +262,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
     ).firstMatch(html);
     final article = articleMatch?.group(0);
     if (article != null && article.isNotEmpty) {
-      return _normalizeHtmlUrls(article, baseUri);
+      return _normalizeHtmlUrls(_rearrangeInfobox(article), baseUri);
     }
 
     final templateMatch = RegExp(
@@ -266,8 +271,15 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
     ).firstMatch(html);
     final templateBody = templateMatch?.group(2);
     if (templateBody != null && templateBody.trim().isNotEmpty) {
-      return _normalizeHtmlUrls(templateBody, baseUri);
+      return _normalizeHtmlUrls(_rearrangeInfobox(templateBody), baseUri);
     }
+
+    // Try to extract both sidebar and main content for better layout
+    final sidebarMatch = RegExp(
+      r"""<aside\b[^>]*\bid=(["'])mw-panel-toc\1[^>]*>([\s\S]*?)</aside>""",
+      caseSensitive: false,
+    ).firstMatch(html);
+    final sidebar = sidebarMatch?.group(0) ?? '';
 
     final contentMatch = RegExp(
       r"""<div\b[^>]*\bid=(["'])mw-content-text\1[^>]*>([\s\S]*?)</div>""",
@@ -275,10 +287,21 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
     ).firstMatch(html);
     final content = contentMatch?.group(0);
     if (content != null && content.trim().isNotEmpty) {
-      return _normalizeHtmlUrls(content, baseUri);
+      final rearranged = _rearrangeInfobox(content);
+      final withSidebar = sidebar.isNotEmpty
+          ? '<div style="display:flex;gap:20px">$sidebar<div style="flex:1">$rearranged</div></div>'
+          : rearranged;
+      return _normalizeHtmlUrls(withSidebar, baseUri);
     }
 
     return null;
+  }
+
+  /// Rearrange infobox to be right-aligned (CSS will handle float in WebView)
+  String _rearrangeInfobox(String html) {
+    // CSS in WebView will handle infobox float styling,
+    // so we just return the HTML as-is
+    return html;
   }
 
   List<_MoegirlSearchResult> _extractSearchResults(String html, Uri baseUri) {
@@ -312,9 +335,9 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
         r"""<div\b[^>]*class=(["'])[^"']*searchresult[^"']*\1[^>]*>([\s\S]*?)</div>""",
         caseSensitive: false,
       ).firstMatch(itemHtml);
-      final snippet = _decodeHtml(_stripTags(snippetMatch?.group(2) ?? ''))
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
+      final snippet = _decodeHtml(
+        _stripTags(snippetMatch?.group(2) ?? ''),
+      ).replaceAll(RegExp(r'\s+'), ' ').trim();
 
       results.add(
         _MoegirlSearchResult(
@@ -375,6 +398,173 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
         .replaceAll('&gt;', '>');
   }
 
+  String _wrapHtmlDocument(String articleHtml, BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? '#e8e6e3' : '#222222';
+    final linkColor = isDarkMode ? '#4a9eff' : '#2c5594';
+
+    return '''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      background-color: transparent;
+      color: $textColor;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    a {
+      color: $linkColor;
+      text-decoration: underline;
+    }
+    
+    body {
+      padding: 12px;
+    }
+    
+    article, #mw-content-text, .mw-body-content {
+      margin: 0;
+      padding: 0;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 12px;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+    
+    h1 { font-size: 28px; }
+    h2 { font-size: 22px; }
+    h3 { font-size: 18px; }
+    h4 { font-size: 16px; }
+    h5 { font-size: 14px; }
+    h6 { font-size: 12px; }
+    
+    p {
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+    
+    table {
+      margin: 12px 0;
+      border-collapse: collapse;
+      width: 100%;
+      background-color: transparent;
+    }
+    
+    tr, tbody, thead {
+      background-color: transparent !important;
+    }
+    
+    td, th {
+      padding: 8px;
+      border: 1px solid rgba(0,0,0,0.1);
+      background-color: transparent;
+      color: #222222;
+    }
+    
+    th {
+      font-weight: bold;
+      background-color: transparent;
+      color: #222222;
+    }
+    
+    ul, ol {
+      margin: 8px 0;
+      padding-left: 24px;
+    }
+    
+    li {
+      margin-bottom: 4px;
+    }
+    
+    blockquote {
+      margin: 12px 0;
+      padding-left: 12px;
+      border-left: 4px solid rgba(0,0,0,0.3);
+    }
+    
+    code {
+      background-color: transparent;
+      padding: 2px 4px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
+    pre {
+      background-color: transparent;
+      padding: 12px;
+      margin: 12px 0;
+      overflow-x: auto;
+      border-radius: 4px;
+    }
+    
+    img {
+      max-width: 100%;
+      height: auto;
+      margin: 8px 0;
+      display: block;
+    }
+    
+    .infobox, .moe-infobox, .infobox3 {
+      float: right;
+      clear: right;
+      margin: 0 0 12px 12px;
+      border: 1px solid rgba(0,0,0,0.1);
+      padding: 4px;
+      background-color: transparent;
+      max-width: 280px;
+      color: #222222;
+    }
+    
+    .infobox-title {
+      margin: 3px 0;
+      padding: 6px;
+      background-color: transparent;
+      color: #222222;
+      font-size: 120%;
+      font-weight: bold;
+      text-align: center;
+    }
+    
+    .infobox-image, .infobox-image-container {
+      margin: 3px 0;
+      text-align: center;
+      padding: 0;
+      color: #222222;
+    }
+    
+    .infobox-image img {
+      max-width: 100%;
+      height: auto;
+      margin: 0;
+    }
+    
+    /* Hide unnecessary elements */
+    .toc, #toc, .navbox, .catlinks, .mw-editsection,
+    .mw-footer, .printfooter, .mw-authority-control,
+    .moe-card-tool, .mobile-edit-button, .backToTop,
+    .reference-edit, .mw-jump-link, .nomobile, .noprint {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  $articleHtml
+</body>
+</html>''';
+  }
+
   @override
   bool get wantKeepAlive => true;
 
@@ -382,6 +572,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
   Widget build(BuildContext context) {
     super.build(context);
     final colorScheme = Theme.of(context).colorScheme;
+
     final body = _loading
         ? const Center(child: CircularProgressIndicator())
         : _contentHtml == null
@@ -414,71 +605,46 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
           )
         : RefreshIndicator(
             onRefresh: _loadContent,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            child: Column(
               children: [
-                if ((_title ?? '').trim().isNotEmpty) ...[
-                  Text(
-                    _title!,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                if ((_title ?? '').trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                    child: Text(
+                      _title!,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-                Html(
-                  data: _contentHtml!,
-                  style: {
-                    'html': Style(
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
+                Expanded(
+                  child: InAppWebView(
+                    initialSettings: InAppWebViewSettings(
+                      useShouldOverrideUrlLoading: true,
+                      useOnLoadResource: false,
+                      useOnRenderProcessGone: false,
+                      transparentBackground: true,
                     ),
-                    'body': Style(
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                      color: colorScheme.onSurface,
-                    ),
-                    'article': Style(
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                    ),
-                    '#mw-content-text': Style(
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                    ),
-                    '.mw-body-content': Style(
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                    ),
-                    '.toc': Style(display: Display.none),
-                    '#toc': Style(display: Display.none),
-                    '.navbox': Style(display: Display.none),
-                    '.catlinks': Style(display: Display.none),
-                    '.mw-editsection': Style(display: Display.none),
-                    '.mw-footer': Style(display: Display.none),
-                    '.printfooter': Style(display: Display.none),
-                    '.mw-authority-control': Style(display: Display.none),
-                    '.moe-card-tool': Style(display: Display.none),
-                    '.mobile-edit-button': Style(display: Display.none),
-                    '.backToTop': Style(display: Display.none),
-                    '.reference-edit': Style(display: Display.none),
-                    '.mw-jump-link': Style(display: Display.none),
-                    '.nomobile': Style(display: Display.none),
-                    '.noprint': Style(display: Display.none),
-                  },
-                  onLinkTap: (url, attributes, element) async {
-                    if (url == null || url.trim().isEmpty) {
-                      return;
-                    }
-                    final uri = Uri.tryParse(url.trim());
-                    if (uri == null) {
-                      return;
-                    }
-                    await launchUrl(
-                      uri,
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
+                    onWebViewCreated: (controller) {
+                      final htmlDoc = _wrapHtmlDocument(_contentHtml!, context);
+                      controller.loadData(
+                        data: htmlDoc,
+                        mimeType: 'text/html',
+                        encoding: 'utf-8',
+                      );
+                    },
+                    shouldOverrideUrlLoading:
+                        (controller, navigationAction) async {
+                          final url = navigationAction.request.url.toString();
+                          if (url.startsWith('http')) {
+                            await launchUrl(
+                              navigationAction.request.url!,
+                              mode: LaunchMode.externalApplication,
+                            );
+                            return NavigationActionPolicy.CANCEL;
+                          }
+                          return NavigationActionPolicy.ALLOW;
+                        },
+                  ),
                 ),
               ],
             ),
