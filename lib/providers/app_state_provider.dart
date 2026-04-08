@@ -14,7 +14,9 @@ class AppStateProvider extends ChangeNotifier {
     AppNavigationConfig.defaultOrder,
   );
   Set<String> _hiddenBottomNavTabIds = <String>{};
-  List<String> _subjectTabOrder = List<String>.from(SubjectTabConfig.defaultOrder);
+  List<String> _subjectTabOrder = List<String>.from(
+    SubjectTabConfig.defaultOrder,
+  );
   Set<String> _hiddenSubjectTabIds = <String>{};
 
   // ==================== 动态页面 ====================

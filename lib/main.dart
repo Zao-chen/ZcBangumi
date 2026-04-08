@@ -114,6 +114,81 @@ class _AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<_AppShell> {
+  final Map<String, ScrollController> _tabScrollControllers = {};
+  final Map<String, GlobalKey> _tabPageKeys = {};
+
+  ScrollController _controllerForTab(String tabId) {
+    return _tabScrollControllers.putIfAbsent(tabId, ScrollController.new);
+  }
+
+  Widget _buildScrollablePage(String tabId, Widget page) {
+    final pageKey = _tabPageKeys.putIfAbsent(tabId, GlobalKey.new);
+    return PrimaryScrollController(
+      controller: _controllerForTab(tabId),
+      child: KeyedSubtree(key: pageKey, child: page),
+    );
+  }
+
+  Future<void> _scrollTabToTop(String tabId) async {
+    final controller = _tabScrollControllers[tabId];
+    if (controller != null && controller.hasClients && controller.offset > 0) {
+      try {
+        await controller.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      } catch (_) {
+        //ignore
+      }
+    }
+
+    final pageContext = _tabPageKeys[tabId]?.currentContext;
+    if (pageContext == null) return;
+
+    final scrollables = <ScrollableState>[];
+
+    void visit(Element element) {
+      if (element is StatefulElement && element.state is ScrollableState) {
+        scrollables.add(element.state as ScrollableState);
+      }
+      element.visitChildElements(visit);
+    }
+
+    (pageContext as Element).visitChildElements(visit);
+
+    for (final scrollable in scrollables) {
+      final position = scrollable.position;
+      final direction = position.axisDirection;
+      final isVertical =
+          direction == AxisDirection.down || direction == AxisDirection.up;
+      if (!isVertical || !position.hasPixels || position.pixels <= 0) {
+        continue;
+      }
+
+      try {
+        await position.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      } catch (_) {
+        //ignore
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _tabScrollControllers.values) {
+      controller.dispose();
+    }
+    _tabScrollControllers.clear();
+    super.dispose();
+  }
+
   Widget _pageForTab(String tabId) {
     switch (tabId) {
       case AppNavTabId.timeline:
@@ -214,12 +289,13 @@ class _AppShellState extends State<_AppShell> {
           final spec = AppNavigationConfig.getById(id);
           if (spec == null) return null;
           return _ShellTab(
+            id: spec.id,
             item: NavigationItem(
               icon: spec.icon,
               selectedIcon: spec.selectedIcon,
               label: spec.label,
             ),
-            page: _pageForTab(spec.id),
+            page: _buildScrollablePage(spec.id, _pageForTab(spec.id)),
           );
         })
         .whereType<_ShellTab>()
@@ -228,12 +304,16 @@ class _AppShellState extends State<_AppShell> {
     final safeTabs = shellTabs.isEmpty
         ? [
             _ShellTab(
+              id: AppNavTabId.timeline,
               item: const NavigationItem(
                 icon: Icons.rss_feed_outlined,
                 selectedIcon: Icons.rss_feed,
                 label: '动态',
               ),
-              page: const TimelinePage(),
+              page: _buildScrollablePage(
+                AppNavTabId.timeline,
+                const TimelinePage(),
+              ),
             ),
           ]
         : shellTabs;
@@ -252,6 +332,10 @@ class _AppShellState extends State<_AppShell> {
     return ResponsiveScaffold(
       currentIndex: safeIndex,
       onIndexChanged: (i) {
+        if (i == safeIndex) {
+          _scrollTabToTop(safeTabs[i].id);
+          return;
+        }
         appState.setCurrentNavIndex(i);
       },
       items: safeTabs.map((tab) => tab.item).toList(growable: false),
@@ -261,8 +345,9 @@ class _AppShellState extends State<_AppShell> {
 }
 
 class _ShellTab {
+  final String id;
   final NavigationItem item;
   final Widget page;
 
-  const _ShellTab({required this.item, required this.page});
+  const _ShellTab({required this.id, required this.item, required this.page});
 }
