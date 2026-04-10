@@ -7,6 +7,11 @@ on:
         description: 'Release tag (e.g., v1.0.0)'
         required: true
         type: string
+      release_title:
+        description: 'Release title (optional, defaults to ZC Bangumi <tag>)'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   build:
@@ -276,6 +281,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_title != '' && github.event.inputs.release_title || format('ZC Bangumi {0}', github.event.inputs.release_tag) }}
           files: |
             artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
             artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
