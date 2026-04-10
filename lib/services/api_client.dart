@@ -831,19 +831,22 @@ class ApiClient {
   /// 用于调用 next.bgm.tv /p1/ 私有 JSON API 的 Dio 实例
   late final Dio _nextDio;
 
-  /// 获取全站时间线（通过解析 HTML，不带认证）
-  Future<List<TimelineItem>> getTimeline({int page = 1}) async {
-    final resp = await _webDio.get(
-      '/timeline',
-      queryParameters: {'type': 'all', 'page': page},
-    );
-    return _parseTimelineHtml(resp.data as String);
+  /// 获取全站时间线（next.bgm.tv /p1/timeline JSON API）
+  /// [limit] 每次获取条数，默认 20
+  /// [until] 游标分页：传入上一页最后一条的 id
+  Future<List<TimelineItem>> getTimeline({int limit = 20, int? until}) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (until != null) params['until'] = until;
+
+    final resp = await _nextDio.get('/p1/timeline', queryParameters: params);
+    final list = resp.data as List<dynamic>;
+    return TimelineItem.fromApiJsonList(list);
   }
 
   /// 获取好友时间线（通过 next.bgm.tv /p1/timeline JSON API）
   /// 使用 mode=friends 参数 + Bearer Token 认证区分好友/全站动态
   /// [limit] 每次获取条数，默认 20
-  /// [until] 游标分页：传入上一页最后一条的 createdAt 时间戳
+  /// [until] 游标分页：传入上一页最后一条的 id
   Future<List<TimelineItem>> getFriendTimeline({
     int limit = 20,
     int? until,
@@ -867,7 +870,7 @@ class ApiClient {
   /// 获取指定用户的时间线（通过 next.bgm.tv /p1/users/{username}/timeline JSON API）
   /// [username] 用户名
   /// [limit] 每次获取条数，默认 20
-  /// [until] 游标分页：传入上一页最后一条的 createdAt 时间戳
+  /// [until] 游标分页：传入上一页最后一条的 id
   /// [fallbackUser] 当 API 返回的 user 为 null 时使用的回退用户信息
   Future<List<TimelineItem>> getUserTimeline({
     required String username,

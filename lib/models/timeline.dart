@@ -1,5 +1,6 @@
 /// 时间线条目模型（从 bgm.tv HTML 解析或 /p1/timeline JSON API）
 class TimelineItem {
+  final int? id; // 动态ID（用于游标分页）
   final String username;
   final String nickname;
   final String avatarUrl;
@@ -16,6 +17,7 @@ class TimelineItem {
   final int? createdAt; // unix timestamp（用于游标分页）
 
   TimelineItem({
+    this.id,
     required this.username,
     required this.nickname,
     required this.avatarUrl,
@@ -42,25 +44,27 @@ class TimelineItem {
 
   /// 序列化为 JSON（用于本地缓存）
   Map<String, dynamic> toJson() => {
-        'username': username,
-        'nickname': nickname,
-        'avatarUrl': avatarUrl,
-        'actionText': actionText,
-        'targetText': targetText,
-        'subjectId': subjectId,
-        'subjectName': subjectName,
-        'subjectNameCn': subjectNameCn,
-        'subjectCoverUrl': subjectCoverUrl,
-        'subjectInfo': subjectInfo,
-        'score': score,
-        'rank': rank,
-        'timeText': timeText,
-        'createdAt': createdAt,
-      };
+    'id': id,
+    'username': username,
+    'nickname': nickname,
+    'avatarUrl': avatarUrl,
+    'actionText': actionText,
+    'targetText': targetText,
+    'subjectId': subjectId,
+    'subjectName': subjectName,
+    'subjectNameCn': subjectNameCn,
+    'subjectCoverUrl': subjectCoverUrl,
+    'subjectInfo': subjectInfo,
+    'score': score,
+    'rank': rank,
+    'timeText': timeText,
+    'createdAt': createdAt,
+  };
 
   /// 从缓存 JSON 反序列化
   factory TimelineItem.fromCacheJson(Map<String, dynamic> json) {
     return TimelineItem(
+      id: json['id'] as int?,
       username: json['username'] as String? ?? '',
       nickname: json['nickname'] as String? ?? '',
       avatarUrl: json['avatarUrl'] as String? ?? '',
@@ -89,10 +93,12 @@ class TimelineItem {
     final items = <TimelineItem>[];
     for (final e in list) {
       try {
-        items.add(TimelineItem._fromApiMap(
-          e as Map<String, dynamic>,
-          fallbackUser: fallbackUser,
-        ));
+        items.add(
+          TimelineItem._fromApiMap(
+            e as Map<String, dynamic>,
+            fallbackUser: fallbackUser,
+          ),
+        );
       } catch (_) {
         // 跳过解析失败的条目
       }
@@ -305,8 +311,10 @@ class TimelineItem {
           if (users != null && users.isNotEmpty) {
             actionText = '成为了好友';
             final friendNames = users
-                .map((u) =>
-                    (u as Map<String, dynamic>)['nickname'] as String? ?? '')
+                .map(
+                  (u) =>
+                      (u as Map<String, dynamic>)['nickname'] as String? ?? '',
+                )
                 .where((n) => n.isNotEmpty)
                 .take(3);
             if (friendNames.isNotEmpty) {
@@ -321,6 +329,7 @@ class TimelineItem {
     }
 
     return TimelineItem(
+      id: json['id'] as int?,
       username: username,
       nickname: nickname,
       avatarUrl: avatarUrl,
@@ -349,20 +358,20 @@ class TimelineItem {
         return subjectType == book
             ? '想读'
             : subjectType == game
-                ? '想玩'
-                : '想看';
+            ? '想玩'
+            : '想看';
       case 2:
         return subjectType == book
             ? '读过'
             : subjectType == game
-                ? '玩过'
-                : '看过';
+            ? '玩过'
+            : '看过';
       case 3:
         return subjectType == book
             ? '在读'
             : subjectType == game
-                ? '在玩'
-                : '在看';
+            ? '在玩'
+            : '在看';
       case 4:
         return '搁置了';
       case 5:
@@ -376,13 +385,17 @@ class TimelineItem {
   static void _fillSubject(
     Map<String, dynamic>? subject,
     void Function(
-            int? id, String? name, String? cn, String? cover, String? info)
-        callback,
+      int? id,
+      String? name,
+      String? cn,
+      String? cover,
+      String? info,
+    )
+    callback,
   ) {
     if (subject == null) return;
     final images = subject['images'] as Map<String, dynamic>?;
-    var coverUrl =
-        images?['common'] as String? ?? images?['small'] as String?;
+    var coverUrl = images?['common'] as String? ?? images?['small'] as String?;
     if (coverUrl != null && coverUrl.startsWith('//')) {
       coverUrl = 'https:$coverUrl';
     }

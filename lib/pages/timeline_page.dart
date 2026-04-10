@@ -31,14 +31,15 @@ class _TimelinePageState extends State<TimelinePage> {
   List<TimelineItem> _globalItems = [];
   bool _globalLoading = false;
   String? _globalError;
-  int _globalPage = 1;
+  int? _globalUntil; // 游标分页：上一页最后一条的 id
   bool _globalLoadingMore = false;
+  bool _globalHasMore = true;
 
   // ==================== 好友动态 ====================
   List<TimelineItem> _friendItems = [];
   bool _friendLoading = false;
   String? _friendError;
-  int? _friendUntil; // 游标分页：上一页最后一条的 createdAt
+  int? _friendUntil; // 游标分页：上一页最后一条的 id
   bool _friendLoadingMore = false;
   bool _friendHasMore = true;
 
@@ -46,7 +47,7 @@ class _TimelinePageState extends State<TimelinePage> {
   List<TimelineItem> _myItems = [];
   bool _myLoading = false;
   String? _myError;
-  int? _myUntil; // 游标分页
+  int? _myUntil; // 游标分页：上一页最后一条的 id
   bool _myLoadingMore = false;
   bool _myHasMore = true;
 
@@ -139,6 +140,37 @@ class _TimelinePageState extends State<TimelinePage> {
 
   StorageService get _storage => context.read<StorageService>();
 
+  String _timelineUniqueKey(TimelineItem item) {
+    if (item.id != null) return 'id:${item.id}';
+    return [
+      item.username,
+      item.createdAt?.toString() ?? '',
+      item.subjectId?.toString() ?? '',
+      item.actionText,
+      item.targetText ?? '',
+    ].join('|');
+  }
+
+  List<TimelineItem> _appendTimelineItems(
+    List<TimelineItem> base,
+    List<TimelineItem> incoming,
+  ) {
+    final merged = <TimelineItem>[...base];
+    final seen = <String>{for (final item in base) _timelineUniqueKey(item)};
+    for (final item in incoming) {
+      if (seen.add(_timelineUniqueKey(item))) {
+        merged.add(item);
+      }
+    }
+    return merged;
+  }
+
+  int? _timelineCursorOf(List<TimelineItem> items) {
+    if (items.isEmpty) return null;
+    final last = items.last;
+    return last.id ?? last.createdAt;
+  }
+
   //好友接口在无好友时偶发回落为全站流，使用“高密度+多用户”特征做兜底识别
   bool _isLikelyGlobalFallbackForFriends(List<TimelineItem> items) {
     if (items.length < 12) return false;
@@ -211,20 +243,24 @@ class _TimelinePageState extends State<TimelinePage> {
       setState(() {
         _globalLoading = _globalItems.isEmpty; // 有缓存则不显示转圈
         _globalError = null;
-        _globalPage = 1;
+        _globalUntil = null;
+        _globalHasMore = true;
       });
     }
 
     final api = context.read<ApiClient>();
     try {
-      final items = await api.getTimeline(page: _globalPage);
+      final items = await api.getTimeline(limit: 20, until: _globalUntil);
+      final previousItems = _globalItems;
+      final mergedItems = refresh
+          ? items
+          : _appendTimelineItems(previousItems, items);
+      final appendedCount = mergedItems.length - previousItems.length;
       setState(() {
-        if (refresh) {
-          _globalItems = items;
-        } else {
-          _globalItems = [..._globalItems, ...items];
-        }
+        _globalItems = mergedItems;
         _globalError = null;
+        _globalHasMore = items.isNotEmpty && (refresh || appendedCount > 0);
+        _globalUntil = _timelineCursorOf(mergedItems);
       });
       // 缓存第一页
       if (refresh) {
@@ -249,9 +285,8 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   Future<void> _loadMoreGlobal() async {
-    if (_globalLoadingMore) return;
+    if (_globalLoadingMore || !_globalHasMore) return;
     setState(() => _globalLoadingMore = true);
-    _globalPage++;
     await _loadGlobal(refresh: false);
   }
 
@@ -290,6 +325,11 @@ class _TimelinePageState extends State<TimelinePage> {
       final items = await api.getFriendTimeline(limit: 20, until: _friendUntil);
       final fallbackToGlobal =
           refresh && _isLikelyGlobalFallbackForFriends(items);
+      final previousItems = _friendItems;
+      final mergedItems = refresh
+          ? items
+          : _appendTimelineItems(previousItems, items);
+      final appendedCount = mergedItems.length - previousItems.length;
       setState(() {
         if (fallbackToGlobal) {
           _hideFriendsTab = true;
@@ -305,17 +345,11 @@ class _TimelinePageState extends State<TimelinePage> {
           }
           return;
         }
-        if (refresh) {
-          _friendItems = items;
-        } else {
-          _friendItems = [..._friendItems, ...items];
-        }
+        _friendItems = mergedItems;
         _hideFriendsTab = false;
         _friendError = null;
-        _friendHasMore = items.isNotEmpty;
-        if (items.isNotEmpty && items.last.createdAt != null) {
-          _friendUntil = items.last.createdAt;
-        }
+        _friendHasMore = items.isNotEmpty && (refresh || appendedCount > 0);
+        _friendUntil = _timelineCursorOf(mergedItems);
       });
       if (refresh) {
         if (fallbackToGlobal) {
@@ -393,17 +427,16 @@ class _TimelinePageState extends State<TimelinePage> {
           },
         },
       );
+      final previousItems = _myItems;
+      final mergedItems = refresh
+          ? items
+          : _appendTimelineItems(previousItems, items);
+      final appendedCount = mergedItems.length - previousItems.length;
       setState(() {
-        if (refresh) {
-          _myItems = items;
-        } else {
-          _myItems = [..._myItems, ...items];
-        }
+        _myItems = mergedItems;
         _myError = null;
-        _myHasMore = items.isNotEmpty;
-        if (items.isNotEmpty && items.last.createdAt != null) {
-          _myUntil = items.last.createdAt;
-        }
+        _myHasMore = items.isNotEmpty && (refresh || appendedCount > 0);
+        _myUntil = _timelineCursorOf(mergedItems);
       });
       if (refresh) {
         _storage.setCache(
@@ -511,7 +544,7 @@ class _TimelinePageState extends State<TimelinePage> {
           error: _globalError,
           loadingMore: _globalLoadingMore,
           onRefresh: _loadGlobal,
-          onLoadMore: _loadMoreGlobal,
+          onLoadMore: _globalHasMore ? _loadMoreGlobal : null,
           requireLogin: false,
         );
       case _TimelineTab.friends:
@@ -522,7 +555,7 @@ class _TimelinePageState extends State<TimelinePage> {
             error: _globalError,
             loadingMore: _globalLoadingMore,
             onRefresh: _loadGlobal,
-            onLoadMore: _loadMoreGlobal,
+            onLoadMore: _globalHasMore ? _loadMoreGlobal : null,
             requireLogin: false,
           );
         }
@@ -532,7 +565,7 @@ class _TimelinePageState extends State<TimelinePage> {
           error: _friendError,
           loadingMore: _friendLoadingMore,
           onRefresh: () => _loadFriends(),
-          onLoadMore: _loadMoreFriends,
+          onLoadMore: _friendHasMore ? _loadMoreFriends : null,
           requireLogin: true,
           emptyText: '暂无好友动态',
         );
@@ -543,7 +576,7 @@ class _TimelinePageState extends State<TimelinePage> {
           error: _myError,
           loadingMore: _myLoadingMore,
           onRefresh: () => _loadMine(),
-          onLoadMore: _loadMoreMine,
+          onLoadMore: _myHasMore ? _loadMoreMine : null,
           requireLogin: true,
           emptyText: '暂无我的动态',
         );
