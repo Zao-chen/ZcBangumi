@@ -100,7 +100,7 @@ class UpdateService {
       final packageInfo = await getCurrentVersion();
       final currentVersion = packageInfo.version;
       final apiUrl =
-          'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
+          'https://api.github.com/repos/$githubOwner/$githubRepo/releases?per_page=100';
 
       final response = await _updateDio.get(
         apiUrl,
@@ -119,18 +119,40 @@ class UpdateService {
         );
       }
 
-      final release = response.data as Map<String, dynamic>;
-      final isPrerelease = (release['prerelease'] as bool?) ?? false;
-      if (!allowPrerelease && isPrerelease) {
+      final releases = (response.data as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      if (releases.isEmpty) {
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.noReleaseFound,
+          message: '未找到可用 Release（仅有 Tag 时无法检查更新）',
+        );
+      }
+
+      final eligibleReleases = releases.where((release) {
+        final isDraft = (release['draft'] as bool?) ?? false;
+        if (isDraft) {
+          return false;
+        }
+        final isPrerelease = (release['prerelease'] as bool?) ?? false;
+        if (!allowPrerelease && isPrerelease) {
+          return false;
+        }
+        final version = _versionFromTag((release['tag_name'] as String?) ?? '');
+        return version.isNotEmpty;
+      }).toList();
+      if (eligibleReleases.isEmpty) {
         return UpdateCheckResult(
-          status: UpdateCheckStatus.upToDate,
-          message: '已是最新稳定版本',
+          status: UpdateCheckStatus.noReleaseFound,
+          message: allowPrerelease ? '未找到可用 Release' : '未找到可用稳定版 Release',
           currentVersion: currentVersion,
         );
       }
 
-      final tagName = (release['tag_name'] as String?)?.trim() ?? '';
-      final latestVersion = tagName.replaceFirst(RegExp(r'^[vV]'), '');
+      final latestRelease = eligibleReleases.first;
+
+      final latestVersion =
+          _versionFromTag((latestRelease['tag_name'] as String?) ?? '');
 
       if (latestVersion.isEmpty) {
         return const UpdateCheckResult(
@@ -168,7 +190,7 @@ class UpdateService {
         );
       }
 
-      final assets = (release['assets'] as List<dynamic>? ?? [])
+      final assets = (latestRelease['assets'] as List<dynamic>? ?? [])
           .whereType<Map<String, dynamic>>()
           .toList();
 
@@ -193,11 +215,22 @@ class UpdateService {
         );
       }
 
+      final pendingReleases = eligibleReleases.where((release) {
+        final version = _versionFromTag((release['tag_name'] as String?) ?? '');
+        if (version.isEmpty) {
+          return false;
+        }
+        return compareVersion(currentVersion, version) < 0 &&
+            compareVersion(version, latestVersion) <= 0;
+      }).toList();
+
+      final combinedChangelog = _buildCombinedChangelog(pendingReleases);
+
       final updateInfo = UpdateInfo(
         version: latestVersion,
         versionCode: '',
         downloadUrl: downloadUrl,
-        changelog: (release['body'] as String?)?.trim() ?? '',
+        changelog: combinedChangelog,
         forceUpdate: false,
         fileSize: (packageAsset['size'] as num?)?.toInt() ?? 0,
       );
@@ -280,6 +313,29 @@ class UpdateService {
     }
 
     return result;
+  }
+
+  String _versionFromTag(String tag) {
+    return tag.trim().replaceFirst(RegExp(r'^[vV]'), '');
+  }
+
+  String _buildCombinedChangelog(List<Map<String, dynamic>> releases) {
+    if (releases.isEmpty) {
+      return '';
+    }
+
+    final sections = <String>[];
+    for (final release in releases) {
+      final version = _versionFromTag((release['tag_name'] as String?) ?? '');
+      if (version.isEmpty) {
+        continue;
+      }
+      final body = (release['body'] as String?)?.trim();
+      final content = (body == null || body.isEmpty) ? '暂无更新说明' : body;
+      sections.add('## v$version\n\n$content');
+    }
+
+    return sections.join('\n\n---\n\n');
   }
 
   /// 请求安装权限
