@@ -161,12 +161,13 @@ class _TimelinePageState extends State<TimelinePage> {
     if (topUserRatio > 0.2) return false;
 
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final createdAtList = items
-        .map((e) => e.createdAt)
-        .whereType<int>()
-        .where((ts) => ts > 0 && ts <= now)
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+    final createdAtList =
+        items
+            .map((e) => e.createdAt)
+            .whereType<int>()
+            .where((ts) => ts > 0 && ts <= now)
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
 
     if (createdAtList.length < 10) return false;
 
@@ -287,7 +288,8 @@ class _TimelinePageState extends State<TimelinePage> {
     final api = context.read<ApiClient>();
     try {
       final items = await api.getFriendTimeline(limit: 20, until: _friendUntil);
-      final fallbackToGlobal = refresh && _isLikelyGlobalFallbackForFriends(items);
+      final fallbackToGlobal =
+          refresh && _isLikelyGlobalFallbackForFriends(items);
       setState(() {
         if (fallbackToGlobal) {
           _hideFriendsTab = true;
