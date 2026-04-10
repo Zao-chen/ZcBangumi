@@ -204,6 +204,7 @@ class _RakuenPageState extends State<RakuenPage>
             : TabBar(
                 controller: _tabController,
                 isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 tabs: _tabs.map((tab) => Tab(text: tab.label)).toList(),
               ),
       ),
