@@ -25,6 +25,7 @@ class _TimelinePageState extends State<TimelinePage> {
   _TimelineTab _currentTab = _TimelineTab.global;
   AuthProvider? _authProvider;
   bool _wasLoggedIn = false;
+  bool _hideFriendsTab = false;
 
   // ==================== 全站动态 ====================
   List<TimelineItem> _globalItems = [];
@@ -56,6 +57,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final appState = context.read<AppStateProvider>();
     _currentTab = _TimelineTab.values[appState.initialTimelineTabIndex];
     _ensureLoadedForTab(_currentTab);
+    _precheckFriendsTimelineFallback();
   }
 
   @override
@@ -86,6 +88,14 @@ class _TimelinePageState extends State<TimelinePage> {
 
     if (!becameLoggedIn || !mounted) return;
     _ensureLoadedForTab(_currentTab);
+    _precheckFriendsTimelineFallback();
+  }
+
+  //进入页面后立即后台预检好友流，避免用户点到好友标签后才发现是全站回落
+  void _precheckFriendsTimelineFallback() {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn || _friendLoading) return;
+    _loadFriends(refresh: true, forceNetwork: true);
   }
 
   void _ensureLoadedForTab(_TimelineTab tab) {
@@ -128,6 +138,57 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   StorageService get _storage => context.read<StorageService>();
+
+  //好友接口在无好友时偶发回落为全站流，使用“高密度+多用户”特征做兜底识别
+  bool _isLikelyGlobalFallbackForFriends(List<TimelineItem> items) {
+    if (items.length < 12) return false;
+
+    final userCounts = <String, int>{};
+    for (final item in items) {
+      final key = item.username.trim();
+      if (key.isEmpty) continue;
+      userCounts[key] = (userCounts[key] ?? 0) + 1;
+    }
+
+    final uniqueUserCount = userCounts.length;
+    if (uniqueUserCount < 10) return false;
+
+    final topUserCount = userCounts.values.fold<int>(
+      0,
+      (maxCount, count) => count > maxCount ? count : maxCount,
+    );
+    final topUserRatio = topUserCount / items.length;
+    if (topUserRatio > 0.2) return false;
+
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final createdAtList = items
+        .map((e) => e.createdAt)
+        .whereType<int>()
+        .where((ts) => ts > 0 && ts <= now)
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    if (createdAtList.length < 10) return false;
+
+    final recentCount = createdAtList
+        .where((ts) => now - ts <= const Duration(hours: 3).inSeconds)
+        .length;
+    if (recentCount < 9) return false;
+
+    final gapSamples = <int>[];
+    final sampleEnd = createdAtList.length > 12 ? 12 : createdAtList.length;
+    for (var i = 0; i < sampleEnd - 1; i++) {
+      final gap = createdAtList[i] - createdAtList[i + 1];
+      if (gap >= 0) {
+        gapSamples.add(gap);
+      }
+    }
+    if (gapSamples.length < 8) return false;
+
+    final avgGapSeconds =
+        gapSamples.reduce((a, b) => a + b) / gapSamples.length;
+    return avgGapSeconds <= const Duration(minutes: 8).inSeconds;
+  }
 
   Future<void> _loadGlobal({
     bool refresh = true,
@@ -226,12 +287,28 @@ class _TimelinePageState extends State<TimelinePage> {
     final api = context.read<ApiClient>();
     try {
       final items = await api.getFriendTimeline(limit: 20, until: _friendUntil);
+      final fallbackToGlobal = refresh && _isLikelyGlobalFallbackForFriends(items);
       setState(() {
+        if (fallbackToGlobal) {
+          _hideFriendsTab = true;
+          _friendItems = [];
+          _friendError = null;
+          _friendUntil = null;
+          _friendHasMore = false;
+          if (_currentTab == _TimelineTab.friends) {
+            _currentTab = _TimelineTab.global;
+            context.read<AppStateProvider>().setTimelineTabIndex(
+              _TimelineTab.global.index,
+            );
+          }
+          return;
+        }
         if (refresh) {
           _friendItems = items;
         } else {
           _friendItems = [..._friendItems, ...items];
         }
+        _hideFriendsTab = false;
         _friendError = null;
         _friendHasMore = items.isNotEmpty;
         if (items.isNotEmpty && items.last.createdAt != null) {
@@ -239,6 +316,10 @@ class _TimelinePageState extends State<TimelinePage> {
         }
       });
       if (refresh) {
+        if (fallbackToGlobal) {
+          _storage.setCache('timeline_friends', []);
+          return;
+        }
         _storage.setCache(
           'timeline_friends',
           items.map((e) => e.toJson()).toList(),
@@ -380,6 +461,13 @@ class _TimelinePageState extends State<TimelinePage> {
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
+    final tabSegments = <ButtonSegment<_TimelineTab>>[
+      const ButtonSegment(value: _TimelineTab.global, label: Text('全站')),
+      if (!_hideFriendsTab)
+        const ButtonSegment(value: _TimelineTab.friends, label: Text('好友')),
+      const ButtonSegment(value: _TimelineTab.mine, label: Text('我的')),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('动态'),
@@ -394,11 +482,7 @@ class _TimelinePageState extends State<TimelinePage> {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: SegmentedButton<_TimelineTab>(
-              segments: const [
-                ButtonSegment(value: _TimelineTab.global, label: Text('全站')),
-                ButtonSegment(value: _TimelineTab.friends, label: Text('好友')),
-                ButtonSegment(value: _TimelineTab.mine, label: Text('我的')),
-              ],
+              segments: tabSegments,
               selected: {_currentTab},
               onSelectionChanged: (val) => _onTabChanged(val.first),
               style: ButtonStyle(
@@ -429,6 +513,17 @@ class _TimelinePageState extends State<TimelinePage> {
           requireLogin: false,
         );
       case _TimelineTab.friends:
+        if (_hideFriendsTab) {
+          return _buildTimelineList(
+            items: _globalItems,
+            loading: _globalLoading,
+            error: _globalError,
+            loadingMore: _globalLoadingMore,
+            onRefresh: _loadGlobal,
+            onLoadMore: _loadMoreGlobal,
+            requireLogin: false,
+          );
+        }
         return _buildTimelineList(
           items: _friendItems,
           loading: _friendLoading,
