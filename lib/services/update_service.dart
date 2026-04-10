@@ -151,8 +151,9 @@ class UpdateService {
 
       final latestRelease = eligibleReleases.first;
 
-      final latestVersion =
-          _versionFromTag((latestRelease['tag_name'] as String?) ?? '');
+      final latestVersion = _versionFromTag(
+        (latestRelease['tag_name'] as String?) ?? '',
+      );
 
       if (latestVersion.isEmpty) {
         return const UpdateCheckResult(
