@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/episode.dart';
 import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
+import '../pages/profile_page.dart';
 import '../pages/subject_page.dart';
 import '../services/api_client.dart';
 import '../widgets/bangumi_content_view.dart';
@@ -851,16 +852,22 @@ class _RakuenPostBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final onMainUserTap = () =>
+        _openUserPage(context, post.username, post.nickname);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Avatar(url: post.avatarUrl, size: avatarSize),
+            GestureDetector(
+              onTap: onMainUserTap,
+              child: _Avatar(url: post.avatarUrl, size: avatarSize),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: _PostBody(
+                username: post.username,
                 nickname: post.nickname,
                 sign: post.sign,
                 floorText: post.floor,
@@ -872,6 +879,7 @@ class _RakuenPostBlock extends StatelessWidget {
                 contentFontSize: contentFontSize,
                 contentHeight: contentHeight,
                 colorScheme: colorScheme,
+                onUserTap: onMainUserTap,
               ),
             ),
           ],
@@ -882,6 +890,8 @@ class _RakuenPostBlock extends StatelessWidget {
             padding: EdgeInsets.only(left: avatarSize + 12),
             child: Column(
               children: post.subReplies.map((reply) {
+                final onReplyUserTap = () =>
+                    _openUserPage(context, reply.username, reply.nickname);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(10),
@@ -893,10 +903,14 @@ class _RakuenPostBlock extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _Avatar(url: reply.avatarUrl, size: 32),
+                      GestureDetector(
+                        onTap: onReplyUserTap,
+                        child: _Avatar(url: reply.avatarUrl, size: 32),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _PostBody(
+                          username: reply.username,
                           nickname: reply.nickname,
                           sign: reply.sign,
                           floorText: reply.floor,
@@ -908,6 +922,7 @@ class _RakuenPostBlock extends StatelessWidget {
                           contentFontSize: 13,
                           contentHeight: 1.4,
                           colorScheme: colorScheme,
+                          onUserTap: onReplyUserTap,
                         ),
                       ),
                     ],
@@ -920,9 +935,21 @@ class _RakuenPostBlock extends StatelessWidget {
       ],
     );
   }
+
+  void _openUserPage(BuildContext context, String username, String nickname) {
+    final safeUsername = username.trim();
+    if (safeUsername.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            OtherUserProfilePage(username: safeUsername, displayName: nickname),
+      ),
+    );
+  }
 }
 
 class _PostBody extends StatelessWidget {
+  final String username;
   final String nickname;
   final String? sign;
   final String floorText;
@@ -934,8 +961,10 @@ class _PostBody extends StatelessWidget {
   final double contentFontSize;
   final double contentHeight;
   final ColorScheme colorScheme;
+  final VoidCallback onUserTap;
 
   const _PostBody({
+    required this.username,
     required this.nickname,
     required this.sign,
     required this.floorText,
@@ -947,6 +976,7 @@ class _PostBody extends StatelessWidget {
     required this.contentFontSize,
     required this.contentHeight,
     required this.colorScheme,
+    required this.onUserTap,
   });
 
   @override
@@ -962,31 +992,35 @@ class _PostBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: RichText(
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                text: TextSpan(
-                  style: DefaultTextStyle.of(context).style,
-                  children: [
-                    TextSpan(
-                      text: nickname,
-                      style: TextStyle(
-                        fontSize: titleFontSize,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (sign?.isNotEmpty == true)
+              child: GestureDetector(
+                onTap: username.trim().isEmpty ? null : onUserTap,
+                child: RichText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: DefaultTextStyle.of(context).style,
+                    children: [
                       TextSpan(
-                        text: ' ($sign)',
+                        text: nickname,
                         style: TextStyle(
-                          fontSize: metaFontSize,
-                          fontWeight: FontWeight.w400,
-                          color: colorScheme.onSurfaceVariant.withValues(
-                            alpha: 0.72,
-                          ),
+                          fontSize: titleFontSize,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.primary,
                         ),
                       ),
-                  ],
+                      if (sign?.isNotEmpty == true)
+                        TextSpan(
+                          text: ' ($sign)',
+                          style: TextStyle(
+                            fontSize: metaFontSize,
+                            fontWeight: FontWeight.w400,
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.72,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1065,7 +1099,7 @@ class _Avatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.25),
+      borderRadius: BorderRadius.circular(size * 0.24),
       child: SizedBox(
         width: size,
         height: size,

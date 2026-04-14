@@ -229,7 +229,11 @@ class _ProfilePageState extends State<ProfilePage> {
             isLandscape: isLandscape,
           )
         : auth.isLoggedIn
-        ? _ProfileContent(user: auth.user!)
+        ? _ProfileContent(
+            user: auth.user!,
+            collectionTitle: '我的收藏',
+            persistViewState: true,
+          )
         : const _LoginView();
 
     return Scaffold(
@@ -376,7 +380,7 @@ class _ProfilePageState extends State<ProfilePage> {
               height: 48,
               decoration: BoxDecoration(
                 color: colorScheme.surfaceContainerHighest,
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             const SizedBox(width: 12),
@@ -566,6 +570,103 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
+class OtherUserProfilePage extends StatefulWidget {
+  final String username;
+  final String? displayName;
+
+  const OtherUserProfilePage({
+    super.key,
+    required this.username,
+    this.displayName,
+  });
+
+  @override
+  State<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
+}
+
+class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
+  BangumiUser? _user;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final api = context.read<ApiClient>();
+      final user = await api.getUser(widget.username);
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '加载用户信息失败: $e';
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.displayName?.trim().isNotEmpty == true
+        ? widget.displayName!.trim()
+        : '@${widget.username}';
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 42),
+              const SizedBox(height: 10),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 14),
+              FilledButton.tonal(onPressed: _loadUser, child: const Text('重试')),
+            ],
+          ),
+        ),
+      );
+    }
+    final user = _user;
+    if (user == null) {
+      return const SizedBox.shrink();
+    }
+    final title = user.nickname.trim().isNotEmpty
+        ? '${user.nickname}的收藏'
+        : 'TA的收藏';
+    return _ProfileContent(
+      user: user,
+      collectionTitle: title,
+      persistViewState: false,
+    );
+  }
+}
+
 class _LoginView extends StatefulWidget {
   const _LoginView();
 
@@ -733,7 +834,14 @@ class _LoginViewState extends State<_LoginView> {
 
 class _ProfileContent extends StatefulWidget {
   final BangumiUser user;
-  const _ProfileContent({required this.user});
+  final String collectionTitle;
+  final bool persistViewState;
+
+  const _ProfileContent({
+    required this.user,
+    this.collectionTitle = '我的收藏',
+    this.persistViewState = true,
+  });
 
   @override
   State<_ProfileContent> createState() => _ProfileContentState();
@@ -851,7 +959,9 @@ class _ProfileContentState extends State<_ProfileContent> {
       _items = [];
       _total = 0;
     });
-    context.read<AppStateProvider>().setProfileSubjectType(type);
+    if (widget.persistViewState) {
+      context.read<AppStateProvider>().setProfileSubjectType(type);
+    }
     _loadData();
   }
 
@@ -862,14 +972,18 @@ class _ProfileContentState extends State<_ProfileContent> {
       _items = [];
       _total = 0;
     });
-    context.read<AppStateProvider>().setProfileCollectionType(type);
+    if (widget.persistViewState) {
+      context.read<AppStateProvider>().setProfileCollectionType(type);
+    }
     _loadData();
   }
 
   void _switchSort(_SortMode mode) {
     if (_sortMode == mode) return;
     setState(() => _sortMode = mode);
-    context.read<AppStateProvider>().setProfileSortMode(mode.index);
+    if (widget.persistViewState) {
+      context.read<AppStateProvider>().setProfileSortMode(mode.index);
+    }
 
     if (mode != _SortMode.updatedAt && _items.length < _total) {
       _loadAllRemaining();
@@ -964,7 +1078,7 @@ class _ProfileContentState extends State<_ProfileContent> {
               _buildUserCard(colorScheme),
               const SizedBox(height: 20),
               Text(
-                '我的收藏',
+                widget.collectionTitle,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1034,7 +1148,7 @@ class _ProfileContentState extends State<_ProfileContent> {
             _buildUserCard(colorScheme),
             const SizedBox(height: 20),
             Text(
-              '我的收藏',
+              widget.collectionTitle,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -1061,7 +1175,7 @@ class _ProfileContentState extends State<_ProfileContent> {
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(12),
               child: SizedBox(
                 width: 48,
                 height: 48,

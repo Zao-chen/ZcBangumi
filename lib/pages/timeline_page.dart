@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/timeline.dart';
 import '../constants.dart';
+import '../pages/profile_page.dart';
 import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/app_state_provider.dart';
@@ -760,11 +760,11 @@ class _TimelineFeedItem extends StatelessWidget {
         children: [
           // 左侧头像
           GestureDetector(
-            onTap: () => _openUserPage(item.username),
+            onTap: () => _openUserPage(context, item.username, item.nickname),
             child: Padding(
               padding: const EdgeInsets.only(top: 2),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(10),
                 child: SizedBox(
                   width: 40,
                   height: 40,
@@ -823,7 +823,7 @@ class _TimelineFeedItem extends StatelessWidget {
       spacing: 0,
       children: [
         GestureDetector(
-          onTap: () => _openUserPage(item.username),
+          onTap: () => _openUserPage(context, item.username, item.nickname),
           child: Text(
             item.nickname,
             style: TextStyle(
@@ -976,11 +976,13 @@ class _TimelineFeedItem extends StatelessWidget {
     );
   }
 
-  void _openUserPage(String username) async {
-    final uri = Uri.parse('${BgmConst.webBaseUrl}/user/$username');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  void _openUserPage(BuildContext context, String username, String nickname) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            OtherUserProfilePage(username: username, displayName: nickname),
+      ),
+    );
   }
 
   void _openSubjectPage(BuildContext context, int subjectId) {
