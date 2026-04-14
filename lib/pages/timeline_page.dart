@@ -979,10 +979,8 @@ class _TimelineFeedItem extends StatelessWidget {
   void _openUserPage(BuildContext context, String username, String nickname) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => OtherUserProfilePage(
-          username: username,
-          displayName: nickname,
-        ),
+        builder: (_) =>
+            OtherUserProfilePage(username: username, displayName: nickname),
       ),
     );
   }

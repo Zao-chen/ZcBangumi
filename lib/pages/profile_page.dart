@@ -646,10 +646,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
               const SizedBox(height: 10),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 14),
-              FilledButton.tonal(
-                onPressed: _loadUser,
-                child: const Text('重试'),
-              ),
+              FilledButton.tonal(onPressed: _loadUser, child: const Text('重试')),
             ],
           ),
         ),
@@ -659,7 +656,9 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
     if (user == null) {
       return const SizedBox.shrink();
     }
-    final title = user.nickname.trim().isNotEmpty ? '${user.nickname}的收藏' : 'TA的收藏';
+    final title = user.nickname.trim().isNotEmpty
+        ? '${user.nickname}的收藏'
+        : 'TA的收藏';
     return _ProfileContent(
       user: user,
       collectionTitle: title,

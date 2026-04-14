@@ -852,8 +852,8 @@ class _RakuenPostBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final onMainUserTap =
-        () => _openUserPage(context, post.username, post.nickname);
+    final onMainUserTap = () =>
+        _openUserPage(context, post.username, post.nickname);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -890,8 +890,8 @@ class _RakuenPostBlock extends StatelessWidget {
             padding: EdgeInsets.only(left: avatarSize + 12),
             child: Column(
               children: post.subReplies.map((reply) {
-                final onReplyUserTap =
-                    () => _openUserPage(context, reply.username, reply.nickname);
+                final onReplyUserTap = () =>
+                    _openUserPage(context, reply.username, reply.nickname);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(10),
@@ -941,10 +941,8 @@ class _RakuenPostBlock extends StatelessWidget {
     if (safeUsername.isEmpty) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => OtherUserProfilePage(
-          username: safeUsername,
-          displayName: nickname,
-        ),
+        builder: (_) =>
+            OtherUserProfilePage(username: safeUsername, displayName: nickname),
       ),
     );
   }
