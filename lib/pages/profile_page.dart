@@ -571,14 +571,16 @@ class _ProfilePageState extends State<ProfilePage> {
 }
 
 class OtherUserProfilePage extends StatefulWidget {
-  final String username;
+  final String? username;
+  final int? userId;
   final String? displayName;
 
   const OtherUserProfilePage({
     super.key,
-    required this.username,
+    this.username,
+    this.userId,
     this.displayName,
-  });
+  }) : assert(username != null || userId != null);
 
   @override
   State<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
@@ -602,7 +604,9 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
     });
     try {
       final api = context.read<ApiClient>();
-      final user = await api.getUser(widget.username);
+      final user = widget.userId != null
+          ? await api.getUserById(widget.userId!)
+          : await api.getUser(widget.username ?? '');
       if (!mounted) return;
       setState(() {
         _user = user;

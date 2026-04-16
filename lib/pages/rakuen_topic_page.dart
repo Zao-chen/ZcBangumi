@@ -938,7 +938,7 @@ class _RakuenPostBlock extends StatelessWidget {
 
   void _openUserPage(BuildContext context, String username, String nickname) {
     final safeUsername = username.trim();
-    if (safeUsername.isEmpty) return;
+    if (safeUsername.isEmpty || safeUsername == '未知用户') return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
