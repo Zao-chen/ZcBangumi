@@ -179,7 +179,15 @@ class ApiClient {
 
   /// 获取指定用户信息
   Future<BangumiUser> getUser(String username) async {
-    final resp = await _dio.get('/v0/users/$username');
+    //URL 编码用户名以支持 Unicode 字符（如日文用户名）
+    final encodedUsername = Uri.encodeComponent(username);
+    final resp = await _dio.get('/v0/users/$encodedUsername');
+    return BangumiUser.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  ///通过用户 ID 获取用户信息
+  Future<BangumiUser> getUserById(int userId) async {
+    final resp = await _dio.get('/v0/users/$userId');
     return BangumiUser.fromJson(resp.data as Map<String, dynamic>);
   }
 
@@ -526,11 +534,36 @@ class ApiClient {
             }
           }
 
-          // 提取用户名：<a href="/user/..." class="l">USERNAME</a>
-          final userNameMatch = RegExp(
-            r'<a href="/user/[^"]*" class="l">([^<]+)</a>',
-          ).firstMatch(itemHtml);
-          final userName = userNameMatch?.group(1)?.trim() ?? '未知用户';
+          //提取用户标识和昵称，兼容 /user/{用户名} 与 /user/{数字ID}
+          int userId = 0;
+          String userKey = '';
+          String userName = '';
+          final userMatch =
+              RegExp(
+                    r'<a[^>]*href="/user/([^"/?#]+)"[^>]*class="[^"]*\bl\b[^"]*"[^>]*>([\s\S]*?)</a>',
+                    caseSensitive: false,
+                  ).firstMatch(itemHtml) ??
+              RegExp(
+                r'<a[^>]*class="[^"]*\bl\b[^"]*"[^>]*href="/user/([^"/?#]+)"[^>]*>([\s\S]*?)</a>',
+                caseSensitive: false,
+              ).firstMatch(itemHtml);
+          if (userMatch != null) {
+            userKey = (userMatch.group(1) ?? '').trim();
+            userName = _decodeHtml(_stripTags(userMatch.group(2) ?? '')).trim();
+            userId = int.tryParse(userKey) ?? 0;
+          }
+          if (userKey.isEmpty) {
+            userKey =
+                RegExp(r'data-item-user="([^"]+)"')
+                    .firstMatch(itemHtml)
+                    ?.group(1)
+                    ?.trim() ??
+                '';
+            userId = int.tryParse(userKey) ?? 0;
+          }
+          if (userName.isEmpty) {
+            userName = userKey;
+          }
 
           // 提取评分：<span class="starlight starsN"></span>
           int rating = 0;
@@ -611,7 +644,7 @@ class ApiClient {
             createdAt = DateTime.now();
           }
 
-          if (content.isNotEmpty && userName.isNotEmpty) {
+          if (content.isNotEmpty && (userName.isNotEmpty || userKey.isNotEmpty)) {
             comments.add(
               Comment(
                 id: commentId++,
@@ -625,7 +658,8 @@ class ApiClient {
                 createdAt: createdAt,
                 updatedAt: createdAt,
                 user: {
-                  'username': userName,
+                  'id': userId,
+                  'username': userKey,
                   'nickname': userName,
                   'avatar': avatarUrl,
                 },
@@ -707,8 +741,10 @@ class ApiClient {
     if (subjectType != null) params['subject_type'] = subjectType;
     if (collectionType != null) params['type'] = collectionType;
 
+    //URL 编码用户名
+    final encodedUsername = Uri.encodeComponent(username);
     final resp = await _dio.get(
-      '/v0/users/$username/collections',
+      '/v0/users/$encodedUsername/collections',
       queryParameters: params,
     );
     final data = resp.data as Map<String, dynamic>;
@@ -2042,7 +2078,9 @@ class ApiClient {
     required String username,
     required int subjectId,
   }) async {
-    final resp = await _dio.get('/v0/users/$username/collections/$subjectId');
+    //URL 编码用户名
+    final encodedUsername = Uri.encodeComponent(username);
+    final resp = await _dio.get('/v0/users/$encodedUsername/collections/$subjectId');
     return UserCollection.fromJson(resp.data as Map<String, dynamic>);
   }
 

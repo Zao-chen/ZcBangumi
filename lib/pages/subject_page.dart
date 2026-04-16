@@ -10,6 +10,7 @@ import '../constants.dart';
 import '../models/character.dart';
 import '../models/collection.dart';
 import '../models/comment.dart';
+import '../pages/profile_page.dart';
 import '../models/episode.dart';
 import '../models/subject.dart';
 import '../models/subject_tab_config.dart';
@@ -3094,6 +3095,8 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   Widget _buildCommentItem(Comment comment, ColorScheme colorScheme) {
+    final userId = comment.user['id'] as int? ?? 0;
+    final isValidUser = userId > 0;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       elevation: 0,
@@ -3105,46 +3108,63 @@ class _SubjectPageState extends State<SubjectPage>
           children: [
             Row(
               children: [
-                if (comment.userAvatar.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: CachedNetworkImage(
-                      imageUrl: comment.userAvatar,
+                GestureDetector(
+                  onTap: !isValidUser
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => OtherUserProfilePage(
+                                userId: userId,
+                                displayName: comment.userName,
+                              ),
+                            ),
+                          ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
                       width: 40,
                       height: 40,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        width: 40,
-                        height: 40,
-                        color: Colors.grey[300],
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        width: 40,
-                        height: 40,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.person, size: 20),
-                      ),
+                      child: comment.userAvatar.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: comment.userAvatar,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: Colors.grey[300],
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.person, size: 20),
+                              ),
+                            )
+                          : Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.person, size: 20),
+                            ),
                     ),
-                  )
-                else
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.grey[300],
-                    ),
-                    child: const Icon(Icons.person, size: 20),
                   ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        comment.userName,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      GestureDetector(
+                        onTap: !isValidUser
+                            ? null
+                            : () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => OtherUserProfilePage(
+                                      userId: userId,
+                                      displayName: comment.userName,
+                                    ),
+                                  ),
+                                ),
+                        child: Text(
+                          comment.userName,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),

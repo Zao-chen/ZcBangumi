@@ -27,7 +27,15 @@ class Comment {
   });
 
   /// 获取用户昵称
-  String get userName => user['nickname'] ?? user['username'] ?? '未知用户';
+  String get userName {
+    final nickname = (user['nickname'] as String? ?? '').trim();
+    if (nickname.isNotEmpty) return nickname;
+    final username = (user['username'] as String? ?? '').trim();
+    if (username.isNotEmpty) return username;
+    final id = user['id'];
+    if (id is int && id > 0) return id.toString();
+    return '未知用户';
+  }
 
   /// 获取用户头像
   String get userAvatar => user['avatar'] ?? '';

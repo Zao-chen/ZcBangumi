@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/timeline.dart';
-import '../constants.dart';
 import '../pages/profile_page.dart';
 import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
@@ -977,10 +976,12 @@ class _TimelineFeedItem extends StatelessWidget {
   }
 
   void _openUserPage(BuildContext context, String username, String nickname) {
+    final safeUsername = username.trim();
+    if (safeUsername.isEmpty || safeUsername == '未知用户') return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
-            OtherUserProfilePage(username: username, displayName: nickname),
+            OtherUserProfilePage(username: safeUsername, displayName: nickname),
       ),
     );
   }
