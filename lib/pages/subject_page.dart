@@ -727,10 +727,13 @@ class _SubjectPageState extends State<SubjectPage>
                 ),
               ],
               title: _showCollapsedTitle
-                  ? Text(
-                      _subject!.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  ? GestureDetector(
+                      onTap: _showFullTitleDialog,
+                      child: Text(
+                        _subject!.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     )
                   : null,
               flexibleSpace: FlexibleSpaceBar(
@@ -2899,6 +2902,27 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
+  void _showFullTitleDialog() {
+    if (_subject == null) {
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('完整标题'),
+          content: SelectableText(_subject!.displayName),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildHeaderCard(ColorScheme colorScheme, {bool isLandscape = false}) {
     final coverWidth = isLandscape ? 84 : 84;
     final coverHeight = isLandscape ? 122 : 122;
@@ -2948,12 +2972,17 @@ class _SubjectPageState extends State<SubjectPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ShortCopyableText(
-                    _subject!.displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                  GestureDetector(
+                    onTap: _showFullTitleDialog,
+                    behavior: HitTestBehavior.opaque,
+                    //标题固定单行，避免头部卡片在窄宽度时被撑高。
+                    child: ShortCopyableText(
+                      _subject!.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
