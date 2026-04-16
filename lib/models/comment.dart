@@ -74,7 +74,8 @@ class Comment {
     return Comment(
       id: toInt(json['id']),
       content: (json['content'] as String?) ?? '',
-      contentHtml: (json['content_html'] as String?) ?? (json['contentHtml'] as String?),
+      contentHtml:
+          (json['content_html'] as String?) ?? (json['contentHtml'] as String?),
       rating: toInt(json['rating']),
       spoiler: toInt(json['spoiler']),
       state: toInt(json['state']),

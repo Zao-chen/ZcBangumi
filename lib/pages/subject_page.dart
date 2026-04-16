@@ -69,7 +69,9 @@ class _SubjectPageState extends State<SubjectPage>
   bool _subjectDetailLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
-  List<String> _visibleTabIds = List<String>.from(SubjectTabConfig.defaultOrder);
+  List<String> _visibleTabIds = List<String>.from(
+    SubjectTabConfig.defaultOrder,
+  );
   _RelatedViewMode _relatedViewMode = _RelatedViewMode.list;
   String? _error;
 
@@ -125,7 +127,9 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     final currentTabId = _selectedTabId;
-    final nextIndex = currentTabId == null ? 0 : nextVisibleIds.indexOf(currentTabId);
+    final nextIndex = currentTabId == null
+        ? 0
+        : nextVisibleIds.indexOf(currentTabId);
     final normalizedIndex = nextIndex >= 0 ? nextIndex : 0;
 
     _tabController.removeListener(_handleTabChanged);
@@ -3112,13 +3116,13 @@ class _SubjectPageState extends State<SubjectPage>
                   onTap: !isValidUser
                       ? null
                       : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => OtherUserProfilePage(
-                                userId: userId,
-                                displayName: comment.userName,
-                              ),
+                          MaterialPageRoute(
+                            builder: (_) => OtherUserProfilePage(
+                              userId: userId,
+                              displayName: comment.userName,
                             ),
                           ),
+                        ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
@@ -3128,9 +3132,8 @@ class _SubjectPageState extends State<SubjectPage>
                           ? CachedNetworkImage(
                               imageUrl: comment.userAvatar,
                               fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: Colors.grey[300],
-                              ),
+                              placeholder: (context, url) =>
+                                  Container(color: Colors.grey[300]),
                               errorWidget: (context, url, error) => Container(
                                 color: Colors.grey[300],
                                 child: const Icon(Icons.person, size: 20),
@@ -3152,19 +3155,20 @@ class _SubjectPageState extends State<SubjectPage>
                         onTap: !isValidUser
                             ? null
                             : () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => OtherUserProfilePage(
-                                      userId: userId,
-                                      displayName: comment.userName,
-                                    ),
+                                MaterialPageRoute(
+                                  builder: (_) => OtherUserProfilePage(
+                                    userId: userId,
+                                    displayName: comment.userName,
                                   ),
                                 ),
+                              ),
                         child: Text(
                           comment.userName,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 2),

@@ -1041,13 +1041,13 @@ class _CharacterPageState extends State<CharacterPage>
                   onTap: !isValidUser
                       ? null
                       : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => OtherUserProfilePage(
-                                userId: userId,
-                                displayName: comment.userName,
-                              ),
+                          MaterialPageRoute(
+                            builder: (_) => OtherUserProfilePage(
+                              userId: userId,
+                              displayName: comment.userName,
                             ),
                           ),
+                        ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
@@ -1057,9 +1057,8 @@ class _CharacterPageState extends State<CharacterPage>
                           ? CachedNetworkImage(
                               imageUrl: comment.userAvatar,
                               fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: Colors.grey[300],
-                              ),
+                              placeholder: (context, url) =>
+                                  Container(color: Colors.grey[300]),
                               errorWidget: (context, url, error) => Container(
                                 color: Colors.grey[300],
                                 child: const Icon(Icons.person, size: 20),
@@ -1081,19 +1080,20 @@ class _CharacterPageState extends State<CharacterPage>
                         onTap: !isValidUser
                             ? null
                             : () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => OtherUserProfilePage(
-                                      userId: userId,
-                                      displayName: comment.userName,
-                                    ),
+                                MaterialPageRoute(
+                                  builder: (_) => OtherUserProfilePage(
+                                    userId: userId,
+                                    displayName: comment.userName,
                                   ),
                                 ),
+                              ),
                         child: Text(
                           comment.userName,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1178,10 +1178,7 @@ class _CharacterPageState extends State<CharacterPage>
                 width: 80,
                 child: CopyableText(
                   entry.key,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   maxLines: 1,
                 ),
               ),
@@ -1236,7 +1233,10 @@ class _CharacterPageState extends State<CharacterPage>
   Widget _buildSection({
     required String title,
     required Widget child,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    EdgeInsets padding = const EdgeInsets.symmetric(
+      horizontal: 16,
+      vertical: 12,
+    ),
   }) {
     return Padding(
       padding: padding,

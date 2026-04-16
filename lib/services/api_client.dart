@@ -540,9 +540,9 @@ class ApiClient {
           String userName = '';
           final userMatch =
               RegExp(
-                    r'<a[^>]*href="/user/([^"/?#]+)"[^>]*class="[^"]*\bl\b[^"]*"[^>]*>([\s\S]*?)</a>',
-                    caseSensitive: false,
-                  ).firstMatch(itemHtml) ??
+                r'<a[^>]*href="/user/([^"/?#]+)"[^>]*class="[^"]*\bl\b[^"]*"[^>]*>([\s\S]*?)</a>',
+                caseSensitive: false,
+              ).firstMatch(itemHtml) ??
               RegExp(
                 r'<a[^>]*class="[^"]*\bl\b[^"]*"[^>]*href="/user/([^"/?#]+)"[^>]*>([\s\S]*?)</a>',
                 caseSensitive: false,
@@ -554,10 +554,9 @@ class ApiClient {
           }
           if (userKey.isEmpty) {
             userKey =
-                RegExp(r'data-item-user="([^"]+)"')
-                    .firstMatch(itemHtml)
-                    ?.group(1)
-                    ?.trim() ??
+                RegExp(
+                  r'data-item-user="([^"]+)"',
+                ).firstMatch(itemHtml)?.group(1)?.trim() ??
                 '';
             userId = int.tryParse(userKey) ?? 0;
           }
@@ -644,7 +643,8 @@ class ApiClient {
             createdAt = DateTime.now();
           }
 
-          if (content.isNotEmpty && (userName.isNotEmpty || userKey.isNotEmpty)) {
+          if (content.isNotEmpty &&
+              (userName.isNotEmpty || userKey.isNotEmpty)) {
             comments.add(
               Comment(
                 id: commentId++,
@@ -2080,7 +2080,9 @@ class ApiClient {
   }) async {
     //URL 编码用户名
     final encodedUsername = Uri.encodeComponent(username);
-    final resp = await _dio.get('/v0/users/$encodedUsername/collections/$subjectId');
+    final resp = await _dio.get(
+      '/v0/users/$encodedUsername/collections/$subjectId',
+    );
     return UserCollection.fromJson(resp.data as Map<String, dynamic>);
   }
 
