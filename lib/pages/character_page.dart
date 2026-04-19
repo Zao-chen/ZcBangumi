@@ -1,13 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../constants.dart';
 import '../models/character.dart';
 import '../models/comment.dart';
 import '../pages/profile_page.dart';
 import '../services/api_client.dart';
+import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
@@ -221,7 +221,7 @@ class _CharacterPageState extends State<CharacterPage>
       return;
     }
     final uri = Uri.parse('${BgmConst.webBaseUrl}/character/$characterId');
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final ok = await LinkNavigator.open(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,

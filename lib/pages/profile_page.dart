@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../constants.dart';
 import '../models/collection.dart';
 import '../models/user.dart';
@@ -10,6 +9,7 @@ import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../services/api_client.dart';
+import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/copyable_text.dart';
 
@@ -830,9 +830,7 @@ class _LoginViewState extends State<_LoginView> {
 
   Future<void> _openTokenPage() async {
     final uri = Uri.parse(BgmConst.tokenUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    await LinkNavigator.open(context, uri);
   }
 }
 
@@ -1231,9 +1229,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                 final uri = Uri.parse(
                   '${BgmConst.webBaseUrl}/user/${widget.user.username}',
                 );
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
+                await LinkNavigator.open(context, uri);
               },
               padding: const EdgeInsets.all(8),
             ),

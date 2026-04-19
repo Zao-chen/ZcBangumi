@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import 'package:zc_bangumi/services/internal_link_handler.dart';
+import 'package:zc_bangumi/services/link_navigator.dart';
 
 class EmbeddedWebPageView extends StatefulWidget {
   final Uri initialUri;
@@ -52,7 +54,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
 
   Future<void> _openInBrowser() async {
     final uri = _currentUri ?? widget.initialUri;
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final ok = await LinkNavigator.open(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -634,14 +636,24 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                     },
                     shouldOverrideUrlLoading:
                         (controller, navigationAction) async {
-                          final url = navigationAction.request.url.toString();
-                          if (url.startsWith('http')) {
-                            await launchUrl(
-                              navigationAction.request.url!,
-                              mode: LaunchMode.externalApplication,
-                            );
+                          final url = navigationAction.request.url;
+                          if (url == null) {
+                            return NavigationActionPolicy.ALLOW;
+                          }
+
+                          final result = InternalLinkHandler.handleLink(
+                            url.uriValue,
+                            context,
+                          );
+
+                          if (result == InternalLinkResult.handled) {
+                            return NavigationActionPolicy.CANCEL;
+                          } else if (result ==
+                              InternalLinkResult.openInBrowser) {
+                            await LinkNavigator.open(context, url.uriValue);
                             return NavigationActionPolicy.CANCEL;
                           }
+
                           return NavigationActionPolicy.ALLOW;
                         },
                   ),
@@ -718,7 +730,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
 
   Future<void> _openInBrowser() async {
     final uri = _currentUrl?.uriValue ?? widget.initialUri;
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final ok = await LinkNavigator.open(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -750,12 +762,24 @@ class _WebPageViewerState extends State<WebPageViewer> {
     }
 
     final scheme = uri.scheme.toLowerCase();
-    if (scheme == 'http' || scheme == 'https') {
-      return NavigationActionPolicy.ALLOW;
+    if (scheme != 'http' && scheme != 'https') {
+      // 非HTTP(S)链接，用浏览器打开
+      await LinkNavigator.open(context, uri);
+      return NavigationActionPolicy.CANCEL;
     }
 
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-    return NavigationActionPolicy.CANCEL;
+    // 对于HTTP(S)链接，检查是否是站内链接
+    final result = InternalLinkHandler.handleLink(uri, context);
+
+    if (result == InternalLinkResult.handled) {
+      return NavigationActionPolicy.CANCEL;
+    } else if (result == InternalLinkResult.openInBrowser) {
+      await LinkNavigator.open(context, uri);
+      return NavigationActionPolicy.CANCEL;
+    }
+
+    // 其他情况，允许WebView处理
+    return NavigationActionPolicy.ALLOW;
   }
 
   @override
@@ -811,7 +835,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
           onCreateWindow: (controller, createWindowAction) async {
             final uri = createWindowAction.request.url?.uriValue;
             if (uri != null) {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
+              await LinkNavigator.open(context, uri);
             }
             return false;
           },

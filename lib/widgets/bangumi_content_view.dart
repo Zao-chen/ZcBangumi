@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../constants.dart';
+import '../services/link_navigator.dart';
 
 class BangumiContentView extends StatelessWidget {
   final String text;
@@ -31,10 +31,7 @@ class BangumiContentView extends StatelessWidget {
       return Html(
         data: _wrapHtml(trimmedHtml),
         style: {
-          'html': Style(
-            margin: Margins.zero,
-            padding: HtmlPaddings.zero,
-          ),
+          'html': Style(margin: Margins.zero, padding: HtmlPaddings.zero),
           'body': Style(
             margin: Margins.zero,
             padding: HtmlPaddings.zero,
@@ -58,7 +55,7 @@ class BangumiContentView extends StatelessWidget {
         },
         onLinkTap: (url, attributes, element) {
           if (url == null || url.trim().isEmpty) return;
-          _openExternal(url.trim());
+          _openLink(context, url.trim());
         },
       );
     }
@@ -154,9 +151,14 @@ class BangumiContentView extends StatelessWidget {
     return '${BgmConst.webBaseUrl}/img/smiles/tv_500/bgm_$id.gif';
   }
 
-  static Future<void> _openExternal(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  static Future<void> _openLink(BuildContext context, String url) async {
+    final parsed = Uri.tryParse(url);
+    if (parsed == null) return;
+
+    final uri = parsed.hasScheme
+        ? parsed
+        : Uri.parse(BgmConst.webBaseUrl).resolveUri(parsed);
+
+    await LinkNavigator.open(context, uri);
   }
 }
