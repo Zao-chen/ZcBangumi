@@ -265,8 +265,16 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     );
   }
 
-  Widget _buildRatingSection(BuildContext context, ColorScheme colorScheme) {
-    const starSize = 28.0;
+  Widget _buildRatingSection(
+    BuildContext context,
+    ColorScheme colorScheme, {
+    bool compact = false,
+  }) {
+    final starSize = compact ? 26.0 : 28.0;
+    final topGap = compact ? 6.0 : 8.0;
+    final cardPadding = compact ? 10.0 : 12.0;
+    final starGap = compact ? 3.0 : 4.0;
+    final scoreGap = compact ? 6.0 : 8.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,10 +291,10 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: topGap),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(cardPadding),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
             borderRadius: BorderRadius.circular(12),
@@ -304,7 +312,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                       _selectedRating < fullStarThreshold;
 
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    padding: EdgeInsets.symmetric(horizontal: starGap),
                     child: GestureDetector(
                       onTapDown: _loading
                           ? null
@@ -350,7 +358,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                   );
                 }),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: scoreGap),
               Text(
                 _selectedRating > 0
                     ? '\u5f53\u524d\u8bc4\u5206 $_selectedRating / 10'
@@ -358,33 +366,6 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCommentSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(context, '\u8bc4\u8bba'),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 120,
-          child: TextField(
-            controller: _commentController,
-            enabled: !_loading,
-            minLines: 2,
-            maxLines: 6,
-            maxLength: 380,
-            textAlignVertical: TextAlignVertical.top,
-            decoration: const InputDecoration(
-              hintText:
-                  '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
           ),
         ),
       ],
@@ -401,17 +382,17 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
-        horizontal: size.width * 0.08,
-        vertical: size.height * 0.08,
+        horizontal: size.width * 0.06,
+        vertical: size.height * 0.06,
       ),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: size.width * 0.8,
-        height: size.height * 0.8,
+        width: size.width * 0.88,
+        height: size.height * 0.88,
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -446,58 +427,56 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
             const Divider(height: 1),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(24),
                 child: isLandscape
                     ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            flex: 2,
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildSectionTitle(
-                                    context,
-                                    '\u6536\u85cf\u72b6\u6001',
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _buildCollectionTypeSelector(context),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildSectionTitle(
-                                          context,
-                                          '\u79c1\u5bc6',
-                                        ),
-                                      ),
-                                      Switch(
-                                        value: _isPrivate,
-                                        onChanged: _loading
-                                            ? null
-                                            : (value) {
-                                                setState(
-                                                  () => _isPrivate = value,
-                                                );
-                                              },
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildRatingSection(context, colorScheme),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
                           Expanded(
                             flex: 3,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                _buildSectionTitle(
+                                  context,
+                                  '\u6536\u85cf\u72b6\u6001',
+                                ),
+                                const SizedBox(height: 8),
+                                _buildCollectionTypeSelector(context),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildSectionTitle(
+                                        context,
+                                        '\u79c1\u5bc6',
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: _isPrivate,
+                                      onChanged: _loading
+                                          ? null
+                                          : (value) {
+                                              setState(
+                                                () => _isPrivate = value,
+                                              );
+                                            },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 24),
+                                _buildRatingSection(context, colorScheme),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 _buildSectionTitle(context, '\u8bc4\u8bba'),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 8),
                                 Expanded(
                                   child: TextField(
                                     controller: _commentController,
@@ -520,48 +499,67 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                           ),
                         ],
                       )
-                    : SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildSectionTitle(
-                              context,
-                              '\u6536\u85cf\u72b6\u6001',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildCollectionTypeSelector(context),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildSectionTitle(
-                                    context,
-                                    '\u79c1\u5bc6',
-                                  ),
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionTitle(
+                            context,
+                            '\u6536\u85cf\u72b6\u6001',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildCollectionTypeSelector(context),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildSectionTitle(
+                                  context,
+                                  '\u79c1\u5bc6',
                                 ),
-                                Switch(
-                                  value: _isPrivate,
-                                  onChanged: _loading
-                                      ? null
-                                      : (value) {
-                                          setState(() => _isPrivate = value);
-                                        },
-                                ),
-                              ],
+                              ),
+                              Switch(
+                                value: _isPrivate,
+                                onChanged: _loading
+                                    ? null
+                                    : (value) {
+                                        setState(() => _isPrivate = value);
+                                      },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _buildRatingSection(
+                            context,
+                            colorScheme,
+                            compact: true,
+                          ),
+                          const SizedBox(height: 14),
+                          _buildSectionTitle(context, '\u8bc4\u8bba'),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: TextField(
+                              controller: _commentController,
+                              enabled: !_loading,
+                              expands: true,
+                              minLines: null,
+                              maxLines: null,
+                              maxLength: 380,
+                              textAlignVertical: TextAlignVertical.top,
+                              decoration: const InputDecoration(
+                                hintText:
+                                    '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
+                                border: OutlineInputBorder(),
+                                alignLabelWithHint: true,
+                              ),
                             ),
-                            const SizedBox(height: 16),
-                            _buildRatingSection(context, colorScheme),
-                            const SizedBox(height: 16),
-                            _buildCommentSection(context),
-                            const SizedBox(height: 8),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
               ),
             ),
             const Divider(height: 1),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -569,7 +567,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                     onPressed: _loading ? null : () => Navigator.pop(context),
                     child: const Text('\u53d6\u6d88'),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   FilledButton(
                     onPressed: _loading ? null : _saveChanges,
                     child: _loading
