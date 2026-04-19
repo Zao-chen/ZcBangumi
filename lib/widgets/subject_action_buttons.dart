@@ -123,6 +123,7 @@ class _UnifiedEditDialog extends StatefulWidget {
 class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
   late int _selectedType;
   late int _selectedRating;
+  late bool _isPrivate;
   late final TextEditingController _commentController;
   bool _loading = false;
 
@@ -131,6 +132,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     super.initState();
     _selectedType = widget.collection?.type ?? 0;
     _selectedRating = widget.collection?.rate ?? 0;
+    _isPrivate = widget.collection?.private_ ?? false;
     _commentController = TextEditingController(
       text: widget.collection?.comment ?? '',
     );
@@ -157,12 +159,14 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
       final api = context.read<ApiClient>();
       final comment = _commentController.text.trim();
       final existingComment = widget.collection?.comment?.trim() ?? '';
+      final existingPrivate = widget.collection?.private_ ?? false;
 
       await api.patchCollection(
         subjectId: widget.subject.id,
         type: _selectedType,
         rate: _selectedRating > 0 ? _selectedRating : null,
         comment: comment != existingComment ? comment : null,
+        private_: _isPrivate != existingPrivate ? _isPrivate : null,
       );
 
       if (!mounted) return;
@@ -245,146 +249,192 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionTitle(
-                      context,
-                      '\u6536\u85cf\u72b6\u6001',
-                    ),
-                    const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SegmentedButton<int>(
-                        showSelectedIcon: false,
-                        onSelectionChanged: _loading
-                            ? null
-                            : (Set<int> newSelection) {
-                                setState(() => _selectedType = newSelection.first);
-                              },
-                        selected: <int>{_selectedType},
-                        segments: const <ButtonSegment<int>>[
-                          ButtonSegment<int>(
-                            value: 1,
-                            label: Text('\u60f3\u770b'),
-                          ),
-                          ButtonSegment<int>(
-                            value: 2,
-                            label: Text('\u770b\u8fc7'),
-                          ),
-                          ButtonSegment<int>(
-                            value: 3,
-                            label: Text('\u5728\u770b'),
-                          ),
-                          ButtonSegment<int>(
-                            value: 4,
-                            label: Text('\u6401\u7f6e'),
-                          ),
-                          ButtonSegment<int>(
-                            value: 5,
-                            label: Text('\u629b\u5f03'),
-                          ),
-                        ],
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle(
+                        context,
+                        '\u6536\u85cf\u72b6\u6001',
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        _buildSectionTitle(context, '\u8bc4\u5206'),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: _loading || _selectedRating == 0
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SegmentedButton<int>(
+                          showSelectedIcon: false,
+                          onSelectionChanged: _loading
                               ? null
-                              : () => setState(() => _selectedRating = 0),
-                          child: const Text('\u6e05\u9664\u8bc4\u5206'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest.withOpacity(
-                          0.45,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: List.generate(10, (index) {
-                                  final rating = index + 1;
-                                  final selected = rating <= _selectedRating;
-                                  return Padding(
-                                    padding: EdgeInsets.only(
-                                      right: index == 9 ? 0 : 4,
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(24),
-                                      onTap: _loading
-                                          ? null
-                                          : () {
-                                              setState(
-                                                () => _selectedRating = rating,
-                                              );
-                                            },
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(2),
-                                        child: Icon(
-                                          selected
-                                              ? Icons.star
-                                              : Icons.star_border,
-                                          color: selected
-                                              ? Colors.amber.shade700
-                                              : colorScheme.outline,
-                                          size: 24,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
+                              : (Set<int> newSelection) {
+                                  setState(() => _selectedType = newSelection.first);
+                                },
+                          selected: <int>{_selectedType},
+                          segments: const <ButtonSegment<int>>[
+                            ButtonSegment<int>(
+                              value: 1,
+                              label: Text('\u60f3\u770b'),
                             ),
+                            ButtonSegment<int>(
+                              value: 2,
+                              label: Text('\u770b\u8fc7'),
+                            ),
+                            ButtonSegment<int>(
+                              value: 3,
+                              label: Text('\u5728\u770b'),
+                            ),
+                            ButtonSegment<int>(
+                              value: 4,
+                              label: Text('\u6401\u7f6e'),
+                            ),
+                            ButtonSegment<int>(
+                              value: 5,
+                              label: Text('\u629b\u5f03'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildSectionTitle(context, '\u4fdd\u5bc6'),
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _selectedRating > 0
-                                ? '\u5f53\u524d\u8bc4\u5206 $_selectedRating / 10'
-                                : '\u5f53\u524d\u672a\u8bc4\u5206',
-                            style: Theme.of(context).textTheme.bodyMedium,
+                          Switch(
+                            value: _isPrivate,
+                            onChanged: _loading
+                                ? null
+                                : (value) {
+                                    setState(() => _isPrivate = value);
+                                  },
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildSectionTitle(context, '\u8bc4\u8bba'),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        enabled: !_loading,
-                        expands: true,
-                        minLines: null,
-                        maxLines: null,
-                        maxLength: 380,
-                        textAlignVertical: TextAlignVertical.top,
-                        decoration: const InputDecoration(
-                          hintText:
-                              '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
-                          border: OutlineInputBorder(),
-                          alignLabelWithHint: true,
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          _buildSectionTitle(context, '\u8bc4\u5206'),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: _loading || _selectedRating == 0
+                                ? null
+                                : () => setState(() => _selectedRating = 0),
+                            child: const Text('\u6e05\u9664\u8bc4\u5206'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.45,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(5, (starIndex) {
+                                // 支持半颗星：10 个等级分配到 5 颗星
+                                // starIndex 0: 评分 0-2 （0 颗星）、评分 2-3 (0.5 颗星)
+                                // starIndex 1: 评分 4 (1 颗星)、评分 5 (1.5 颗星)
+                                // starIndex 2: 评分 6 (2 颗星)、评分 7 (2.5 颗星)
+                                // starIndex 3: 评分 8 (3 颗星)、评分 9 (3.5 颗星)
+                                // starIndex 4: 评分 10 (4 颗星)，但最多 5 颗
+
+                                // 简化：每颗星对应 2 个评分等级
+                                final fullStarThreshold = (starIndex + 1) * 2;
+
+                                bool isFull = _selectedRating >= fullStarThreshold;
+                                bool isHalf = _selectedRating >= (starIndex * 2 + 1) &&
+                                    _selectedRating < fullStarThreshold;
+
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8.0,
+                                  ),
+                                  child: GestureDetector(
+                                    onTap: _loading
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              _selectedRating =
+                                                  (starIndex + 1) * 2;
+                                            });
+                                          },
+                                    onLongPress: _loading
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              _selectedRating =
+                                                  (starIndex + 1) * 2 - 1;
+                                            });
+                                          },
+                                    child: Stack(
+                                      children: [
+                                        Icon(
+                                          Icons.star,
+                                          color: colorScheme.outline,
+                                          size: 48,
+                                        ),
+                                        if (isHalf)
+                                          ClipRect(
+                                            clipper:
+                                                _HalfClipper(isLeftHalf: true),
+                                            child: Icon(
+                                              Icons.star,
+                                              color: Colors.amber.shade700,
+                                              size: 48,
+                                            ),
+                                          )
+                                        else if (isFull)
+                                          Icon(
+                                            Icons.star,
+                                            color: Colors.amber.shade700,
+                                            size: 48,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _selectedRating > 0
+                                  ? '\u5f53\u524d\u8bc4\u5206 $_selectedRating / 10'
+                                  : '\u5f53\u524d\u672a\u8bc4\u5206',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                      _buildSectionTitle(context, '\u8bc4\u8bba'),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 120,
+                        child: TextField(
+                          controller: _commentController,
+                          enabled: !_loading,
+                          minLines: 2,
+                          maxLines: 6,
+                          maxLength: 380,
+                          textAlignVertical: TextAlignVertical.top,
+                          decoration: const InputDecoration(
+                            hintText:
+                                '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -417,4 +467,23 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
       ),
     );
   }
+}
+
+/// 用于显示半颗星的裁剪器
+class _HalfClipper extends CustomClipper<Rect> {
+  final bool isLeftHalf;
+
+  _HalfClipper({this.isLeftHalf = true});
+
+  @override
+  Rect getClip(Size size) {
+    if (isLeftHalf) {
+      return Rect.fromLTWH(0, 0, size.width / 2, size.height);
+    } else {
+      return Rect.fromLTWH(size.width / 2, 0, size.width / 2, size.height);
+    }
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
 }
