@@ -5,7 +5,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../constants.dart';
 import '../models/character.dart';
 import '../models/collection.dart';
@@ -17,6 +16,7 @@ import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
+import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
 import '../widgets/subject_action_buttons.dart';
@@ -552,7 +552,7 @@ class _SubjectPageState extends State<SubjectPage>
 
   Future<void> _openSubjectWebPage() async {
     final uri = Uri.parse('${BgmConst.webBaseUrl}/subject/${widget.subjectId}');
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final ok = await LinkNavigator.open(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,

@@ -1,7 +1,6 @@
 ﻿import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/episode.dart';
 import '../models/rakuen_topic.dart';
@@ -9,6 +8,7 @@ import '../models/rakuen_topic_detail.dart';
 import '../pages/profile_page.dart';
 import '../pages/subject_page.dart';
 import '../services/api_client.dart';
+import '../services/link_navigator.dart';
 import '../widgets/bangumi_content_view.dart';
 
 class RakuenTopicPage extends StatefulWidget {
@@ -124,7 +124,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
             ),
           IconButton(
             tooltip: '浏览器打开',
-            onPressed: () => _openExternal(widget.topic.topicUrl),
+            onPressed: () => _openExternal(context, widget.topic.topicUrl),
             icon: const Icon(Icons.open_in_new),
           ),
         ],
@@ -452,10 +452,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     );
   }
 
-  static Future<void> _openExternal(String url) async {
+  static Future<void> _openExternal(BuildContext context, String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await LinkNavigator.open(context, uri);
   }
 }
 
