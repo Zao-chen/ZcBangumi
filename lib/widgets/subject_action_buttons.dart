@@ -46,9 +46,7 @@ class _SubjectActionButtonsState extends State<SubjectActionButtons> {
     if (!authProvider.isLoggedIn) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(
-        const SnackBar(content: Text('\u8bf7\u5148\u767b\u5f55')),
-      );
+      ).showSnackBar(const SnackBar(content: Text('\u8bf7\u5148\u767b\u5f55')));
       return;
     }
 
@@ -146,10 +144,10 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
 
   Future<void> _saveChanges() async {
     if (_selectedType == 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(content: Text('\u8bf7\u9009\u62e9\u6536\u85cf\u72b6\u6001')),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('\u8bf7\u9009\u62e9\u6536\u85cf\u72b6\u6001'),
+        ),
       );
       return;
     }
@@ -179,9 +177,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(
-        SnackBar(content: Text('\u4fdd\u5b58\u5931\u8d25: $e')),
-      );
+      ).showSnackBar(SnackBar(content: Text('\u4fdd\u5b58\u5931\u8d25: $e')));
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -198,10 +194,210 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
     );
   }
 
+  Widget _buildCollectionTypeSelector(BuildContext context) {
+    const options = <(int, String)>[
+      (1, '\u60f3\u770b'),
+      (2, '\u770b\u8fc7'),
+      (3, '\u5728\u770b'),
+      (4, '\u6401\u7f6e'),
+      (5, '\u629b\u5f03'),
+    ];
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 6.0;
+        final itemWidth =
+            (constraints.maxWidth - gap * (options.length - 1)) /
+            options.length;
+        final compact = itemWidth < 64;
+
+        return Row(
+          children: List.generate(options.length, (index) {
+            final (value, label) = options[index];
+            final selected = _selectedType == value;
+            return Padding(
+              padding: EdgeInsets.only(
+                right: index == options.length - 1 ? 0 : gap,
+              ),
+              child: SizedBox(
+                width: itemWidth,
+                child: OutlinedButton(
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          setState(() => _selectedType = value);
+                        },
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 2 : 4,
+                      vertical: compact ? 8 : 10,
+                    ),
+                    visualDensity: compact
+                        ? const VisualDensity(horizontal: -3, vertical: -2)
+                        : VisualDensity.standard,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: BorderSide(
+                      color: selected
+                          ? colorScheme.primary
+                          : colorScheme.outline,
+                    ),
+                    foregroundColor: selected
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurface,
+                    backgroundColor: selected
+                        ? colorScheme.primary
+                        : Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(label, maxLines: 1),
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _buildRatingSection(BuildContext context, ColorScheme colorScheme) {
+    const starSize = 28.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _buildSectionTitle(context, '\u8bc4\u5206'),
+            const Spacer(),
+            TextButton(
+              onPressed: _loading || _selectedRating == 0
+                  ? null
+                  : () => setState(() => _selectedRating = 0),
+              child: const Text('\u6e05\u9664\u8bc4\u5206'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (starIndex) {
+                  final fullStarThreshold = (starIndex + 1) * 2;
+
+                  bool isFull = _selectedRating >= fullStarThreshold;
+                  bool isHalf =
+                      _selectedRating >= (starIndex * 2 + 1) &&
+                      _selectedRating < fullStarThreshold;
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: GestureDetector(
+                      onTapDown: _loading
+                          ? null
+                          : (details) {
+                              final isHalfTap =
+                                  details.localPosition.dx < starSize / 2;
+                              setState(() {
+                                _selectedRating = isHalfTap
+                                    ? (starIndex + 1) * 2 - 1
+                                    : (starIndex + 1) * 2;
+                              });
+                            },
+                      behavior: HitTestBehavior.opaque,
+                      child: SizedBox(
+                        width: starSize,
+                        height: starSize,
+                        child: Stack(
+                          children: [
+                            Icon(
+                              Icons.star,
+                              color: colorScheme.outline,
+                              size: starSize,
+                            ),
+                            if (isHalf)
+                              ClipRect(
+                                clipper: _HalfClipper(isLeftHalf: true),
+                                child: Icon(
+                                  Icons.star,
+                                  color: Colors.amber.shade700,
+                                  size: starSize,
+                                ),
+                              )
+                            else if (isFull)
+                              Icon(
+                                Icons.star,
+                                color: Colors.amber.shade700,
+                                size: starSize,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _selectedRating > 0
+                    ? '\u5f53\u524d\u8bc4\u5206 $_selectedRating / 10'
+                    : '\u5f53\u524d\u672a\u8bc4\u5206',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCommentSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, '\u8bc4\u8bba'),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 120,
+          child: TextField(
+            controller: _commentController,
+            enabled: !_loading,
+            minLines: 2,
+            maxLines: 6,
+            maxLength: 380,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: const InputDecoration(
+              hintText:
+                  '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape &&
+        size.width >= 700;
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
@@ -249,193 +445,118 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSectionTitle(
-                        context,
-                        '\u6536\u85cf\u72b6\u6001',
-                      ),
-                      const SizedBox(height: 8),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SegmentedButton<int>(
-                          showSelectedIcon: false,
-                          onSelectionChanged: _loading
-                              ? null
-                              : (Set<int> newSelection) {
-                                  setState(() => _selectedType = newSelection.first);
-                                },
-                          selected: <int>{_selectedType},
-                          segments: const <ButtonSegment<int>>[
-                            ButtonSegment<int>(
-                              value: 1,
-                              label: Text('\u60f3\u770b'),
-                            ),
-                            ButtonSegment<int>(
-                              value: 2,
-                              label: Text('\u770b\u8fc7'),
-                            ),
-                            ButtonSegment<int>(
-                              value: 3,
-                              label: Text('\u5728\u770b'),
-                            ),
-                            ButtonSegment<int>(
-                              value: 4,
-                              label: Text('\u6401\u7f6e'),
-                            ),
-                            ButtonSegment<int>(
-                              value: 5,
-                              label: Text('\u629b\u5f03'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: isLandscape
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: _buildSectionTitle(context, '\u4fdd\u5bc6'),
-                          ),
-                          Switch(
-                            value: _isPrivate,
-                            onChanged: _loading
-                                ? null
-                                : (value) {
-                                    setState(() => _isPrivate = value);
-                                  },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          _buildSectionTitle(context, '\u8bc4\u5206'),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: _loading || _selectedRating == 0
-                                ? null
-                                : () => setState(() => _selectedRating = 0),
-                            child: const Text('\u6e05\u9664\u8bc4\u5206'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.45,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(5, (starIndex) {
-                                // 支持半颗星：10 个等级分配到 5 颗星
-                                // starIndex 0: 评分 0-2 （0 颗星）、评分 2-3 (0.5 颗星)
-                                // starIndex 1: 评分 4 (1 颗星)、评分 5 (1.5 颗星)
-                                // starIndex 2: 评分 6 (2 颗星)、评分 7 (2.5 颗星)
-                                // starIndex 3: 评分 8 (3 颗星)、评分 9 (3.5 颗星)
-                                // starIndex 4: 评分 10 (4 颗星)，但最多 5 颗
-
-                                // 简化：每颗星对应 2 个评分等级
-                                final fullStarThreshold = (starIndex + 1) * 2;
-
-                                bool isFull = _selectedRating >= fullStarThreshold;
-                                bool isHalf = _selectedRating >= (starIndex * 2 + 1) &&
-                                    _selectedRating < fullStarThreshold;
-
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8.0,
+                            flex: 2,
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildSectionTitle(
+                                    context,
+                                    '\u6536\u85cf\u72b6\u6001',
                                   ),
-                                  child: GestureDetector(
-                                    onTap: _loading
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _selectedRating =
-                                                  (starIndex + 1) * 2;
-                                            });
-                                          },
-                                    onLongPress: _loading
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _selectedRating =
-                                                  (starIndex + 1) * 2 - 1;
-                                            });
-                                          },
-                                    child: Stack(
-                                      children: [
-                                        Icon(
-                                          Icons.star,
-                                          color: colorScheme.outline,
-                                          size: 48,
+                                  const SizedBox(height: 8),
+                                  _buildCollectionTypeSelector(context),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildSectionTitle(
+                                          context,
+                                          '\u79c1\u5bc6',
                                         ),
-                                        if (isHalf)
-                                          ClipRect(
-                                            clipper:
-                                                _HalfClipper(isLeftHalf: true),
-                                            child: Icon(
-                                              Icons.star,
-                                              color: Colors.amber.shade700,
-                                              size: 48,
-                                            ),
-                                          )
-                                        else if (isFull)
-                                          Icon(
-                                            Icons.star,
-                                            color: Colors.amber.shade700,
-                                            size: 48,
-                                          ),
-                                      ],
+                                      ),
+                                      Switch(
+                                        value: _isPrivate,
+                                        onChanged: _loading
+                                            ? null
+                                            : (value) {
+                                                setState(
+                                                  () => _isPrivate = value,
+                                                );
+                                              },
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildRatingSection(context, colorScheme),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionTitle(context, '\u8bc4\u8bba'),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _commentController,
+                                    enabled: !_loading,
+                                    expands: true,
+                                    minLines: null,
+                                    maxLines: null,
+                                    maxLength: 380,
+                                    textAlignVertical: TextAlignVertical.top,
+                                    decoration: const InputDecoration(
+                                      hintText:
+                                          '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
+                                      border: OutlineInputBorder(),
+                                      alignLabelWithHint: true,
                                     ),
                                   ),
-                                );
-                              }),
+                                ),
+                              ],
                             ),
+                          ),
+                        ],
+                      )
+                    : SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildSectionTitle(
+                              context,
+                              '\u6536\u85cf\u72b6\u6001',
+                            ),
+                            const SizedBox(height: 8),
+                            _buildCollectionTypeSelector(context),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildSectionTitle(
+                                    context,
+                                    '\u79c1\u5bc6',
+                                  ),
+                                ),
+                                Switch(
+                                  value: _isPrivate,
+                                  onChanged: _loading
+                                      ? null
+                                      : (value) {
+                                          setState(() => _isPrivate = value);
+                                        },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            _buildRatingSection(context, colorScheme),
+                            const SizedBox(height: 24),
+                            _buildCommentSection(context),
                             const SizedBox(height: 12),
-                            Text(
-                              _selectedRating > 0
-                                  ? '\u5f53\u524d\u8bc4\u5206 $_selectedRating / 10'
-                                  : '\u5f53\u524d\u672a\u8bc4\u5206',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      _buildSectionTitle(context, '\u8bc4\u8bba'),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 120,
-                        child: TextField(
-                          controller: _commentController,
-                          enabled: !_loading,
-                          minLines: 2,
-                          maxLines: 6,
-                          maxLength: 380,
-                          textAlignVertical: TextAlignVertical.top,
-                          decoration: const InputDecoration(
-                            hintText:
-                                '\u5199\u70b9\u6536\u85cf\u611f\u60f3\uff0c\u53ef\u7559\u7a7a',
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
-                ),
               ),
             ),
             const Divider(height: 1),
