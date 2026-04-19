@@ -369,7 +369,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle(context, '\u8bc4\u8bba'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         SizedBox(
           height: 120,
           child: TextField(
@@ -401,8 +401,8 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
-        horizontal: size.width * 0.1,
-        vertical: size.height * 0.1,
+        horizontal: size.width * 0.08,
+        vertical: size.height * 0.08,
       ),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
@@ -411,7 +411,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -446,7 +446,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
             const Divider(height: 1),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(16),
                 child: isLandscape
                     ? Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -463,7 +463,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                                   ),
                                   const SizedBox(height: 8),
                                   _buildCollectionTypeSelector(context),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 12),
                                   Row(
                                     children: [
                                       Expanded(
@@ -484,20 +484,20 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 24),
+                                  const SizedBox(height: 16),
                                   _buildRatingSection(context, colorScheme),
                                 ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 24),
+                          const SizedBox(width: 16),
                           Expanded(
                             flex: 3,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 _buildSectionTitle(context, '\u8bc4\u8bba'),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 6),
                                 Expanded(
                                   child: TextField(
                                     controller: _commentController,
@@ -530,7 +530,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                             ),
                             const SizedBox(height: 8),
                             _buildCollectionTypeSelector(context),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                             Row(
                               children: [
                                 Expanded(
@@ -549,11 +549,11 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
                             _buildRatingSection(context, colorScheme),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
                             _buildCommentSection(context),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                           ],
                         ),
                       ),
@@ -561,7 +561,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
             ),
             const Divider(height: 1),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -569,7 +569,7 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                     onPressed: _loading ? null : () => Navigator.pop(context),
                     child: const Text('\u53d6\u6d88'),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   FilledButton(
                     onPressed: _loading ? null : _saveChanges,
                     child: _loading
