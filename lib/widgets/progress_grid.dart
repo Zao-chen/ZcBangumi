@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
@@ -657,8 +659,36 @@ class _EpisodeCell extends StatelessWidget {
   void _showMenu(BuildContext context, Offset position) {
     final ep = episode;
     final currentType = ep.type;
+    final title = ep.episode.displayName.isNotEmpty
+        ? ep.episode.displayName
+        : 'EP.${ep.episode.sortLabel}';
+    final menuWidth = _menuWidth(context, currentType, ep.episode.comment);
 
     final items = <PopupMenuEntry<int>>[];
+
+    items.add(
+      PopupMenuItem<int>(
+        enabled: false,
+        height: 34,
+        padding: EdgeInsets.zero,
+        child: SizedBox(
+          width: menuWidth,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    items.add(const PopupMenuDivider(height: 8));
 
     if (currentType != BgmConst.episodeDone) {
       items.add(
@@ -731,12 +761,12 @@ class _EpisodeCell extends StatelessWidget {
 
     items.add(const PopupMenuDivider(height: 8));
     items.add(
-      const PopupMenuItem(
+      PopupMenuItem(
         value: _menuOpenDiscussion,
         height: 40,
         child: _MenuRow(
           icon: Icons.forum_outlined,
-          label: '\u8ba8\u8bba',
+          label: '\u8ba8\u8bba(${ep.episode.comment})',
           color: Colors.indigo,
         ),
       ),
@@ -761,6 +791,30 @@ class _EpisodeCell extends StatelessWidget {
         onSetStatus?.call(ep.episode.id, value);
       }
     });
+  }
+
+  double _menuWidth(BuildContext context, int currentType, int commentCount) {
+    const style = TextStyle(fontSize: 14);
+    final labels = <String>[
+      if (currentType != BgmConst.episodeDone) '看过',
+      '看到',
+      if (currentType != BgmConst.episodeWish) '想看',
+      if (currentType != BgmConst.episodeDropped) '抛弃',
+      if (currentType != BgmConst.episodeNotCollected) '撤销',
+      '讨论($commentCount)',
+    ];
+
+    var maxTextWidth = 0.0;
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: Directionality.of(context),
+        maxLines: 1,
+      )..layout();
+      maxTextWidth = math.max(maxTextWidth, painter.width);
+    }
+
+    return maxTextWidth + 18 + 8 + 32;
   }
 
   Future<void> _openEpisodeDiscussion(
