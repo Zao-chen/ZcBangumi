@@ -54,7 +54,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
 
   Future<void> _openInBrowser() async {
     final uri = _currentUri ?? widget.initialUri;
-    final ok = await LinkNavigator.open(context, uri);
+    final ok = await LinkNavigator.openBrowser(uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -650,7 +650,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                             return NavigationActionPolicy.CANCEL;
                           } else if (result ==
                               InternalLinkResult.openInBrowser) {
-                            await LinkNavigator.open(context, url.uriValue);
+                            await LinkNavigator.openBrowser(url.uriValue);
                             return NavigationActionPolicy.CANCEL;
                           }
 
@@ -730,7 +730,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
 
   Future<void> _openInBrowser() async {
     final uri = _currentUrl?.uriValue ?? widget.initialUri;
-    final ok = await LinkNavigator.open(context, uri);
+    final ok = await LinkNavigator.openBrowser(uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -764,7 +764,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'http' && scheme != 'https') {
       // 非HTTP(S)链接，用浏览器打开
-      await LinkNavigator.open(context, uri);
+      await LinkNavigator.openBrowser(uri);
       return NavigationActionPolicy.CANCEL;
     }
 
@@ -774,7 +774,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
     if (result == InternalLinkResult.handled) {
       return NavigationActionPolicy.CANCEL;
     } else if (result == InternalLinkResult.openInBrowser) {
-      await LinkNavigator.open(context, uri);
+      await LinkNavigator.openBrowser(uri);
       return NavigationActionPolicy.CANCEL;
     }
 
@@ -835,7 +835,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
           onCreateWindow: (controller, createWindowAction) async {
             final uri = createWindowAction.request.url?.uriValue;
             if (uri != null) {
-              await LinkNavigator.open(context, uri);
+              await LinkNavigator.openBrowser(uri);
             }
             return false;
           },

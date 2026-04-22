@@ -14,4 +14,9 @@ class LinkNavigator {
     }
     return launchUrl(uri, mode: LaunchMode.externalApplication);
   }
+
+  /// 直接使用系统浏览器打开，不做任何站内链接拦截。
+  static Future<bool> openBrowser(Uri uri) {
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 }

@@ -455,7 +455,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   static Future<void> _openExternal(BuildContext context, String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
-    await LinkNavigator.open(context, uri);
+    await LinkNavigator.openBrowser(uri);
   }
 }
 
