@@ -221,7 +221,7 @@ class _CharacterPageState extends State<CharacterPage>
       return;
     }
     final uri = Uri.parse('${BgmConst.webBaseUrl}/character/$characterId');
-    final ok = await LinkNavigator.open(context, uri);
+    final ok = await LinkNavigator.openBrowser(uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,

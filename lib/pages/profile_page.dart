@@ -830,7 +830,7 @@ class _LoginViewState extends State<_LoginView> {
 
   Future<void> _openTokenPage() async {
     final uri = Uri.parse(BgmConst.tokenUrl);
-    await LinkNavigator.open(context, uri);
+    await LinkNavigator.openBrowser(uri);
   }
 }
 
@@ -1229,7 +1229,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                 final uri = Uri.parse(
                   '${BgmConst.webBaseUrl}/user/${widget.user.username}',
                 );
-                await LinkNavigator.open(context, uri);
+                await LinkNavigator.openBrowser(uri);
               },
               padding: const EdgeInsets.all(8),
             ),

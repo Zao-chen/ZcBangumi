@@ -552,7 +552,7 @@ class _SubjectPageState extends State<SubjectPage>
 
   Future<void> _openSubjectWebPage() async {
     final uri = Uri.parse('${BgmConst.webBaseUrl}/subject/${widget.subjectId}');
-    final ok = await LinkNavigator.open(context, uri);
+    final ok = await LinkNavigator.openBrowser(uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
