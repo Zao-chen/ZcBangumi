@@ -49,3 +49,15 @@ app.*.map.json
 /android/**/*.jks
 /android/**/*.keystore
 /android/keystore/*.txt
+
+# iOS/macOS generated files
+ios/Flutter/*.xcconfig
+ios/Podfile
+ios/Runner.xcodeproj/project.pbxproj
+ios/Runner.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+ios/Runner.xcworkspace/contents.xcworkspacedata
+macos/Flutter/*.xcconfig
+macos/Podfile
+macos/Podfile.lock
+macos/Runner.xcodeproj/project.pbxproj
+macos/Runner.xcworkspace/contents.xcworkspacedata
