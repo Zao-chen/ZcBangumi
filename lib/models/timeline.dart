@@ -211,10 +211,16 @@ class TimelineItem {
 
       // ---- 吐槽 / 日常 (cat=1) ----
       case 1:
-        actionText = '说';
-        final status = memo['status'] as Map<String, dynamic>?;
-        if (status != null) {
-          targetText = status['tsukkomi'] as String?;
+        final dailyFriendTarget = _dailyFriendTarget(memo);
+        if (dailyFriendTarget != null) {
+          actionText = '将';
+          targetText = dailyFriendTarget;
+        } else {
+          actionText = '说';
+          final status = memo['status'] as Map<String, dynamic>?;
+          if (status != null) {
+            targetText = status['tsukkomi'] as String?;
+          }
         }
         break;
 
@@ -305,24 +311,10 @@ class TimelineItem {
       // ---- 好友 (cat=9) 等 ----
       default:
         // daily 类型中可能包含好友相关动态
-        final daily = memo['daily'] as Map<String, dynamic>?;
-        if (daily != null) {
-          final users = daily['users'] as List<dynamic>?;
-          if (users != null && users.isNotEmpty) {
-            actionText = '成为了好友';
-            final friendNames = users
-                .map(
-                  (u) =>
-                      (u as Map<String, dynamic>)['nickname'] as String? ?? '',
-                )
-                .where((n) => n.isNotEmpty)
-                .take(3);
-            if (friendNames.isNotEmpty) {
-              targetText = friendNames.join('、');
-            }
-          } else {
-            actionText = '动态';
-          }
+        final dailyFriendTarget = _dailyFriendTarget(memo);
+        if (dailyFriendTarget != null) {
+          actionText = '将';
+          targetText = dailyFriendTarget;
         } else {
           actionText = '动态';
         }
@@ -348,6 +340,26 @@ class TimelineItem {
   }
 
   // ---- 辅助方法 ----
+
+  static String? _dailyFriendTarget(Map<String, dynamic> memo) {
+    final daily = memo['daily'] as Map<String, dynamic>?;
+    final users = daily?['users'] as List<dynamic>?;
+    if (users == null || users.isEmpty) return null;
+
+    final friendNames = <String>[];
+    for (final user in users) {
+      if (user is! Map<String, dynamic>) continue;
+      final nickname = user['nickname'] as String? ?? '';
+      if (nickname.isNotEmpty) {
+        friendNames.add(nickname);
+      }
+    }
+    if (friendNames.isEmpty) return null;
+
+    final visibleNames = friendNames.take(3).join('、');
+    final suffix = friendNames.length > 3 ? ' 等${friendNames.length}人' : '';
+    return '$visibleNames$suffix 加为了好友';
+  }
 
   /// 收藏动作文本
   static String _collectionLabel(int collectionType, int subjectType) {
