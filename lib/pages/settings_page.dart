@@ -19,6 +19,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  int _selectedSectionIndex = 0;
   String _version = '';
 
   @override
@@ -40,6 +41,27 @@ class _SettingsPageState extends State<SettingsPage> {
     final auth = context.watch<AuthProvider>();
     final colorScheme = Theme.of(context).colorScheme;
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTwoPane =
+            constraints.maxWidth >= 720 ||
+            (constraints.maxWidth > constraints.maxHeight &&
+                constraints.maxWidth >= 600);
+
+        if (isTwoPane) {
+          return _buildTwoPaneLayout(context, auth, colorScheme);
+        }
+
+        return _buildCompactLayout(context, auth, colorScheme);
+      },
+    );
+  }
+
+  Widget _buildCompactLayout(
+    BuildContext context,
+    AuthProvider auth,
+    ColorScheme colorScheme,
+  ) {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: Column(
@@ -48,189 +70,286 @@ class _SettingsPageState extends State<SettingsPage> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.asset(
-                              'assets/images/bangumi_icon.png',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'ZC Bangumi',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Bangumi 番组计划第三方客户端',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _version,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colorScheme.outline,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                _buildAppInfoCard(colorScheme),
                 const SizedBox(height: 16),
-                _buildCategoryMenuCard(context),
+                _buildCategoryMenuCard(context, isTwoPane: false),
                 const SizedBox(height: 16),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: const Text('账号'),
-                    subtitle: Text(
-                      auth.user != null ? '@${auth.user!.username}' : '未登录',
-                    ),
-                  ),
-                ),
+                _buildAccountCard(auth),
               ],
             ),
           ),
-          if (auth.isLoggedIn)
-            SafeArea(
-              top: false,
-              minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonal(
-                  onPressed: () => _confirmLogout(context),
-                  style: FilledButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.logout_rounded),
-                      SizedBox(width: 8),
-                      Text('退出登录'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          if (auth.isLoggedIn) _buildLogoutArea(context),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryMenuCard(BuildContext context) {
-    return Card(
-      child: Column(
+  Widget _buildTwoPaneLayout(
+    BuildContext context,
+    AuthProvider auth,
+    ColorScheme colorScheme,
+  ) {
+    final sections = _settingsSections(context);
+    final selectedIndex = _selectedSectionIndex
+        .clamp(0, sections.length - 1)
+        .toInt();
+    final selectedSection = sections[selectedIndex];
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('设置')),
+      body: Row(
         children: [
-          _CategoryEntryTile(
-            icon: Icons.tune_rounded,
-            title: '底栏自定义',
-            subtitle: '排序、显隐与恢复默认',
-            onTap: () => _openSectionPage(
-              context,
-              title: '底栏自定义',
-              builder: (ctx) {
-                final appState = ctx.watch<AppStateProvider>();
-                return [_buildBottomNavSettingsCard(ctx, appState)];
-              },
+          SizedBox(
+            width: 320,
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+                    children: [
+                      _buildAppInfoCard(colorScheme, compact: true),
+                      const SizedBox(height: 12),
+                      _buildCategoryMenuCard(context, isTwoPane: true),
+                      const SizedBox(height: 12),
+                      _buildAccountCard(auth),
+                    ],
+                  ),
+                ),
+                if (auth.isLoggedIn) _buildLogoutArea(context, horizontal: 12),
+              ],
             ),
           ),
-          const Divider(height: 1),
-          _CategoryEntryTile(
-            icon: Icons.sync_rounded,
-            title: '刷新与缓存',
-            subtitle: '自动刷新、下拉策略与缓存清理',
-            onTap: () => _openSectionPage(
-              context,
-              title: '刷新与缓存',
-              builder: (ctx) {
-                final appState = ctx.watch<AppStateProvider>();
-                return [_buildDataAndRefreshSettingsCard(ctx, appState)];
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          _CategoryEntryTile(
-            icon: Icons.palette_outlined,
-            title: '阅读与显示',
-            subtitle: '密度、圆角与信息展示',
-            onTap: () => _openSectionPage(
-              context,
-              title: '阅读与显示',
-              builder: (ctx) {
-                final appState = ctx.watch<AppStateProvider>();
-                return [_buildDisplaySettingsCard(ctx, appState)];
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          _CategoryEntryTile(
-            icon: Icons.view_day_outlined,
-            title: '默认分区',
-            subtitle: '动态与超展开进入分区',
-            onTap: () => _openSectionPage(
-              context,
-              title: '默认分区',
-              builder: (ctx) {
-                final appState = ctx.watch<AppStateProvider>();
-                return [_buildDefaultTabSettingsCard(ctx, appState)];
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          _CategoryEntryTile(
-            icon: Icons.dashboard_customize_outlined,
-            title: '\u6761\u76ee\u9875\u6807\u7b7e',
-            subtitle: '\u6392\u5e8f\u3001\u663e\u9690\u4e0e\u6062\u590d\u9ed8\u8ba4',
-            onTap: () => _openSectionPage(
-              context,
-              title: '\u6761\u76ee\u9875\u6807\u7b7e',
-              builder: (ctx) {
-                final appState = ctx.watch<AppStateProvider>();
-                return [_buildSubjectTabSettingsCard(ctx, appState)];
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          _CategoryEntryTile(
-            icon: Icons.system_update_alt_rounded,
-            title: '更新设置',
-            subtitle: '检查频率、版本策略与手动检查',
-            onTap: () => _openSectionPage(
-              context,
-              title: '更新设置',
-              builder: (ctx) {
-                final appState = ctx.watch<AppStateProvider>();
-                return [
-                  const Card(child: CheckUpdateButton()),
-                  _buildUpdateSettingsCard(ctx, appState),
-                ];
-              },
+          const VerticalDivider(thickness: 1, width: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Row(
+                  children: [
+                    Icon(selectedSection.icon),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedSection.title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  selectedSection.subtitle,
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                ...selectedSection.builder(context),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildAppInfoCard(ColorScheme colorScheme, {bool compact = false}) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(compact ? 16 : 20),
+        child: compact
+            ? Row(
+                children: [
+                  _buildAppIcon(size: 56, radius: 12),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildAppInfoText(colorScheme)),
+                ],
+              )
+            : Column(
+                children: [
+                  _buildAppIcon(size: 80, radius: 16),
+                  const SizedBox(height: 16),
+                  _buildAppInfoText(colorScheme, centered: true),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildAppIcon({required double size, required double radius}) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.asset(
+          'assets/images/bangumi_icon.png',
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppInfoText(ColorScheme colorScheme, {bool centered = false}) {
+    final align = centered ? TextAlign.center : TextAlign.start;
+
+    return Column(
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ZC Bangumi',
+          textAlign: align,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Bangumi 番组计划第三方客户端',
+          textAlign: align,
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _version,
+          textAlign: align,
+          style: TextStyle(fontSize: 11, color: colorScheme.outline),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccountCard(AuthProvider auth) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.person_outline),
+        title: const Text('账号'),
+        subtitle: Text(auth.user != null ? '@${auth.user!.username}' : '未登录'),
+      ),
+    );
+  }
+
+  Widget _buildLogoutArea(BuildContext context, {double horizontal = 16}) {
+    return SafeArea(
+      top: false,
+      minimum: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 16),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.tonal(
+          onPressed: () => _confirmLogout(context),
+          style: FilledButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.logout_rounded),
+              SizedBox(width: 8),
+              Text('退出登录'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryMenuCard(
+    BuildContext context, {
+    required bool isTwoPane,
+  }) {
+    final sections = _settingsSections(context);
+
+    return Card(
+      child: Column(
+        children: [
+          for (var i = 0; i < sections.length; i++) ...[
+            if (i > 0) const Divider(height: 1),
+            _CategoryEntryTile(
+              icon: sections[i].icon,
+              title: sections[i].title,
+              subtitle: sections[i].subtitle,
+              selected: isTwoPane && i == _selectedSectionIndex,
+              onTap: () {
+                if (isTwoPane) {
+                  setState(() => _selectedSectionIndex = i);
+                  return;
+                }
+                _openSectionPage(
+                  context,
+                  title: sections[i].title,
+                  builder: sections[i].builder,
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<_SettingsSection> _settingsSections(BuildContext context) {
+    return [
+      _SettingsSection(
+        icon: Icons.tune_rounded,
+        title: '底栏自定义',
+        subtitle: '排序、显隐与恢复默认',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [_buildBottomNavSettingsCard(ctx, appState)];
+        },
+      ),
+      _SettingsSection(
+        icon: Icons.sync_rounded,
+        title: '刷新与缓存',
+        subtitle: '自动刷新、下拉策略与缓存清理',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [_buildDataAndRefreshSettingsCard(ctx, appState)];
+        },
+      ),
+      _SettingsSection(
+        icon: Icons.palette_outlined,
+        title: '阅读与显示',
+        subtitle: '密度、圆角与信息展示',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [_buildDisplaySettingsCard(ctx, appState)];
+        },
+      ),
+      _SettingsSection(
+        icon: Icons.view_day_outlined,
+        title: '默认分区',
+        subtitle: '动态与超展开进入分区',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [_buildDefaultTabSettingsCard(ctx, appState)];
+        },
+      ),
+      _SettingsSection(
+        icon: Icons.dashboard_customize_outlined,
+        title: '\u6761\u76ee\u9875\u6807\u7b7e',
+        subtitle:
+            '\u6392\u5e8f\u3001\u663e\u9690\u4e0e\u6062\u590d\u9ed8\u8ba4',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [_buildSubjectTabSettingsCard(ctx, appState)];
+        },
+      ),
+      _SettingsSection(
+        icon: Icons.system_update_alt_rounded,
+        title: '更新设置',
+        subtitle: '检查频率、版本策略与手动检查',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [
+            const Card(child: CheckUpdateButton()),
+            _buildUpdateSettingsCard(ctx, appState),
+          ];
+        },
+      ),
+    ];
   }
 
   void _openSectionPage(
@@ -743,12 +862,14 @@ class _CategoryEntryTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final bool selected;
   final VoidCallback onTap;
 
   const _CategoryEntryTile({
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.selected = false,
     required this.onTap,
   });
 
@@ -759,9 +880,24 @@ class _CategoryEntryTile extends StatelessWidget {
       title: Text(title),
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right_rounded),
+      selected: selected,
       onTap: onTap,
     );
   }
+}
+
+class _SettingsSection {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> Function(BuildContext context) builder;
+
+  const _SettingsSection({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.builder,
+  });
 }
 
 class _SettingsSectionPage extends StatelessWidget {
