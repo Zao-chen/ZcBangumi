@@ -51,11 +51,9 @@ app.*.map.json
 /android/keystore/*.txt
 
 # iOS/macOS generated files
-ios/Flutter/*.xcconfig
 ios/Podfile
 ios/Runner.xcodeproj/project.xcworkspace/contents.xcworkspacedata
 ios/Runner.xcworkspace/contents.xcworkspacedata
-macos/Flutter/*.xcconfig
 macos/Podfile
 macos/Podfile.lock
 macos/Runner.xcworkspace/contents.xcworkspacedata
