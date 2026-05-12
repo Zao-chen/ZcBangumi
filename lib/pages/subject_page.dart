@@ -1211,15 +1211,15 @@ class _SubjectPageState extends State<SubjectPage>
                             children: [
                               SizedBox(
                                 width: 80,
-                                child: CopyableText(
+                                child: ShortCopyableText(
                                   key,
                                   style: TextStyle(
                                     color: Colors.grey[600],
                                     fontSize: 14,
                                   ),
-                                  maxLines: 1,
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: CopyableText(
                                   value,
@@ -1339,12 +1339,12 @@ class _SubjectPageState extends State<SubjectPage>
                   children: [
                     SizedBox(
                       width: 80,
-                      child: CopyableText(
+                      child: ShortCopyableText(
                         key,
                         style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                        maxLines: 1,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: CopyableText(
                         value,
