@@ -29,6 +29,8 @@ class CollectionProvider extends ChangeNotifier {
       BgmConst.subjectAnime,
       BgmConst.subjectGame,
       BgmConst.subjectBook,
+      BgmConst.subjectMusic,
+      BgmConst.subjectReal,
     ];
 
     // 获取上次保存的用户名
@@ -66,7 +68,7 @@ class CollectionProvider extends ChangeNotifier {
   bool isEpisodeLoading(int subjectId) =>
       _episodeLoadingMap[subjectId] ?? false;
 
-  /// 加载用户的"在看/在玩/在读"收藏
+  /// 加载用户正在进行中的收藏
   Future<void> loadDoingCollections({
     required String username,
     required int subjectType,

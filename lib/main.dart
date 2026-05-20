@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'constants.dart';
 import 'services/api_client.dart';
 import 'services/storage_service.dart';
 import 'services/update_service.dart';
@@ -233,26 +232,16 @@ class _AppShellState extends State<_AppShell> {
             authProvider.isLoggedIn &&
             authProvider.username != null) {
           final collectionProvider = context.read<CollectionProvider>();
-          await Future.wait([
-            collectionProvider.loadDoingCollections(
-              username: authProvider.username!,
-              subjectType: BgmConst.subjectAnime,
-              refresh: true,
-              forceNetwork: true,
+          await Future.wait(
+            appState.enabledProgressSubjectTypes.map(
+              (subjectType) => collectionProvider.loadDoingCollections(
+                username: authProvider.username!,
+                subjectType: subjectType,
+                refresh: true,
+                forceNetwork: true,
+              ),
             ),
-            collectionProvider.loadDoingCollections(
-              username: authProvider.username!,
-              subjectType: BgmConst.subjectGame,
-              refresh: true,
-              forceNetwork: true,
-            ),
-            collectionProvider.loadDoingCollections(
-              username: authProvider.username!,
-              subjectType: BgmConst.subjectBook,
-              refresh: true,
-              forceNetwork: true,
-            ),
-          ]);
+          );
         }
       }
 

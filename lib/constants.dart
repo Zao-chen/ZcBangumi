@@ -41,13 +41,32 @@ class BgmConst {
   static String collectionLabel(int type, {int subjectType = subjectAnime}) {
     final bool isBook = subjectType == subjectBook;
     final bool isGame = subjectType == subjectGame;
+    final bool isMusic = subjectType == subjectMusic;
     switch (type) {
       case collectionWish:
-        return isBook ? '想读' : isGame ? '想玩' : '想看';
+        return isBook
+            ? '想读'
+            : isGame
+            ? '想玩'
+            : isMusic
+            ? '想听'
+            : '想看';
       case collectionDone:
-        return isBook ? '读过' : isGame ? '玩过' : '看过';
+        return isBook
+            ? '读过'
+            : isGame
+            ? '玩过'
+            : isMusic
+            ? '听过'
+            : '看过';
       case collectionDoing:
-        return isBook ? '在读' : isGame ? '在玩' : '在看';
+        return isBook
+            ? '在读'
+            : isGame
+            ? '在玩'
+            : isMusic
+            ? '在听'
+            : '在看';
       case collectionOnHold:
         return '搁置';
       case collectionDropped:

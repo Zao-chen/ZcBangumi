@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../constants.dart';
 import '../models/navigation_config.dart';
 import '../models/subject_tab_config.dart';
 import '../services/storage_service.dart';
@@ -18,6 +19,7 @@ class AppStateProvider extends ChangeNotifier {
     SubjectTabConfig.defaultOrder,
   );
   Set<String> _hiddenSubjectTabIds = <String>{};
+  Set<int> _hiddenProgressSubjectTypes = <int>{};
 
   // ==================== 动态页面 ====================
   int _timelineTabIndex = 0; // 0=全站, 1=好友, 2=我的
@@ -60,6 +62,11 @@ class AppStateProvider extends ChangeNotifier {
   List<String> get enabledSubjectTabIds => _subjectTabOrder
       .where((id) => !_hiddenSubjectTabIds.contains(id))
       .toList(growable: false);
+  Set<int> get hiddenProgressSubjectTypes =>
+      Set.unmodifiable(_hiddenProgressSubjectTypes);
+  List<int> get enabledProgressSubjectTypes => progressSubjectTypeOrder
+      .where((type) => !_hiddenProgressSubjectTypes.contains(type))
+      .toList(growable: false);
   int get timelineTabIndex => _timelineTabIndex;
   int get rakuenTabIndex => _rakuenTabIndex;
   int get profileSubjectType => _profileSubjectType;
@@ -79,6 +86,14 @@ class AppStateProvider extends ChangeNotifier {
       _restoreLastTabSelection ? _timelineTabIndex : _defaultTimelineTabIndex;
   int get initialRakuenTabIndex =>
       _restoreLastTabSelection ? _rakuenTabIndex : _defaultRakuenTabIndex;
+
+  static const List<int> progressSubjectTypeOrder = [
+    BgmConst.subjectAnime,
+    BgmConst.subjectGame,
+    BgmConst.subjectBook,
+    BgmConst.subjectMusic,
+    BgmConst.subjectReal,
+  ];
 
   // ==================== Setters ====================
 
@@ -209,6 +224,47 @@ class AppStateProvider extends ChangeNotifier {
 
     _subjectTabOrder = defaultOrder;
     _hiddenSubjectTabIds.clear();
+    notifyListeners();
+    _saveState();
+  }
+
+  bool isProgressSubjectTypeVisible(int type) {
+    return !_hiddenProgressSubjectTypes.contains(type);
+  }
+
+  void setProgressSubjectTypeVisible(int type, bool visible) {
+    if (!progressSubjectTypeOrder.contains(type)) {
+      return;
+    }
+
+    final nextHidden = Set<int>.from(_hiddenProgressSubjectTypes);
+    if (visible) {
+      nextHidden.remove(type);
+    } else {
+      final enabledCount = progressSubjectTypeOrder
+          .where((item) => !nextHidden.contains(item))
+          .length;
+      if (enabledCount <= 1) {
+        return;
+      }
+      nextHidden.add(type);
+    }
+
+    if (setEquals(_hiddenProgressSubjectTypes, nextHidden)) {
+      return;
+    }
+
+    _hiddenProgressSubjectTypes = nextHidden;
+    notifyListeners();
+    _saveState();
+  }
+
+  void resetProgressSubjectTypes() {
+    if (_hiddenProgressSubjectTypes.isEmpty) {
+      return;
+    }
+
+    _hiddenProgressSubjectTypes.clear();
     notifyListeners();
     _saveState();
   }
@@ -374,6 +430,14 @@ class AppStateProvider extends ChangeNotifier {
         if (enabledSubjectTabIds.isEmpty) {
           _hiddenSubjectTabIds.clear();
         }
+        _hiddenProgressSubjectTypes =
+            ((data['hiddenProgressSubjectTypes'] as List?) ?? const <dynamic>[])
+                .whereType<int>()
+                .where(progressSubjectTypeOrder.contains)
+                .toSet();
+        if (enabledProgressSubjectTypes.isEmpty) {
+          _hiddenProgressSubjectTypes.clear();
+        }
 
         final cachedNavIndex = data['currentNavIndex'] as int? ?? 0;
         _currentNavIndex = cachedNavIndex;
@@ -417,6 +481,7 @@ class AppStateProvider extends ChangeNotifier {
         'hiddenBottomNavTabIds': _hiddenBottomNavTabIds.toList(),
         'subjectTabOrder': _subjectTabOrder,
         'hiddenSubjectTabIds': _hiddenSubjectTabIds.toList(),
+        'hiddenProgressSubjectTypes': _hiddenProgressSubjectTypes.toList(),
         'timelineTabIndex': _timelineTabIndex,
         'rakuenTabIndex': _rakuenTabIndex,
         'profileSubjectType': _profileSubjectType,
@@ -446,6 +511,7 @@ class AppStateProvider extends ChangeNotifier {
     _hiddenBottomNavTabIds.clear();
     _subjectTabOrder = List<String>.from(SubjectTabConfig.defaultOrder);
     _hiddenSubjectTabIds.clear();
+    _hiddenProgressSubjectTypes.clear();
     _timelineTabIndex = 0;
     _rakuenTabIndex = 0;
     _profileSubjectType = 2;

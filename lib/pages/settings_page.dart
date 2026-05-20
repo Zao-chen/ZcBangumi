@@ -3,6 +3,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../constants.dart';
 import '../models/navigation_config.dart';
 import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
@@ -310,6 +311,15 @@ class _SettingsPageState extends State<SettingsPage> {
         },
       ),
       _SettingsSection(
+        icon: Icons.playlist_play_outlined,
+        title: '进度分区',
+        subtitle: '控制进度页显示的条目类型',
+        builder: (ctx) {
+          final appState = ctx.watch<AppStateProvider>();
+          return [_buildProgressSubjectTypeSettingsCard(ctx, appState)];
+        },
+      ),
+      _SettingsSection(
         icon: Icons.palette_outlined,
         title: '阅读与显示',
         subtitle: '密度、圆角与信息展示',
@@ -373,7 +383,7 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           SwitchListTile(
             title: const Text('启动后自动刷新关键数据'),
-            subtitle: const Text('登录后自动刷新进度列表（动画/游戏/书籍）'),
+            subtitle: const Text('登录后自动刷新进度页当前启用的分区'),
             value: appState.startupAutoRefresh,
             onChanged: appState.setStartupAutoRefresh,
           ),
@@ -399,6 +409,82 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildProgressSubjectTypeSettingsCard(
+    BuildContext context,
+    AppStateProvider appState,
+  ) {
+    final enabledCount = appState.enabledProgressSubjectTypes.length;
+    final hidden = appState.hiddenProgressSubjectTypes;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.playlist_play_outlined),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '进度页分区',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: hidden.isEmpty
+                      ? null
+                      : appState.resetProgressSubjectTypes,
+                  child: const Text('恢复默认'),
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '选择进度页和启动自动刷新包含的条目类型。至少保留 1 个分区。',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final type in AppStateProvider.progressSubjectTypeOrder)
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                secondary: Icon(_progressSubjectIcon(type)),
+                title: Text(BgmConst.subjectTypeName(type)),
+                value: appState.isProgressSubjectTypeVisible(type),
+                onChanged:
+                    appState.isProgressSubjectTypeVisible(type) &&
+                        enabledCount <= 1
+                    ? null
+                    : (value) {
+                        appState.setProgressSubjectTypeVisible(type, value);
+                      },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _progressSubjectIcon(int type) {
+    switch (type) {
+      case BgmConst.subjectAnime:
+        return Icons.movie_outlined;
+      case BgmConst.subjectGame:
+        return Icons.sports_esports_outlined;
+      case BgmConst.subjectBook:
+        return Icons.menu_book_outlined;
+      case BgmConst.subjectMusic:
+        return Icons.music_note_outlined;
+      case BgmConst.subjectReal:
+        return Icons.live_tv_outlined;
+      default:
+        return Icons.category_outlined;
+    }
   }
 
   Widget _buildDisplaySettingsCard(

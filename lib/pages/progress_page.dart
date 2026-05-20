@@ -11,7 +11,7 @@ import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
 import '../widgets/progress_grid.dart';
 
-/// 进度页面 - 分为动画、游戏、书籍三个标签
+/// 进度页面 - 展示用户正在进行的收藏
 class ProgressPage extends StatefulWidget {
   const ProgressPage({super.key});
 
@@ -21,9 +21,9 @@ class ProgressPage extends StatefulWidget {
 
 class _ProgressPageState extends State<ProgressPage>
     with TickerProviderStateMixin {
-  late final TabController _tabController;
+  late TabController _tabController;
 
-  static const _tabs = [
+  static const _allTabs = [
     _TabConfig(
       type: BgmConst.subjectAnime,
       label: '动画',
@@ -39,17 +39,50 @@ class _ProgressPageState extends State<ProgressPage>
       label: '书籍',
       icon: Icons.menu_book_outlined,
     ),
+    _TabConfig(
+      type: BgmConst.subjectMusic,
+      label: '音乐',
+      icon: Icons.music_note_outlined,
+    ),
+    _TabConfig(
+      type: BgmConst.subjectReal,
+      label: '三次元',
+      icon: Icons.live_tv_outlined,
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
-    _tabController.addListener(() {
+    _tabController = _createTabController(_allTabs.length);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tabs = _visibleTabs(context.watch<AppStateProvider>());
+    if (_tabController.length != tabs.length) {
+      final previousIndex = _tabController.index.clamp(0, tabs.length - 1);
+      _tabController.dispose();
+      _tabController = _createTabController(
+        tabs.length,
+        initialIndex: previousIndex,
+      );
+    }
+  }
+
+  TabController _createTabController(int length, {int initialIndex = 0}) {
+    final controller = TabController(
+      length: length,
+      initialIndex: initialIndex,
+      vsync: this,
+    );
+    controller.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() {}); // 触发重建以便子组件加载数据
       }
     });
+    return controller;
   }
 
   @override
@@ -68,11 +101,11 @@ class _ProgressPageState extends State<ProgressPage>
   Future<void> _refreshCurrentTab() async {
     final auth = context.read<AuthProvider>();
     if (!auth.isLoggedIn || auth.username == null) return;
-    final forceNetwork = context
-        .read<AppStateProvider>()
-        .pullToRefreshForceNetwork;
+    final appState = context.read<AppStateProvider>();
+    final forceNetwork = appState.pullToRefreshForceNetwork;
 
-    final subjectType = _tabs[_tabController.index].type;
+    final tabs = _visibleTabs(appState);
+    final subjectType = tabs[_tabController.index].type;
     await context.read<CollectionProvider>().loadDoingCollections(
       username: auth.username!,
       subjectType: subjectType,
@@ -81,9 +114,17 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
+  List<_TabConfig> _visibleTabs(AppStateProvider appState) {
+    final enabledTypes = appState.enabledProgressSubjectTypes;
+    return _allTabs
+        .where((tab) => enabledTypes.contains(tab.type))
+        .toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final tabs = _visibleTabs(context.watch<AppStateProvider>());
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -98,7 +139,7 @@ class _ProgressPageState extends State<ProgressPage>
               ? _buildLandscapeLayout()
               : TabBarView(
                   controller: _tabController,
-                  children: _tabs
+                  children: tabs
                       .map((t) => _ProgressTabView(subjectType: t.type))
                       .toList(),
                 )
@@ -125,7 +166,7 @@ class _ProgressPageState extends State<ProgressPage>
         bottom: (!isLandscape)
             ? TabBar(
                 controller: _tabController,
-                tabs: _tabs.map((t) => Tab(text: t.label)).toList(),
+                tabs: tabs.map((t) => Tab(text: t.label)).toList(),
                 labelPadding: const EdgeInsets.symmetric(horizontal: 8),
                 indicatorSize: TabBarIndicatorSize.label,
               )
@@ -137,6 +178,7 @@ class _ProgressPageState extends State<ProgressPage>
 
   Widget _buildLandscapeLayout() {
     final colorScheme = Theme.of(context).colorScheme;
+    final tabs = _visibleTabs(context.watch<AppStateProvider>());
 
     return Row(
       children: [
@@ -146,7 +188,7 @@ class _ProgressPageState extends State<ProgressPage>
           backgroundColor: colorScheme.surface,
           indicatorColor: colorScheme.primaryContainer,
           labelType: NavigationRailLabelType.all,
-          destinations: _tabs
+          destinations: tabs
               .map(
                 (tab) => NavigationRailDestination(
                   icon: Icon(tab.icon),
@@ -159,7 +201,7 @@ class _ProgressPageState extends State<ProgressPage>
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: _tabs
+            children: tabs
                 .map((t) => _ProgressTabView(subjectType: t.type))
                 .toList(),
           ),
@@ -171,6 +213,7 @@ class _ProgressPageState extends State<ProgressPage>
   /// 横屏初始化布局：固定 NavigationRail 保持不变，仅内容区骨架化
   Widget _buildLandscapeInitializingLayout() {
     final colorScheme = Theme.of(context).colorScheme;
+    final tabs = _visibleTabs(context.watch<AppStateProvider>());
 
     return Row(
       children: [
@@ -180,7 +223,7 @@ class _ProgressPageState extends State<ProgressPage>
           backgroundColor: colorScheme.surface,
           indicatorColor: colorScheme.primaryContainer,
           labelType: NavigationRailLabelType.all,
-          destinations: _tabs
+          destinations: tabs
               .map(
                 (tab) => NavigationRailDestination(
                   icon: Icon(tab.icon),
