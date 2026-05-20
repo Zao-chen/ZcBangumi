@@ -6,6 +6,8 @@ import '../models/rakuen_topic.dart';
 import '../pages/subject_page.dart';
 import '../pages/rakuen_topic_page.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/auth_provider.dart';
+import '../providers/rakuen_favorite_provider.dart';
 import '../services/api_client.dart';
 
 class RakuenPage extends StatefulWidget {
@@ -54,6 +56,10 @@ class _RakuenPageState extends State<RakuenPage>
     _tabStates = {for (final tab in _RakuenTab.values) tab: _RakuenTabState()};
     _tabController.addListener(_handleTabChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      context.read<RakuenFavoriteProvider>().initialize(
+        username: auth.username,
+      );
       _ensureLoaded(_currentTab);
     });
   }
@@ -182,6 +188,11 @@ class _RakuenPageState extends State<RakuenPage>
         title: const Text('超展开'),
         centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: '收藏帖子',
+            onPressed: _openFavoritesPage,
+            icon: const Icon(Icons.stars_outlined),
+          ),
           if (isLandscape)
             IconButton(
               tooltip: '刷新当前分区',
@@ -210,6 +221,18 @@ class _RakuenPageState extends State<RakuenPage>
       ),
       body: isLandscape ? _buildLandscapeLayout() : _buildTabBarView(),
     );
+  }
+
+  Future<void> _openFavoritesPage() async {
+    final auth = context.read<AuthProvider>();
+    await context.read<RakuenFavoriteProvider>().initialize(
+      username: auth.username,
+      syncCloud: auth.isLoggedIn,
+    );
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const _RakuenFavoritesPage()));
   }
 
   Future<void> _openJumpDialog() async {
@@ -648,6 +671,168 @@ class _RakuenTopicCard extends StatelessWidget {
   static int? _tryGetSubjectId(String? url) {
     final match = RegExp(r'/subject/(\d+)').firstMatch(url ?? '');
     return match != null ? int.tryParse(match.group(1) ?? '') : null;
+  }
+}
+
+class _RakuenFavoritesPage extends StatefulWidget {
+  const _RakuenFavoritesPage();
+
+  @override
+  State<_RakuenFavoritesPage> createState() => _RakuenFavoritesPageState();
+}
+
+class _RakuenFavoritesPageState extends State<_RakuenFavoritesPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      context.read<RakuenFavoriteProvider>().initialize(
+        username: auth.username,
+        syncCloud: auth.isLoggedIn,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    return Scaffold(
+      appBar: AppBar(title: const Text('收藏帖子'), centerTitle: false),
+      body: Consumer<RakuenFavoriteProvider>(
+        builder: (context, favorites, _) {
+          final username = auth.username?.trim();
+          final normalizedUsername = username == null || username.isEmpty
+              ? null
+              : username;
+          if (!favorites.loaded ||
+              favorites.activeUsername != normalizedUsername) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              context.read<RakuenFavoriteProvider>().initialize(
+                username: auth.username,
+                syncCloud: auth.isLoggedIn,
+              );
+            });
+          }
+
+          final items = favorites.favorites;
+          if (items.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+              children: [
+                _FavoriteSyncHeader(
+                  loggedIn: auth.isLoggedIn,
+                  cloudSyncEnabled: favorites.cloudSyncEnabled,
+                  syncing: favorites.syncing,
+                  error: favorites.syncError,
+                  onEnableCloud: auth.isLoggedIn
+                      ? () => favorites.setCloudSyncEnabled(true)
+                      : null,
+                ),
+                const SizedBox(height: 120),
+                const Icon(Icons.star_border_rounded, size: 48),
+                const SizedBox(height: 12),
+                Center(
+                  child: Text(
+                    auth.isLoggedIn ? '暂无收藏帖子' : '暂无收藏帖子，登录后可同步到 Bangumi 私有目录',
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            itemCount: items.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _FavoriteSyncHeader(
+                  loggedIn: auth.isLoggedIn,
+                  cloudSyncEnabled: favorites.cloudSyncEnabled,
+                  syncing: favorites.syncing,
+                  error: favorites.syncError,
+                  onEnableCloud: auth.isLoggedIn
+                      ? () => favorites.setCloudSyncEnabled(true)
+                      : null,
+                );
+              }
+              return _RakuenTopicCard(topic: items[index - 1].topic);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _FavoriteSyncHeader extends StatelessWidget {
+  final bool loggedIn;
+  final bool cloudSyncEnabled;
+  final bool syncing;
+  final String? error;
+  final VoidCallback? onEnableCloud;
+
+  const _FavoriteSyncHeader({
+    required this.loggedIn,
+    required this.cloudSyncEnabled,
+    required this.syncing,
+    required this.error,
+    required this.onEnableCloud,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final text = !loggedIn
+        ? '登录后可同步到 Bangumi 私有目录'
+        : !cloudSyncEnabled
+        ? '当前仅本地收藏'
+        : syncing
+        ? '正在同步目录...'
+        : error == null
+        ? '已启用私有目录云同步'
+        : '同步失败，稍后重试';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          child: Row(
+            children: [
+              Icon(
+                loggedIn && cloudSyncEnabled
+                    ? Icons.cloud_sync_outlined
+                    : Icons.cloud_off_outlined,
+                size: 18,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (syncing)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (loggedIn && !cloudSyncEnabled)
+                TextButton(onPressed: onEnableCloud, child: const Text('开启')),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

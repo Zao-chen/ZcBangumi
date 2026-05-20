@@ -8,6 +8,7 @@ import 'models/navigation_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/collection_provider.dart';
 import 'providers/app_state_provider.dart';
+import 'providers/rakuen_favorite_provider.dart';
 import 'providers/update_provider.dart';
 import 'widgets/responsive_scaffold.dart';
 import 'widgets/update_dialog.dart';
@@ -66,6 +67,10 @@ class ZCBangumiApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => CollectionProvider(api: apiClient, storage: storage),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              RakuenFavoriteProvider(api: apiClient, storage: storage),
         ),
         ChangeNotifierProvider(
           create: (_) =>
@@ -224,6 +229,12 @@ class _AppShellState extends State<_AppShell> {
       // 1. 尝试恢复登录状态
       final authProvider = context.read<AuthProvider>();
       await authProvider.tryRestoreSession();
+      if (mounted) {
+        await context.read<RakuenFavoriteProvider>().initialize(
+          username: authProvider.username,
+          syncCloud: authProvider.isLoggedIn,
+        );
+      }
 
       // 1.5 启动后自动刷新关键数据（可配置）
       if (mounted) {

@@ -9,6 +9,7 @@ import '../models/episode.dart';
 import '../models/bangumi_web_session.dart';
 import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
+import '../models/rakuen_topic_favorite.dart';
 import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
@@ -88,8 +89,10 @@ class ApiClient {
     _accessToken = token;
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
+      _nextDio.options.headers['Authorization'] = 'Bearer $token';
     } else {
       _dio.options.headers.remove('Authorization');
+      _nextDio.options.headers.remove('Authorization');
     }
   }
 
@@ -1083,6 +1086,74 @@ class ApiClient {
     }
 
     return resultUrl;
+  }
+
+  Future<PagedResult<RakuenFavoriteIndex>> getUserRakuenFavoriteIndexes({
+    required String username,
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final resp = await _nextDio.get(
+      '/p1/users/${Uri.encodeComponent(username)}/indexes',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    final data = resp.data;
+    if (data is! Map) {
+      return PagedResult(
+        total: 0,
+        limit: limit,
+        offset: offset,
+        data: const [],
+      );
+    }
+    final list = data['data'] as List<dynamic>? ?? const [];
+    final items = list
+        .whereType<Map>()
+        .map(
+          (item) =>
+              RakuenFavoriteIndex.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .where((item) => item.id > 0)
+        .toList();
+    return PagedResult(
+      total: data['total'] as int? ?? items.length,
+      limit: limit,
+      offset: offset,
+      data: items,
+    );
+  }
+
+  Future<RakuenFavoriteIndex> getRakuenFavoriteIndex(int indexId) async {
+    final resp = await _nextDio.get('/p1/indexes/$indexId');
+    return RakuenFavoriteIndex.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  Future<int> createRakuenFavoriteIndex({
+    required String title,
+    required String desc,
+    required bool private,
+  }) async {
+    final resp = await _nextDio.post(
+      '/p1/indexes',
+      data: {'title': title, 'desc': desc, 'private': private},
+    );
+    final data = resp.data;
+    if (data is Map) {
+      return data['id'] as int? ?? int.parse('${data['id']}');
+    }
+    throw Exception('创建同步目录失败');
+  }
+
+  Future<void> updateRakuenFavoriteIndex({
+    required int indexId,
+    required String title,
+    required String desc,
+    required bool private,
+  }) async {
+    await _nextDio.patch(
+      '/p1/indexes/$indexId',
+      data: {'title': title, 'desc': desc, 'private': private},
+    );
   }
 
   /// 解析时间线 HTML

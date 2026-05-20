@@ -7,9 +7,12 @@ import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../pages/profile_page.dart';
 import '../pages/subject_page.dart';
+import '../providers/auth_provider.dart';
+import '../providers/rakuen_favorite_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../widgets/bangumi_content_view.dart';
+import '../widgets/rakuen_favorite_button.dart';
 
 class RakuenTopicPage extends StatefulWidget {
   final RakuenTopic topic;
@@ -34,6 +37,13 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_handleScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      context.read<RakuenFavoriteProvider>().initialize(
+        username: auth.username,
+      );
+    });
     _load();
   }
 
@@ -116,6 +126,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
             ? Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)
             : null,
         actions: [
+          RakuenFavoriteButton(topic: widget.topic),
           if (isLandscape)
             IconButton(
               tooltip: '刷新帖子',
