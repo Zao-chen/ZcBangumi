@@ -1119,60 +1119,36 @@ class _ProfileContentState extends State<_ProfileContent> {
       );
     }
 
-    return Column(
+    return Row(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildUserCard(colorScheme),
-              const SizedBox(height: 20),
-              Text(
-                widget.collectionTitle,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-            ],
+        SafeArea(
+          top: false,
+          right: false,
+          child: NavigationRail(
+            selectedIndex: _selectedSubjectIndex,
+            onDestinationSelected: (index) {
+              _switchSubjectType(_subjectTypes[index].type);
+            },
+            labelType: NavigationRailLabelType.all,
+            backgroundColor: colorScheme.surface,
+            indicatorColor: colorScheme.primaryContainer,
+            destinations: _subjectTypes
+                .map(
+                  (t) => NavigationRailDestination(
+                    icon: Icon(t.icon),
+                    label: Text(t.label),
+                  ),
+                )
+                .toList(),
           ),
         ),
+        const VerticalDivider(thickness: 1, width: 1),
         Expanded(
-          child: Row(
-            children: [
-              SafeArea(
-                top: false,
-                right: false,
-                child: NavigationRail(
-                  selectedIndex: _selectedSubjectIndex,
-                  onDestinationSelected: (index) {
-                    _switchSubjectType(_subjectTypes[index].type);
-                  },
-                  labelType: NavigationRailLabelType.all,
-                  backgroundColor: colorScheme.surface,
-                  indicatorColor: colorScheme.primaryContainer,
-                  destinations: _subjectTypes
-                      .map(
-                        (t) => NavigationRailDestination(
-                          icon: Icon(t.icon),
-                          label: Text(t.label),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              const VerticalDivider(thickness: 1, width: 1),
-              Expanded(
-                child: _buildCollectionsContent(
-                  colorScheme,
-                  showSubjectTypeBar: false,
-                  includeHeader: false,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                ),
-              ),
-            ],
+          child: _buildCollectionsContent(
+            colorScheme,
+            showSubjectTypeBar: false,
+            includeHeader: true,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           ),
         ),
       ],
