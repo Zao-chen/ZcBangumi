@@ -38,6 +38,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
   late int _subjectType;
   late int _collectionType;
   _SortMode _sortMode = _SortMode.updatedAt;
+  final TextEditingController _searchController = TextEditingController();
 
   List<UserCollection> _items = [];
   bool _loading = true;
@@ -79,6 +80,12 @@ class _CollectionListPageState extends State<CollectionListPage> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadData({bool refresh = true}) async {
     if (refresh) {
       if (_items.isEmpty) {
@@ -118,6 +125,9 @@ class _CollectionListPageState extends State<CollectionListPage> {
       });
       if (refresh) {
         _storage.setCache(_cacheKey, _items.map((e) => e.toJson()).toList());
+      }
+      if (refresh && _hasSearchQuery && _items.length < _total) {
+        await _loadAllRemaining();
       }
     } catch (e) {
       if (_items.isEmpty) {
@@ -171,6 +181,67 @@ class _CollectionListPageState extends State<CollectionListPage> {
       return;
     }
     setState(() => _sortMode = mode);
+    if (mode != _SortMode.updatedAt && _items.length < _total) {
+      _loadAllRemaining();
+    }
+  }
+
+  Future<void> _loadAllRemaining() async {
+    if (_loadingMore || _items.length >= _total) {
+      return;
+    }
+    setState(() => _loadingMore = true);
+
+    final api = context.read<ApiClient>();
+    try {
+      while (_items.length < _total) {
+        final offset = _items.length;
+        final result = await api.getUserCollections(
+          username: widget.username,
+          subjectType: _subjectType,
+          collectionType: _collectionType,
+          limit: _pageSize,
+          offset: offset,
+        );
+
+        if (result.data.isEmpty) {
+          break;
+        }
+
+        setState(() {
+          _items = [..._items, ...result.data];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMore = false);
+      }
+    }
+  }
+
+  String get _searchQuery => _searchController.text.trim();
+
+  bool get _hasSearchQuery => _searchQuery.isNotEmpty;
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    if (value.trim().isNotEmpty && _items.length < _total) {
+      _loadAllRemaining();
+    }
+  }
+
+  void _clearSearch() {
+    if (_searchController.text.isEmpty) {
+      return;
+    }
+    _searchController.clear();
+    setState(() {});
   }
 
   int get _selectedSubjectIndex {
@@ -205,6 +276,29 @@ class _CollectionListPageState extends State<CollectionListPage> {
         break;
     }
     return list;
+  }
+
+  List<UserCollection> get _visibleItems {
+    final sorted = _sortedItems;
+    final query = _searchQuery.toLowerCase();
+    if (query.isEmpty) {
+      return sorted;
+    }
+
+    return sorted.where((item) => _matchesSearch(item, query)).toList();
+  }
+
+  bool _matchesSearch(UserCollection item, String query) {
+    final subject = item.subject;
+    final fields = [
+      '${item.subjectId}',
+      subject?.name ?? '',
+      subject?.nameCn ?? '',
+      subject?.displayName ?? '',
+      item.comment ?? '',
+      ...item.tags,
+    ];
+    return fields.any((field) => field.toLowerCase().contains(query));
   }
 
   @override
@@ -294,6 +388,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
       children: [
         if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
         _buildCollectionTypeBar(colorScheme),
+        _buildSearchField(colorScheme),
         Expanded(child: _buildList(colorScheme)),
       ],
     );
@@ -319,6 +414,39 @@ class _CollectionListPageState extends State<CollectionListPage> {
             showCheckmark: false,
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSearchField(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: '搜索收藏',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _hasSearchQuery
+              ? IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: '清除搜索',
+                  onPressed: _clearSearch,
+                )
+              : null,
+          isDense: true,
+          filled: true,
+          fillColor: colorScheme.surfaceContainerLow,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+        ),
+        onChanged: _onSearchChanged,
       ),
     );
   }
@@ -367,7 +495,12 @@ class _CollectionListPageState extends State<CollectionListPage> {
       );
     }
 
-    if (_items.isEmpty) {
+    final visible = _visibleItems;
+    final isSearchingMore =
+        _hasSearchQuery && _loadingMore && _items.length < _total;
+
+    if (_items.isEmpty || (visible.isEmpty && !isSearchingMore)) {
+      final emptyText = _hasSearchQuery ? '没有找到相关收藏' : '暂无收藏';
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -375,7 +508,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
             Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 12),
             Text(
-              '暂无收藏',
+              emptyText,
               style: TextStyle(fontSize: 15, color: Colors.grey[500]),
             ),
           ],
@@ -383,16 +516,16 @@ class _CollectionListPageState extends State<CollectionListPage> {
       );
     }
 
-    final sorted = _sortedItems;
-    final hasMore = _items.length < _total;
+    final hasMore = !_hasSearchQuery && _items.length < _total;
+    final itemCount = visible.length + (hasMore || isSearchingMore ? 1 : 0);
 
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        itemCount: sorted.length + (hasMore ? 1 : 0),
+        itemCount: itemCount,
         itemBuilder: (ctx, i) {
-          if (i == sorted.length) {
+          if (i == visible.length) {
             if (!_loadingMore) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _loadMore();
@@ -410,7 +543,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
             );
           }
           return _CollectionItemCard(
-            collection: sorted[i],
+            collection: visible[i],
             subjectType: _subjectType,
           );
         },
@@ -422,7 +555,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: 6,
-      separatorBuilder: (_, __) => const SizedBox(height: 0),
+      separatorBuilder: (context, index) => const SizedBox(height: 0),
       itemBuilder: (context, index) =>
           _buildCollectionSkeletonCard(colorScheme),
     );

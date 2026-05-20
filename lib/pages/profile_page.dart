@@ -436,7 +436,7 @@ class _ProfilePageState extends State<ProfilePage> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
         itemCount: _initializingSubjectTypes.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           final t = _initializingSubjectTypes[index];
           return ChoiceChip(
@@ -475,7 +475,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 0),
                 itemCount: collectionTypes.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                separatorBuilder: (context, index) => const SizedBox(width: 6),
                 itemBuilder: (context, index) {
                   final ct = collectionTypes[index];
                   return FilterChip(
@@ -617,10 +617,11 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
         _error = '加载用户信息失败: $e';
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -871,6 +872,7 @@ class _ProfileContentState extends State<_ProfileContent> {
   int _subjectType = BgmConst.subjectAnime;
   int _collectionType = BgmConst.collectionDoing;
   _SortMode _sortMode = _SortMode.updatedAt;
+  final TextEditingController _searchController = TextEditingController();
   List<UserCollection> _items = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -889,8 +891,18 @@ class _ProfileContentState extends State<_ProfileContent> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   String get _cacheKey =>
       'collection_list_${widget.user.username}_${_subjectType}_$_collectionType';
+
+  String get _searchQuery => _searchController.text.trim();
+
+  bool get _hasSearchQuery => _searchQuery.isNotEmpty;
 
   Future<void> _loadData({bool refresh = true}) async {
     final storage = context.read<StorageService>();
@@ -932,6 +944,9 @@ class _ProfileContentState extends State<_ProfileContent> {
       });
       if (refresh) {
         storage.setCache(_cacheKey, _items.map((e) => e.toJson()).toList());
+      }
+      if (refresh && _hasSearchQuery && _items.length < _total) {
+        await _loadAllRemaining();
       }
     } catch (e) {
       if (_items.isEmpty) {
@@ -978,6 +993,19 @@ class _ProfileContentState extends State<_ProfileContent> {
       context.read<AppStateProvider>().setProfileCollectionType(type);
     }
     _loadData();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    if (value.trim().isNotEmpty && _items.length < _total) {
+      _loadAllRemaining();
+    }
+  }
+
+  void _clearSearch() {
+    if (_searchController.text.isEmpty) return;
+    _searchController.clear();
+    setState(() {});
   }
 
   void _switchSort(_SortMode mode) {
@@ -1054,6 +1082,27 @@ class _ProfileContentState extends State<_ProfileContent> {
         break;
     }
     return list;
+  }
+
+  List<UserCollection> get _visibleItems {
+    final sorted = _sortedItems;
+    final query = _searchQuery.toLowerCase();
+    if (query.isEmpty) return sorted;
+
+    return sorted.where((item) => _matchesSearch(item, query)).toList();
+  }
+
+  bool _matchesSearch(UserCollection item, String query) {
+    final subject = item.subject;
+    final fields = [
+      '${item.subjectId}',
+      subject?.name ?? '',
+      subject?.nameCn ?? '',
+      subject?.displayName ?? '',
+      item.comment ?? '',
+      ...item.tags,
+    ];
+    return fields.any((field) => field.toLowerCase().contains(query));
   }
 
   @override
@@ -1161,6 +1210,7 @@ class _ProfileContentState extends State<_ProfileContent> {
           ],
           if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
           _buildCollectionTypeBar(colorScheme),
+          _buildSearchField(colorScheme),
           const SizedBox(height: 8),
           _buildList(colorScheme),
         ],
@@ -1263,6 +1313,39 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
+  Widget _buildSearchField(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: '搜索收藏',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _hasSearchQuery
+              ? IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: '清除搜索',
+                  onPressed: _clearSearch,
+                )
+              : null,
+          isDense: true,
+          filled: true,
+          fillColor: colorScheme.surfaceContainerLow,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+        ),
+        onChanged: _onSearchChanged,
+      ),
+    );
+  }
+
   Widget _buildCollectionTypeBar(ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1349,7 +1432,12 @@ class _ProfileContentState extends State<_ProfileContent> {
       );
     }
 
-    if (_items.isEmpty) {
+    final visible = _visibleItems;
+    final isSearchingMore =
+        _hasSearchQuery && _loadingMore && _items.length < _total;
+
+    if (_items.isEmpty || (visible.isEmpty && !isSearchingMore)) {
+      final emptyText = _hasSearchQuery ? '没有找到相关收藏' : '暂无收藏';
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1357,7 +1445,7 @@ class _ProfileContentState extends State<_ProfileContent> {
             Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 12),
             Text(
-              '暂无收藏',
+              emptyText,
               style: TextStyle(fontSize: 15, color: Colors.grey[500]),
             ),
           ],
@@ -1365,16 +1453,16 @@ class _ProfileContentState extends State<_ProfileContent> {
       );
     }
 
-    final sorted = _sortedItems;
-    final hasMore = _items.length < _total;
+    final hasMore = !_hasSearchQuery && _items.length < _total;
+    final itemCount = visible.length + (hasMore || isSearchingMore ? 1 : 0);
 
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: sorted.length + (hasMore ? 1 : 0),
+      itemCount: itemCount,
       itemBuilder: (ctx, i) {
-        if (i == sorted.length) {
+        if (i == visible.length) {
           if (!_loadingMore) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _loadMore();
@@ -1392,7 +1480,7 @@ class _ProfileContentState extends State<_ProfileContent> {
           );
         }
         return _CollectionItemCard(
-          collection: sorted[i],
+          collection: visible[i],
           subjectType: _subjectType,
         );
       },
@@ -1405,7 +1493,7 @@ class _ProfileContentState extends State<_ProfileContent> {
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: 6,
-      separatorBuilder: (_, __) => const SizedBox(height: 0),
+      separatorBuilder: (context, index) => const SizedBox(height: 0),
       itemBuilder: (context, index) =>
           _buildCollectionSkeletonCard(colorScheme),
     );
