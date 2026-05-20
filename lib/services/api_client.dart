@@ -305,6 +305,45 @@ class ApiClient {
     return Character.fromJson(resp.data as Map<String, dynamic>);
   }
 
+  /// 获取用户单个角色收藏信息
+  Future<bool> isCharacterCollected({
+    required String username,
+    required int characterId,
+  }) async {
+    final encodedUsername = Uri.encodeComponent(username);
+    try {
+      await _dio.get(
+        '/v0/users/$encodedUsername/collections/-/characters/$characterId',
+      );
+      return true;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  /// 收藏角色
+  Future<void> collectCharacter(int characterId) async {
+    await _dio.post('/v0/characters/$characterId/collect');
+  }
+
+  /// 取消收藏角色
+  Future<void> uncollectCharacter(int characterId) async {
+    await _dio.delete('/v0/characters/$characterId/collect');
+  }
+
+  /// 收藏人物
+  Future<void> collectPerson(int personId) async {
+    await _dio.post('/v0/persons/$personId/collect');
+  }
+
+  /// 取消收藏人物
+  Future<void> uncollectPerson(int personId) async {
+    await _dio.delete('/v0/persons/$personId/collect');
+  }
+
   /// 获取角色出演条目
   Future<List<CharacterSubject>> getCharacterSubjects(int characterId) async {
     final resp = await _dio.get('/v0/characters/$characterId/subjects');

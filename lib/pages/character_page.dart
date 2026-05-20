@@ -6,6 +6,7 @@ import '../constants.dart';
 import '../models/character.dart';
 import '../models/comment.dart';
 import '../pages/profile_page.dart';
+import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
@@ -43,6 +44,9 @@ class _CharacterPageState extends State<CharacterPage>
   bool _overviewLoading = false;
   bool _subjectsLoading = false;
   bool _commentsLoading = false;
+  bool _collectionLoading = false;
+  bool _collectionUpdating = false;
+  bool _isCollected = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
   String? _error;
@@ -69,6 +73,9 @@ class _CharacterPageState extends State<CharacterPage>
     final characterId = widget.characterId ?? widget.character?.id;
     if (characterId != null) {
       _loadAllData(characterId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadCollectionState(characterId);
+      });
     }
   }
 
@@ -215,6 +222,86 @@ class _CharacterPageState extends State<CharacterPage>
     }
   }
 
+  Future<void> _loadCollectionState(int characterId) async {
+    final auth = context.read<AuthProvider>();
+    final username = auth.username;
+    if (!auth.isLoggedIn || username == null || username.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isCollected = false;
+          _collectionLoading = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _collectionLoading = true);
+    final api = context.read<ApiClient>();
+    try {
+      final collected = await api.isCharacterCollected(
+        username: username,
+        characterId: characterId,
+      );
+      if (mounted) {
+        setState(() => _isCollected = collected);
+      }
+    } catch (_) {
+      // 收藏状态查询失败不影响详情页主体展示。
+    } finally {
+      if (mounted) {
+        setState(() => _collectionLoading = false);
+      }
+    }
+  }
+
+  Future<void> _toggleCharacterCollection() async {
+    final characterId = _activeCharacterId;
+    if (characterId == null || _collectionUpdating) {
+      return;
+    }
+
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先登录后再收藏角色')));
+      return;
+    }
+
+    final api = context.read<ApiClient>();
+    final nextCollected = !_isCollected;
+
+    setState(() {
+      _collectionUpdating = true;
+      _isCollected = nextCollected;
+    });
+
+    try {
+      if (nextCollected) {
+        await api.collectCharacter(characterId);
+      } else {
+        await api.uncollectCharacter(characterId);
+      }
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(nextCollected ? '已收藏角色' : '已取消收藏角色')),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCollected = !nextCollected);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('更新角色收藏失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _collectionUpdating = false);
+      }
+    }
+  }
+
   Future<void> _openCharacterWebPage() async {
     final characterId = _activeCharacterId;
     if (characterId == null) {
@@ -280,6 +367,23 @@ class _CharacterPageState extends State<CharacterPage>
               pinned: true,
               expandedHeight: _headerExpandedHeight,
               actions: [
+                IconButton(
+                  tooltip: _isCollected ? '取消收藏角色' : '收藏角色',
+                  onPressed: _collectionLoading || _collectionUpdating
+                      ? null
+                      : _toggleCharacterCollection,
+                  icon: _collectionUpdating
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          _isCollected
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                        ),
+                ),
                 IconButton(
                   tooltip: '打开网页',
                   onPressed: _openCharacterWebPage,
@@ -488,9 +592,22 @@ class _CharacterPageState extends State<CharacterPage>
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${character.collects} 次收藏',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '${character.collects} 次收藏',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                      if (_isCollected)
+                        Icon(
+                          Icons.favorite_rounded,
+                          size: 14,
+                          color: colorScheme.primary,
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -1278,7 +1395,7 @@ class _CharacterPageState extends State<CharacterPage>
     final content = ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: 5,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         return Container(
           height: index == 0 ? 120 : 88,
