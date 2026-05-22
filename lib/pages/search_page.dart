@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/subject.dart';
 import '../pages/subject_page.dart';
+import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 
 /// 条目搜索页面
@@ -21,6 +22,8 @@ class _SearchPageState extends State<SearchPage> {
   bool _isSearching = false;
   String? _searchError;
   late int _selectedSubjectType;
+  String _submittedQuery = '';
+  int _searchGeneration = 0;
 
   // 0 表示全部类型
   static const int _allTypes = 0;
@@ -51,10 +54,15 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _search(String keyword) async {
-    if (keyword.isEmpty) {
+    final query = keyword.trim();
+    final generation = ++_searchGeneration;
+
+    if (query.isEmpty) {
       setState(() {
         _searchResults = [];
         _searchError = null;
+        _submittedQuery = '';
+        _isSearching = false;
       });
       return;
     }
@@ -62,6 +70,7 @@ class _SearchPageState extends State<SearchPage> {
     setState(() {
       _isSearching = true;
       _searchError = null;
+      _submittedQuery = query;
     });
 
     try {
@@ -69,10 +78,13 @@ class _SearchPageState extends State<SearchPage> {
       final client = auth.api;
 
       final results = await client.searchSubjects(
-        keyword: keyword,
+        keyword: query,
         type: _selectedSubjectType == _allTypes ? null : _selectedSubjectType,
         limit: 50,
+        enrichDetails: true,
       );
+
+      if (!mounted || generation != _searchGeneration) return;
 
       setState(() {
         _searchResults = results;
@@ -84,6 +96,8 @@ class _SearchPageState extends State<SearchPage> {
         }
       });
     } catch (e) {
+      if (!mounted || generation != _searchGeneration) return;
+
       setState(() {
         _isSearching = false;
         _searchError = '网络错误，请稍后重试';
@@ -98,98 +112,43 @@ class _SearchPageState extends State<SearchPage> {
       appBar: AppBar(title: const Text('搜索条目'), centerTitle: false),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 800;
-          final horizontalPadding = isWide
-              ? (constraints.maxWidth - 900).clamp(0.0, constraints.maxWidth) /
-                    2
-              : 16.0;
+          final isWide = constraints.maxWidth >= 900;
+          if (isWide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTypeRail(),
+                const VerticalDivider(width: 1),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+                        child: _buildSearchField(),
+                      ),
+                      Expanded(child: _buildResultContent(24, true)),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
 
           return Column(
             children: [
               // 搜索框
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  16,
-                  horizontalPadding,
-                  16,
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: '搜索条目...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchResults = [];
-                                _searchError = null;
-                              });
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  onChanged: (value) {
-                    setState(() {});
-                    if (value.isNotEmpty) {
-                      _search(value);
-                    }
-                  },
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                child: _buildSearchField(),
               ),
 
               // 类型筛选
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isWide ? horizontalPadding : 12,
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _subjectTypes.map((config) {
-                      final isSelected = _selectedSubjectType == config.type;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: FilterChip(
-                          selected: isSelected,
-                          label: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(config.icon, size: 16),
-                              const SizedBox(width: 4),
-                              Text(config.label),
-                            ],
-                          ),
-                          onSelected: (selected) {
-                            setState(() {
-                              _selectedSubjectType = config.type;
-                              if (_searchController.text.isNotEmpty) {
-                                _search(_searchController.text);
-                              }
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
+              _buildTypeChips(),
 
               const SizedBox(height: 16),
 
               // 搜索结果
-              Expanded(child: _buildResultContent(horizontalPadding)),
+              Expanded(child: _buildResultContent(12, false)),
             ],
           );
         },
@@ -197,9 +156,110 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget _buildResultContent(double horizontalPadding) {
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      autofocus: true,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: '搜索条目...',
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: _searchController.text.isNotEmpty
+            ? IconButton(icon: const Icon(Icons.clear), onPressed: _clearSearch)
+            : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+      ),
+      onChanged: (value) {
+        setState(() {});
+      },
+      onSubmitted: _search,
+    );
+  }
+
+  Widget _buildTypeChips() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _subjectTypes.map((config) {
+            final isSelected = _selectedSubjectType == config.type;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FilterChip(
+                selected: isSelected,
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(config.icon, size: 16),
+                    const SizedBox(width: 4),
+                    Text(config.label),
+                  ],
+                ),
+                onSelected: (_) => _selectSubjectType(config.type),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeRail() {
+    return NavigationRail(
+      minWidth: 112,
+      labelType: NavigationRailLabelType.all,
+      selectedIndex: _selectedSubjectIndex,
+      onDestinationSelected: (index) {
+        _selectSubjectType(_subjectTypes[index].type);
+      },
+      destinations: _subjectTypes
+          .map(
+            (config) => NavigationRailDestination(
+              icon: Icon(config.icon),
+              selectedIcon: Icon(config.icon),
+              label: Text(config.label),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  int get _selectedSubjectIndex {
+    final index = _subjectTypes.indexWhere(
+      (config) => config.type == _selectedSubjectType,
+    );
+    return index >= 0 ? index : 0;
+  }
+
+  void _selectSubjectType(int type) {
+    if (_selectedSubjectType == type) return;
+    setState(() {
+      _selectedSubjectType = type;
+    });
+    if (_submittedQuery.isNotEmpty) {
+      _search(_submittedQuery);
+    }
+  }
+
+  void _clearSearch() {
+    _searchGeneration++;
+    _searchController.clear();
+    setState(() {
+      _searchResults = [];
+      _searchError = null;
+      _submittedQuery = '';
+      _isSearching = false;
+    });
+  }
+
+  Widget _buildResultContent(double horizontalPadding, bool isWide) {
     if (_isSearching) {
-      return _buildSearchSkeletonList(horizontalPadding);
+      return _buildSearchSkeletonList(horizontalPadding, isWide);
     }
 
     if (_searchError != null) {
@@ -219,7 +279,7 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
 
-    if (_searchResults.isEmpty && _searchController.text.isNotEmpty) {
+    if (_searchResults.isEmpty && _submittedQuery.isNotEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -245,10 +305,30 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
 
+    final listPadding = EdgeInsets.symmetric(
+      horizontal: horizontalPadding,
+      vertical: isWide ? 4 : 0,
+    );
+
+    if (isWide) {
+      return GridView.builder(
+        padding: listPadding,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisExtent: 112,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 4,
+        ),
+        itemCount: _searchResults.length,
+        itemBuilder: (context, index) {
+          final subject = _searchResults[index];
+          return _SearchResultCard(subject: subject);
+        },
+      );
+    }
+
     return ListView.builder(
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding > 16 ? horizontalPadding : 12,
-      ),
+      padding: listPadding,
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
         final subject = _searchResults[index];
@@ -257,70 +337,89 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget _buildSearchSkeletonList(double horizontalPadding) {
+  Widget _buildSearchSkeletonList(double horizontalPadding, bool isWide) {
     final colorScheme = Theme.of(context).colorScheme;
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding > 16 ? horizontalPadding : 12,
-      ),
-      itemCount: 6,
-      itemBuilder: (context, index) {
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          elevation: 0,
-          color: colorScheme.surfaceContainerLow,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 60,
-                  height: 84,
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+    final listPadding = EdgeInsets.symmetric(
+      horizontal: horizontalPadding,
+      vertical: isWide ? 4 : 0,
+    );
+
+    Widget skeletonCard(int index) {
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        elevation: 0,
+        color: colorScheme.surfaceContainerLow,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 60,
+                height: 84,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 160,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 160,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: 190,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: 190,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      );
+    }
+
+    if (isWide) {
+      return GridView.builder(
+        padding: listPadding,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisExtent: 112,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 4,
+        ),
+        itemCount: 8,
+        itemBuilder: (context, index) => skeletonCard(index),
+      );
+    }
+
+    return ListView.builder(
+      padding: listPadding,
+      itemCount: 6,
+      itemBuilder: (context, index) => skeletonCard(index),
     );
   }
 }
@@ -333,6 +432,18 @@ class _SearchResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final appState = context.watch<AppStateProvider>();
+    final densityScale = switch (appState.listDensityMode) {
+      0 => 0.88,
+      2 => 1.12,
+      _ => 1.0,
+    };
+    final cardPadding = 10.0 * densityScale;
+    final coverWidth = 56.0 * densityScale;
+    final coverHeight = 80.0 * densityScale;
+    final coverRadius = appState.coverCornerRadius;
+    final showSecondary = _hasSecondaryInfo;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       elevation: 0,
@@ -347,19 +458,19 @@ class _SearchResultCard extends StatelessWidget {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(cardPadding),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 封面
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(coverRadius),
                 child: SizedBox(
-                  width: 60,
-                  height: 84,
-                  child: subject.images?.grid.isNotEmpty == true
+                  width: coverWidth,
+                  height: coverHeight,
+                  child: subject.images?.common.isNotEmpty == true
                       ? CachedNetworkImage(
-                          imageUrl: subject.images!.grid,
+                          imageUrl: subject.images!.common,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(
                             color: colorScheme.surfaceContainerHighest,
@@ -378,90 +489,57 @@ class _SearchResultCard extends StatelessWidget {
               const SizedBox(width: 12),
               // 条目信息
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 标题
-                    Text(
-                      subject.displayName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // 英文名
-                    if (subject.name.isNotEmpty &&
-                        subject.name != subject.nameCn)
+                child: SizedBox(
+                  height: coverHeight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 标题
                       Text(
-                        subject.name,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    const SizedBox(height: 6),
-                    // 评分和收藏
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: [
-                        if (subject.score > 0)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.star,
-                                size: 14,
-                                color: Colors.amber,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                subject.score.toStringAsFixed(1),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.favorite_border,
-                              size: 14,
-                              color: Colors.grey[500],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${subject.collectionTotal}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    // 简介
-                    if (subject.shortSummary.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        subject.shortSummary,
+                        subject.displayName,
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[500],
-                          height: 1.3,
+                          fontSize: 14 * densityScale,
+                          fontWeight: FontWeight.w600,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      SizedBox(height: 4 * densityScale),
+                      // 英文名
+                      if (subject.name.isNotEmpty &&
+                          subject.name != subject.nameCn)
+                        Text(
+                          subject.name,
+                          style: TextStyle(
+                            fontSize: 11 * densityScale,
+                            color: Colors.grey[500],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      if (subject.shortSummary.isNotEmpty) ...[
+                        SizedBox(height: 4 * densityScale),
+                        Text(
+                          subject.shortSummary,
+                          style: TextStyle(
+                            fontSize: 11 * densityScale,
+                            color: Colors.grey[500],
+                            height: 1.2,
+                          ),
+                          maxLines:
+                              subject.name.isNotEmpty &&
+                                  subject.name != subject.nameCn
+                              ? 1
+                              : 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (showSecondary) ...[
+                        const Spacer(),
+                        _buildBottomRow(context, colorScheme, densityScale),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -470,4 +548,54 @@ class _SearchResultCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildBottomRow(
+    BuildContext context,
+    ColorScheme colorScheme,
+    double densityScale,
+  ) {
+    return Row(
+      children: [
+        if (subject.score > 0) ...[
+          Icon(Icons.star_rounded, size: 14, color: Colors.amber[700]),
+          const SizedBox(width: 2),
+          Text(
+            subject.score.toStringAsFixed(1),
+            style: TextStyle(
+              fontSize: 12 * densityScale,
+              fontWeight: FontWeight.w600,
+              color: Colors.amber[800],
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        if (subject.rank > 0) ...[
+          Text(
+            '#${subject.rank}',
+            style: TextStyle(
+              fontSize: 11 * densityScale,
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        const Spacer(),
+        if (subject.collectionTotal > 0) ...[
+          Icon(Icons.people_outline, size: 13, color: Colors.grey[500]),
+          const SizedBox(width: 2),
+          Text(
+            '${subject.collectionTotal}',
+            style: TextStyle(
+              fontSize: 11 * densityScale,
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  bool get _hasSecondaryInfo =>
+      subject.score > 0 || subject.rank > 0 || subject.collectionTotal > 0;
 }

@@ -79,6 +79,22 @@ class SlimSubject {
   /// 优先显示中文名
   String get displayName => nameCn.isNotEmpty ? nameCn : name;
 
+  factory SlimSubject.fromSubject(Subject subject) {
+    return SlimSubject(
+      id: subject.id,
+      type: subject.type,
+      name: subject.name,
+      nameCn: subject.nameCn,
+      shortSummary: subject.summary,
+      images: subject.images,
+      eps: subject.eps,
+      volumes: subject.volumes,
+      collectionTotal: subject.collectionTotal,
+      score: subject.score,
+      rank: subject.rank,
+    );
+  }
+
   factory SlimSubject.fromJson(Map<String, dynamic> json) {
     return SlimSubject(
       id: json['id'] as int,
@@ -92,8 +108,11 @@ class SlimSubject {
       eps: (json['eps'] as int?) ?? 0,
       volumes: (json['volumes'] as int?) ?? 0,
       collectionTotal: _parseCollectionTotal(json),
-      score: (json['score'] as num?)?.toDouble() ?? 0.0,
-      rank: (json['rank'] as int?) ?? 0,
+      score:
+          (json['rating']?['score'] as num?)?.toDouble() ??
+          (json['score'] as num?)?.toDouble() ??
+          0.0,
+      rank: (json['rating']?['rank'] as int?) ?? (json['rank'] as int?) ?? 0,
     );
   }
 

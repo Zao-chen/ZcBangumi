@@ -215,6 +215,7 @@ class ApiClient {
     required String keyword,
     int? type,
     int limit = 25,
+    bool enrichDetails = false,
   }) async {
     try {
       // 使用 /search/subject/{keyword} 端点
@@ -265,7 +266,11 @@ class ApiClient {
         print('搜索结果数量: ${results.length}');
       }
 
-      return results;
+      if (!enrichDetails || results.isEmpty) {
+        return results;
+      }
+
+      return _enrichSearchSubjectsWithDetails(results);
     } catch (e) {
       if (kDebugMode) {
         print('搜索条目失败: $e');
@@ -273,6 +278,34 @@ class ApiClient {
       // 如果搜索失败，返回空列表而不是抛出异常
       return [];
     }
+  }
+
+  Future<List<SlimSubject>> _enrichSearchSubjectsWithDetails(
+    List<SlimSubject> results,
+  ) async {
+    const batchSize = 8;
+    final enriched = <SlimSubject>[];
+
+    for (var start = 0; start < results.length; start += batchSize) {
+      final end = (start + batchSize).clamp(0, results.length);
+      final batch = results.sublist(start, end);
+      final details = await Future.wait(
+        batch.map((subject) async {
+          try {
+            final detail = await getSubject(subject.id);
+            return SlimSubject.fromSubject(detail);
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('补全搜索结果详情失败: ${subject.id}, $e');
+            }
+            return subject;
+          }
+        }),
+      );
+      enriched.addAll(details);
+    }
+
+    return enriched;
   }
 
   /// 获取条目详情
