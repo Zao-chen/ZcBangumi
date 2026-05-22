@@ -3056,7 +3056,6 @@ class _SubjectPageState extends State<SubjectPage>
                       ),
                       const Spacer(),
                       MikanSubscriptionButton(subject: _subject!),
-                      const SizedBox(width: 8),
                       SubjectActionButtons(
                         subject: _subject!,
                         existingCollection: _userCollection,

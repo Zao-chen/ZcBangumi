@@ -403,101 +403,121 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                 ),
-                DropdownButton<String>(
-                  value: MikanService.availableBaseUrls.contains(mikan.baseUrl)
-                      ? mikan.baseUrl
-                      : MikanService.defaultBaseUrl,
-                  onChanged: mikan.loading
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            mikan.setBaseUrl(value);
-                          }
-                        },
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'https://mikanani.me',
-                      child: Text('mikanani'),
+                if (mikan.isEnabled)
+                  DropdownButton<String>(
+                    value:
+                        MikanService.availableBaseUrls.contains(mikan.baseUrl)
+                        ? mikan.baseUrl
+                        : MikanService.defaultBaseUrl,
+                    onChanged: mikan.loading
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              mikan.setBaseUrl(value);
+                            }
+                          },
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'https://mikanani.me',
+                        child: Text('mikanani'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'https://mikanime.tv',
+                        child: Text('mikanime'),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('启用 Mikan 功能'),
+              subtitle: const Text('关闭后条目页不显示 Mikan 订阅按钮和资源入口'),
+              value: mikan.isEnabled,
+              onChanged: mikan.loading ? null : mikan.setEnabled,
+            ),
+            if (!mikan.isEnabled) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Mikan 功能已关闭，登录态和本地映射会保留。',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              Text(
+                mikan.isLoggedIn
+                    ? '已登录 @${mikan.session?.username ?? mikan.user?.name ?? ''}'
+                    : '登录后可在动画条目页同步 Mikan 订阅',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (mikan.error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  mikan.error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              if (!mikan.isLoggedIn) ...[
+                TextField(
+                  controller: _mikanUsernameController,
+                  enabled: !mikan.loading,
+                  decoration: const InputDecoration(
+                    labelText: 'Mikan 用户名 / 邮箱',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _mikanPasswordController,
+                  enabled: !mikan.loading,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Mikan 密码',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                  onSubmitted: (_) => _loginMikan(mikan),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: mikan.loading ? null : () => _loginMikan(mikan),
+                    icon: mikan.loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.login_rounded),
+                    label: const Text('登录 Mikan'),
+                  ),
+                ),
+              ] else ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: mikan.loading ? null : mikan.logout,
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('退出 Mikan'),
                     ),
-                    DropdownMenuItem(
-                      value: 'https://mikanime.tv',
-                      child: Text('mikanime'),
+                    OutlinedButton.icon(
+                      onPressed: mikan.loading ? null : _clearMikanData,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('清理 Mikan 缓存'),
                     ),
                   ],
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              mikan.isLoggedIn
-                  ? '已登录 @${mikan.session?.username ?? mikan.user?.name ?? ''}'
-                  : '登录后可在动画收藏编辑时同步 Mikan 订阅',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (mikan.error != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                mikan.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: 12),
-            if (!mikan.isLoggedIn) ...[
-              TextField(
-                controller: _mikanUsernameController,
-                enabled: !mikan.loading,
-                decoration: const InputDecoration(
-                  labelText: 'Mikan 用户名 / 邮箱',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _mikanPasswordController,
-                enabled: !mikan.loading,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Mikan 密码',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
-                onSubmitted: (_) => _loginMikan(mikan),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  onPressed: mikan.loading ? null : () => _loginMikan(mikan),
-                  icon: mikan.loading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.login_rounded),
-                  label: const Text('登录 Mikan'),
-                ),
-              ),
-            ] else ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: mikan.loading ? null : mikan.logout,
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('退出 Mikan'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: mikan.loading ? null : _clearMikanData,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('清理 Mikan 缓存'),
-                  ),
-                ],
-              ),
             ],
           ],
         ),

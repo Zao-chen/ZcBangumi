@@ -139,6 +139,8 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
     if (!_isAnime) return const SizedBox.shrink();
 
     final mikan = context.watch<MikanProvider>();
+    if (!mikan.isEnabled) return const SizedBox.shrink();
+
     final mapping = _mapping ?? mikan.mappingForSubject(widget.subject.id);
     final subscribed = mapping?.subscribed == true;
     final label = !mikan.isLoggedIn
@@ -147,23 +149,26 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
         ? '已订阅'
         : '订阅 Mikan';
 
-    return OutlinedButton.icon(
-      onPressed: _loading ? null : _handlePressed,
-      icon: _loading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              subscribed
-                  ? Icons.notifications_active
-                  : Icons.notifications_none_outlined,
-              size: 18,
-            ),
-      label: Text(label, style: const TextStyle(fontSize: 13)),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: OutlinedButton.icon(
+        onPressed: _loading ? null : _handlePressed,
+        icon: _loading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                subscribed
+                    ? Icons.notifications_active
+                    : Icons.notifications_none_outlined,
+                size: 18,
+              ),
+        label: Text(label, style: const TextStyle(fontSize: 13)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        ),
       ),
     );
   }

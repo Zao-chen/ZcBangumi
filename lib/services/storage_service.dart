@@ -19,6 +19,7 @@ class StorageService {
   static const String _keyRecentSubjectDetails = 'recent_subject_details';
   static const String _keyMikanSession = 'mikan_session';
   static const String _keyMikanBaseUrl = 'mikan_base_url';
+  static const String _keyMikanEnabled = 'mikan_enabled';
   static const String _keyMikanSubjectMappings = 'mikan_subject_mappings';
 
   late final SharedPreferences _prefs;
@@ -117,6 +118,12 @@ class StorageService {
 
   String get mikanBaseUrl =>
       _prefs.getString(_keyMikanBaseUrl) ?? 'https://mikanani.me';
+
+  bool get mikanEnabled => _prefs.getBool(_keyMikanEnabled) ?? true;
+
+  Future<void> setMikanEnabled(bool value) async {
+    await _prefs.setBool(_keyMikanEnabled, value);
+  }
 
   Future<void> setMikanBaseUrl(String baseUrl) async {
     final normalized = baseUrl.trim();

@@ -13,11 +13,13 @@ class MikanProvider extends ChangeNotifier {
   MikanUser? _user;
   bool _loading = false;
   bool _initialized = false;
+  bool _enabled = true;
   String? _error;
   Map<int, MikanSubjectMapping> _mappings = const {};
   List<MikanBangumi>? _subscribedCache;
 
   MikanProvider({required this.service, required this.storage}) {
+    _enabled = storage.mikanEnabled;
     _session = storage.mikanSession;
     _mappings = storage.getMikanSubjectMappings();
     service
@@ -30,6 +32,7 @@ class MikanProvider extends ChangeNotifier {
   bool get isLoggedIn => _session?.isValid == true;
   bool get loading => _loading;
   bool get initialized => _initialized;
+  bool get isEnabled => _enabled;
   String? get error => _error;
   String get baseUrl => service.baseUrl;
 
@@ -38,6 +41,12 @@ class MikanProvider extends ChangeNotifier {
   }
 
   Future<void> tryRestoreSession() async {
+    if (!_enabled) {
+      _initialized = true;
+      notifyListeners();
+      return;
+    }
+
     final saved = storage.mikanSession;
     _session = saved;
     service.setSession(saved);
@@ -101,6 +110,14 @@ class MikanProvider extends ChangeNotifier {
     service.setBaseUrl(baseUrl);
     _subscribedCache = null;
     await storage.setMikanBaseUrl(service.baseUrl);
+    notifyListeners();
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    if (_enabled == enabled) return;
+    _enabled = enabled;
+    _error = null;
+    await storage.setMikanEnabled(enabled);
     notifyListeners();
   }
 

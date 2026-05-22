@@ -84,6 +84,7 @@ void main() {
     WidgetTester tester, {
     required Subject subject,
     bool loggedIn = false,
+    bool enabled = true,
     MikanSubjectMapping? mapping,
   }) async {
     SharedPreferences.setMockInitialValues({});
@@ -91,6 +92,7 @@ void main() {
     if (!loggedIn) {
       await storage.init();
     }
+    await storage.setMikanEnabled(enabled);
     final mikan = MikanProvider(service: _FakeMikanService(), storage: storage);
     if (mapping != null) {
       await mikan.saveMapping(mapping);
@@ -138,6 +140,16 @@ void main() {
     await pumpMikanButton(tester, subject: _subject(type: 2));
 
     expect(find.text('Mikan'), findsOneWidget);
+  });
+
+  testWidgets('Mikan subscription button is hidden when feature is disabled', (
+    tester,
+  ) async {
+    await pumpMikanButton(tester, subject: _subject(type: 2), enabled: false);
+
+    expect(find.text('Mikan'), findsNothing);
+    expect(find.text('订阅 Mikan'), findsNothing);
+    expect(find.text('已订阅'), findsNothing);
   });
 
   testWidgets('Mikan subscription button reflects saved subscribed mapping', (

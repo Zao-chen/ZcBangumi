@@ -101,6 +101,20 @@ void main() {
     expect(service.getUserCalls, 1);
   });
 
+  test('Mikan feature is enabled by default and can be disabled', () async {
+    final storage = await storageWithSession();
+    final service = _FakeMikanService();
+    final provider = MikanProvider(service: service, storage: storage);
+
+    expect(provider.isEnabled, isTrue);
+
+    await provider.setEnabled(false);
+    await provider.tryRestoreSession();
+
+    expect(provider.isEnabled, isFalse);
+    expect(service.getUserCalls, 0);
+  });
+
   test('successful subscribe invalidates subscribed cache', () async {
     final storage = await storageWithSession();
     final service = _FakeMikanService();
