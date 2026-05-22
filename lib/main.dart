@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'services/api_client.dart';
+import 'services/mikan_service.dart';
 import 'services/storage_service.dart';
 import 'services/update_service.dart';
 import 'models/navigation_config.dart';
@@ -10,6 +11,7 @@ import 'providers/collection_provider.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/rakuen_favorite_provider.dart';
 import 'providers/update_provider.dart';
+import 'providers/mikan_provider.dart';
 import 'widgets/responsive_scaffold.dart';
 import 'widgets/update_dialog.dart';
 import 'pages/timeline_page.dart';
@@ -30,12 +32,14 @@ void main() async {
 
   // 初始化更新服务
   final updateService = UpdateService(apiClient.dio, storage);
+  final mikanService = MikanService(baseUrl: storage.mikanBaseUrl);
 
   runApp(
     ZCBangumiApp(
       apiClient: apiClient,
       storage: storage,
       updateService: updateService,
+      mikanService: mikanService,
     ),
   );
 }
@@ -44,12 +48,14 @@ class ZCBangumiApp extends StatelessWidget {
   final ApiClient apiClient;
   final StorageService storage;
   final UpdateService updateService;
+  final MikanService mikanService;
 
   const ZCBangumiApp({
     super.key,
     required this.apiClient,
     required this.storage,
     required this.updateService,
+    required this.mikanService,
   });
 
   @override
@@ -59,6 +65,7 @@ class ZCBangumiApp extends StatelessWidget {
         Provider<ApiClient>.value(value: apiClient),
         Provider<StorageService>.value(value: storage),
         Provider<UpdateService>.value(value: updateService),
+        Provider<MikanService>.value(value: mikanService),
         ChangeNotifierProvider(
           create: (_) => AppStateProvider(storage: storage),
         ),
@@ -75,6 +82,9 @@ class ZCBangumiApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) =>
               UpdateProvider(updateService: updateService, storage: storage),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => MikanProvider(service: mikanService, storage: storage),
         ),
       ],
       child: MaterialApp(
@@ -228,6 +238,8 @@ class _AppShellState extends State<_AppShell> {
 
       // 1. 尝试恢复登录状态
       final authProvider = context.read<AuthProvider>();
+      final mikanProvider = context.read<MikanProvider>();
+      await mikanProvider.tryRestoreSession();
       await authProvider.tryRestoreSession();
       if (mounted) {
         await context.read<RakuenFavoriteProvider>().initialize(

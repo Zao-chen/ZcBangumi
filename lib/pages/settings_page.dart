@@ -9,6 +9,8 @@ import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
+import '../providers/mikan_provider.dart';
+import '../services/mikan_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/update_dialog.dart';
 
@@ -22,6 +24,10 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   int _selectedSectionIndex = 0;
   String _version = '';
+  final TextEditingController _mikanUsernameController =
+      TextEditingController();
+  final TextEditingController _mikanPasswordController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -35,6 +41,13 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _version = 'v${packageInfo.version}';
     });
+  }
+
+  @override
+  void dispose() {
+    _mikanUsernameController.dispose();
+    _mikanPasswordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -359,7 +372,137 @@ class _SettingsPageState extends State<SettingsPage> {
           ];
         },
       ),
+      _SettingsSection(
+        icon: Icons.cloud_sync_outlined,
+        title: 'Mikan 订阅',
+        subtitle: '账号、镜像与本地映射',
+        builder: (ctx) {
+          final mikan = ctx.watch<MikanProvider>();
+          return [_buildMikanSettingsCard(ctx, mikan)];
+        },
+      ),
     ];
+  }
+
+  Widget _buildMikanSettingsCard(BuildContext context, MikanProvider mikan) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud_sync_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Mikan 订阅',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                DropdownButton<String>(
+                  value: MikanService.availableBaseUrls.contains(mikan.baseUrl)
+                      ? mikan.baseUrl
+                      : MikanService.defaultBaseUrl,
+                  onChanged: mikan.loading
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            mikan.setBaseUrl(value);
+                          }
+                        },
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'https://mikanani.me',
+                      child: Text('mikanani'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'https://mikanime.tv',
+                      child: Text('mikanime'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              mikan.isLoggedIn
+                  ? '已登录 @${mikan.session?.username ?? mikan.user?.name ?? ''}'
+                  : '登录后可在动画收藏编辑时同步 Mikan 订阅',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (mikan.error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                mikan.error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (!mikan.isLoggedIn) ...[
+              TextField(
+                controller: _mikanUsernameController,
+                enabled: !mikan.loading,
+                decoration: const InputDecoration(
+                  labelText: 'Mikan 用户名 / 邮箱',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _mikanPasswordController,
+                enabled: !mikan.loading,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Mikan 密码',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+                onSubmitted: (_) => _loginMikan(mikan),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: mikan.loading ? null : () => _loginMikan(mikan),
+                  icon: mikan.loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.login_rounded),
+                  label: const Text('登录 Mikan'),
+                ),
+              ),
+            ] else ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: mikan.loading ? null : mikan.logout,
+                    icon: const Icon(Icons.logout_rounded),
+                    label: const Text('退出 Mikan'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: mikan.loading ? null : _clearMikanData,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('清理 Mikan 缓存'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   void _openSectionPage(
@@ -871,6 +1014,56 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     }
     return true;
+  }
+
+  Future<void> _loginMikan(MikanProvider mikan) async {
+    final username = _mikanUsernameController.text.trim();
+    final password = _mikanPasswordController.text;
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入 Mikan 账号和密码')));
+      return;
+    }
+
+    final ok = await mikan.login(username, password);
+    if (!mounted) return;
+    if (ok) {
+      _mikanPasswordController.clear();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Mikan 登录成功')));
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Mikan 登录失败')));
+    }
+  }
+
+  Future<void> _clearMikanData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清理 Mikan 缓存'),
+        content: const Text('将清理 Mikan 登录态和本地条目映射，Bangumi 登录不受影响。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('清理'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await context.read<MikanProvider>().clearLocalMikanData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Mikan 缓存已清理')));
   }
 
   Future<void> _clearDataCache() async {

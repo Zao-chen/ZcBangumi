@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../constants.dart';
 import '../models/collection.dart';
+import '../models/mikan.dart';
 import '../models/subject.dart';
 import '../providers/auth_provider.dart';
+import '../providers/mikan_provider.dart';
+import '../pages/settings_page.dart';
 import '../services/api_client.dart';
+import '../services/link_navigator.dart';
 
 /// 条目操作按钮组件
 /// 包含编辑按钮，打开统一对话框修改收藏、评分、评论。
@@ -103,6 +109,290 @@ class _SubjectActionButtonsState extends State<SubjectActionButtons> {
   }
 }
 
+class MikanSubscriptionButton extends StatefulWidget {
+  final Subject subject;
+
+  const MikanSubscriptionButton({super.key, required this.subject});
+
+  @override
+  State<MikanSubscriptionButton> createState() =>
+      _MikanSubscriptionButtonState();
+}
+
+class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
+  bool _loading = false;
+  MikanSubjectMapping? _mapping;
+
+  bool get _isAnime => widget.subject.type == BgmConst.subjectAnime;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isAnime) return;
+    _mapping ??= context.read<MikanProvider>().mappingForSubject(
+      widget.subject.id,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAnime) return const SizedBox.shrink();
+
+    final mikan = context.watch<MikanProvider>();
+    final mapping = _mapping ?? mikan.mappingForSubject(widget.subject.id);
+    final subscribed = mapping?.subscribed == true;
+    final label = !mikan.isLoggedIn
+        ? 'Mikan'
+        : subscribed
+        ? '已订阅'
+        : '订阅 Mikan';
+
+    return OutlinedButton.icon(
+      onPressed: _loading ? null : _handlePressed,
+      icon: _loading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              subscribed
+                  ? Icons.notifications_active
+                  : Icons.notifications_none_outlined,
+              size: 18,
+            ),
+      label: Text(label, style: const TextStyle(fontSize: 13)),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      ),
+    );
+  }
+
+  Future<void> _handlePressed() async {
+    final mikan = context.read<MikanProvider>();
+    if (!mikan.isLoggedIn) {
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+      return;
+    }
+
+    var mapping = await _ensureMapping(refresh: true);
+    if (mapping == null || !mounted) return;
+    await _showActions(mapping);
+  }
+
+  Future<MikanSubjectMapping?> _ensureMapping({bool refresh = false}) async {
+    final mikan = context.read<MikanProvider>();
+    final existing = _mapping ?? mikan.mappingForSubject(widget.subject.id);
+    if (existing != null) {
+      if (!refresh) return existing;
+      final refreshed = await _runWithLoading(
+        () => mikan.refreshMapping(existing),
+      );
+      if (refreshed != null && mounted) {
+        setState(() => _mapping = refreshed);
+      }
+      return refreshed;
+    }
+
+    final exact = await _runWithLoading(
+      () => mikan.findExactMapping(widget.subject),
+    );
+    if (exact != null) {
+      if (mounted) setState(() => _mapping = exact);
+      return exact;
+    }
+    return _pickMikanMapping();
+  }
+
+  Future<MikanSubjectMapping?> _pickMikanMapping() async {
+    final mikan = context.read<MikanProvider>();
+    final candidates = await _runWithLoading(
+      () => mikan.searchBangumiCandidates(widget.subject),
+    );
+    if (!mounted || candidates == null) return null;
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有找到 Mikan 候选番组')));
+      return null;
+    }
+
+    final selectedBangumi = await showModalBottomSheet<MikanBangumi>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _MikanBangumiPicker(candidates: candidates),
+    );
+    if (selectedBangumi == null || !mounted) return null;
+
+    final detail = await _runWithLoading(
+      () => mikan.getBangumiDetail(selectedBangumi.id),
+    );
+    if (detail == null || !mounted) return null;
+
+    MikanSubgroupBangumi? selectedSubgroup;
+    final subscribedSubgroups = detail.subgroupBangumis
+        .where((item) => item.subscribed)
+        .toList(growable: false);
+    if (subscribedSubgroups.isNotEmpty) {
+      selectedSubgroup = subscribedSubgroups.first;
+    } else if (detail.subgroupBangumis.length == 1) {
+      selectedSubgroup = detail.subgroupBangumis.first;
+    } else if (detail.subgroupBangumis.isNotEmpty) {
+      selectedSubgroup = await showModalBottomSheet<MikanSubgroupBangumi>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => _MikanSubgroupPicker(
+          bangumiName: selectedBangumi.name,
+          subgroups: detail.subgroupBangumis,
+        ),
+      );
+      if (selectedSubgroup == null) return null;
+    }
+
+    final mapping = MikanSubjectMapping.fromSelection(
+      subjectId: widget.subject.id,
+      bangumi: MikanBangumi(
+        id: selectedBangumi.id,
+        name: detail.name.isNotEmpty ? detail.name : selectedBangumi.name,
+        cover: detail.cover.isNotEmpty ? detail.cover : selectedBangumi.cover,
+        subscribed: detail.subscribed || selectedBangumi.subscribed,
+      ),
+      subgroup: selectedSubgroup,
+    );
+    await mikan.saveMapping(mapping);
+    if (mounted) setState(() => _mapping = mapping);
+    return mapping;
+  }
+
+  Future<void> _showActions(MikanSubjectMapping mapping) async {
+    final action = await showModalBottomSheet<_MikanSubscriptionAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _MikanSubscriptionActionsSheet(mapping: mapping),
+    );
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case _MikanSubscriptionAction.subscribe:
+        await _sync(mapping, subscribe: true);
+      case _MikanSubscriptionAction.unsubscribe:
+        await _sync(mapping, subscribe: false);
+      case _MikanSubscriptionAction.change:
+        await _pickMikanMapping();
+      case _MikanSubscriptionAction.records:
+        await _showMikanRecords(mapping);
+    }
+  }
+
+  Future<void> _sync(
+    MikanSubjectMapping mapping, {
+    required bool subscribe,
+  }) async {
+    final mikan = context.read<MikanProvider>();
+    final next = await _runWithLoading(() async {
+      await mikan.syncSubscription(mapping: mapping, subscribe: subscribe);
+      return mikan.refreshMapping(mapping);
+    });
+    if (!mounted || next == null) return;
+    setState(() => _mapping = next);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(subscribe ? 'Mikan 已订阅' : 'Mikan 已取消订阅')),
+    );
+  }
+
+  Future<void> _showMikanRecords(MikanSubjectMapping mapping) async {
+    final detail = await _runWithLoading(
+      () => context.read<MikanProvider>().getBangumiDetail(mapping.bangumiId),
+    );
+    if (!mounted || detail == null) return;
+    final subgroups = mapping.subgroupId.isEmpty
+        ? detail.subgroupBangumis
+        : detail.subgroupBangumis
+              .where((item) => item.dataId == mapping.subgroupId)
+              .toList();
+    final records = subgroups.expand((item) => item.records).toList();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _MikanRecordsSheet(records: records),
+    );
+  }
+
+  Future<T?> _runWithLoading<T>(Future<T> Function() run) async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      return await run();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Mikan 操作失败: $e')));
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+}
+
+enum _MikanSubscriptionAction { subscribe, unsubscribe, change, records }
+
+class _MikanSubscriptionActionsSheet extends StatelessWidget {
+  final MikanSubjectMapping mapping;
+
+  const _MikanSubscriptionActionsSheet({required this.mapping});
+
+  @override
+  Widget build(BuildContext context) {
+    final subscribed = mapping.subscribed;
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: Text(mapping.bangumiName),
+            subtitle: Text(
+              [
+                if (mapping.subgroupName.isNotEmpty) mapping.subgroupName,
+                subscribed ? 'Mikan 已订阅' : 'Mikan 未订阅',
+              ].join(' · '),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: Icon(
+              subscribed
+                  ? Icons.notifications_off_outlined
+                  : Icons.notifications_active_outlined,
+            ),
+            title: Text(subscribed ? '取消订阅这个字幕组' : '订阅这个字幕组'),
+            onTap: () => Navigator.of(context).pop(
+              subscribed
+                  ? _MikanSubscriptionAction.unsubscribe
+                  : _MikanSubscriptionAction.subscribe,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.swap_horiz_rounded),
+            title: const Text('更换 Mikan 番组/字幕组'),
+            onTap: () =>
+                Navigator.of(context).pop(_MikanSubscriptionAction.change),
+          ),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('查看资源'),
+            onTap: () =>
+                Navigator.of(context).pop(_MikanSubscriptionAction.records),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _UnifiedEditDialog extends StatefulWidget {
   final Subject subject;
   final UserCollection? collection;
@@ -169,10 +459,11 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
 
       if (!mounted) return;
       widget.onChanged();
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('\u5df2\u4fdd\u5b58')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('\u5df2\u4fdd\u5b58')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -434,39 +725,41 @@ class _UnifiedEditDialogState extends State<_UnifiedEditDialog> {
                         children: [
                           Expanded(
                             flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionTitle(
-                                  context,
-                                  '\u6536\u85cf\u72b6\u6001',
-                                ),
-                                const SizedBox(height: 8),
-                                _buildCollectionTypeSelector(context),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _buildSectionTitle(
-                                        context,
-                                        '\u79c1\u5bc6',
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildSectionTitle(
+                                    context,
+                                    '\u6536\u85cf\u72b6\u6001',
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildCollectionTypeSelector(context),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildSectionTitle(
+                                          context,
+                                          '\u79c1\u5bc6',
+                                        ),
                                       ),
-                                    ),
-                                    Switch(
-                                      value: _isPrivate,
-                                      onChanged: _loading
-                                          ? null
-                                          : (value) {
-                                              setState(
-                                                () => _isPrivate = value,
-                                              );
-                                            },
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-                                _buildRatingSection(context, colorScheme),
-                              ],
+                                      Switch(
+                                        value: _isPrivate,
+                                        onChanged: _loading
+                                            ? null
+                                            : (value) {
+                                                setState(
+                                                  () => _isPrivate = value,
+                                                );
+                                              },
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildRatingSection(context, colorScheme),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 24),
@@ -605,4 +898,227 @@ class _HalfClipper extends CustomClipper<Rect> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
+class _MikanBangumiPicker extends StatelessWidget {
+  final List<MikanBangumi> candidates;
+
+  const _MikanBangumiPicker({required this.candidates});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    '选择 Mikan 番组',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                itemCount: candidates.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = candidates[index];
+                  return ListTile(
+                    leading: const Icon(Icons.movie_outlined),
+                    title: Text(item.name),
+                    subtitle: item.updateAt.isEmpty
+                        ? null
+                        : Text('更新：${item.updateAt}'),
+                    trailing: item.subscribed
+                        ? const Icon(Icons.notifications_active)
+                        : const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).pop(item),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MikanSubgroupPicker extends StatelessWidget {
+  final String bangumiName;
+  final List<MikanSubgroupBangumi> subgroups;
+
+  const _MikanSubgroupPicker({
+    required this.bangumiName,
+    required this.subgroups,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      bangumiName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                itemCount: subgroups.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = subgroups[index];
+                  return ListTile(
+                    leading: Icon(
+                      item.subscribed
+                          ? Icons.notifications_active
+                          : Icons.subscriptions_outlined,
+                    ),
+                    title: Text(item.name),
+                    subtitle: Text(
+                      [
+                        if (item.sublang.isNotEmpty) item.sublang,
+                        if (item.records.isNotEmpty)
+                          '${item.records.length} 个资源',
+                      ].join(' · '),
+                    ),
+                    onTap: () => Navigator.of(context).pop(item),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MikanRecordsSheet extends StatelessWidget {
+  final List<MikanRecordItem> records;
+
+  const _MikanRecordsSheet({required this.records});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Mikan 资源',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            if (records.isEmpty)
+              const Expanded(child: Center(child: Text('暂无资源')))
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemCount: records.length,
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = records[index];
+                    return ListTile(
+                      title: Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        [
+                          if (item.size.isNotEmpty) item.size,
+                          if (item.publishAt.isNotEmpty) item.publishAt,
+                        ].join(' · '),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: item.magnet.isEmpty
+                                ? null
+                                : () => _copyMagnet(context, item.magnet),
+                            icon: const Icon(Icons.copy),
+                            tooltip: '复制磁链',
+                          ),
+                          IconButton(
+                            onPressed: item.magnet.isEmpty
+                                ? null
+                                : () => _openUri(context, item.magnet),
+                            icon: const Icon(Icons.link),
+                            tooltip: '打开磁链',
+                          ),
+                          IconButton(
+                            onPressed: item.torrent.isEmpty
+                                ? null
+                                : () => _openUri(context, item.torrent),
+                            icon: const Icon(Icons.download_outlined),
+                            tooltip: '打开种子',
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _copyMagnet(BuildContext context, String magnet) async {
+    await Clipboard.setData(ClipboardData(text: magnet));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('磁链已复制')));
+  }
+
+  static Future<void> _openUri(BuildContext context, String raw) async {
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+    final ok = await LinkNavigator.openBrowser(uri);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('打开失败')));
+    }
+  }
 }

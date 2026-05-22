@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bangumi_web_session.dart';
+import '../models/mikan.dart';
 import '../models/subject.dart';
 
 /// 本地存储服务
@@ -16,6 +17,9 @@ class StorageService {
   static const String _keyLastUpdateCheck = 'last_update_check';
   static const String _keyIgnoredVersion = 'ignored_version';
   static const String _keyRecentSubjectDetails = 'recent_subject_details';
+  static const String _keyMikanSession = 'mikan_session';
+  static const String _keyMikanBaseUrl = 'mikan_base_url';
+  static const String _keyMikanSubjectMappings = 'mikan_subject_mappings';
 
   late final SharedPreferences _prefs;
 
@@ -89,6 +93,85 @@ class StorageService {
     await _prefs.remove(_keyUsername);
   }
 
+  MikanSession? get mikanSession {
+    final raw = _prefs.getString(_keyMikanSession);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      return MikanSession.fromJson(
+        decoded.map((key, value) => MapEntry('$key', value)),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setMikanSession(MikanSession? session) async {
+    if (session == null || !session.isValid) {
+      await _prefs.remove(_keyMikanSession);
+      return;
+    }
+    await _prefs.setString(_keyMikanSession, jsonEncode(session.toJson()));
+  }
+
+  String get mikanBaseUrl =>
+      _prefs.getString(_keyMikanBaseUrl) ?? 'https://mikanani.me';
+
+  Future<void> setMikanBaseUrl(String baseUrl) async {
+    final normalized = baseUrl.trim();
+    if (normalized.isEmpty) {
+      await _prefs.remove(_keyMikanBaseUrl);
+    } else {
+      await _prefs.setString(_keyMikanBaseUrl, normalized);
+    }
+  }
+
+  Map<int, MikanSubjectMapping> getMikanSubjectMappings() {
+    final raw = getCache(_keyMikanSubjectMappings);
+    if (raw is! Map) return const {};
+    final result = <int, MikanSubjectMapping>{};
+    for (final entry in raw.entries) {
+      final subjectId = int.tryParse('${entry.key}');
+      final value = entry.value;
+      if (subjectId == null || value is! Map) continue;
+      try {
+        result[subjectId] = MikanSubjectMapping.fromJson(
+          value.map((key, value) => MapEntry('$key', value)),
+        );
+      } catch (_) {
+        // 忽略损坏的映射项
+      }
+    }
+    return result;
+  }
+
+  MikanSubjectMapping? getMikanSubjectMapping(int subjectId) {
+    return getMikanSubjectMappings()[subjectId];
+  }
+
+  Future<void> setMikanSubjectMapping(MikanSubjectMapping mapping) async {
+    final all = getMikanSubjectMappings();
+    final next = <String, dynamic>{
+      for (final entry in all.entries) '${entry.key}': entry.value.toJson(),
+      '${mapping.subjectId}': mapping.toJson(),
+    };
+    await setCache(_keyMikanSubjectMappings, next);
+  }
+
+  Future<void> removeMikanSubjectMapping(int subjectId) async {
+    final all = getMikanSubjectMappings();
+    all.remove(subjectId);
+    await setCache(_keyMikanSubjectMappings, {
+      for (final entry in all.entries) '${entry.key}': entry.value.toJson(),
+    });
+  }
+
+  Future<void> clearMikanData() async {
+    await _prefs.remove(_keyMikanSession);
+    await removeCache(_keyMikanSubjectMappings);
+  }
+
   Future<void> _migrateLegacyWebSession() async {
     final hasLegacyCookie = (_prefs.getString(_keyWebCookie) ?? '').isNotEmpty;
     final hasLegacyCookieJar =
@@ -144,7 +227,12 @@ class StorageService {
   Future<void> clearDataCache() async {
     final keys = _prefs
         .getKeys()
-        .where((k) => k.startsWith('cache_') && k != 'cache_app_state')
+        .where(
+          (k) =>
+              k.startsWith('cache_') &&
+              k != 'cache_app_state' &&
+              k != 'cache_$_keyMikanSubjectMappings',
+        )
         .toList();
     for (final key in keys) {
       await _prefs.remove(key);
