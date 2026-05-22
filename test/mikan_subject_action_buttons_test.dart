@@ -19,7 +19,28 @@ class _LoggedInAuthProvider extends AuthProvider {
 }
 
 class _FakeMikanService extends MikanService {
-  _FakeMikanService() : super(baseUrl: MikanService.defaultBaseUrl);
+  final bool remoteSubscribed;
+
+  _FakeMikanService({this.remoteSubscribed = false})
+    : super(baseUrl: MikanService.defaultBaseUrl);
+
+  @override
+  Future<MikanBangumiDetail> getBangumi(String bangumiId) async {
+    return MikanBangumiDetail(
+      id: bangumiId,
+      name: '测试动画',
+      subgroupBangumis: [
+        MikanSubgroupBangumi(
+          dataId: '15',
+          name: '字幕组',
+          subscribed: remoteSubscribed,
+          records: const [
+            MikanRecordItem(title: '测试资源', magnet: 'magnet:?xt=urn:test'),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 void main() {
@@ -85,6 +106,7 @@ void main() {
     required Subject subject,
     bool loggedIn = false,
     bool enabled = true,
+    bool remoteSubscribed = false,
     MikanSubjectMapping? mapping,
   }) async {
     SharedPreferences.setMockInitialValues({});
@@ -93,7 +115,10 @@ void main() {
       await storage.init();
     }
     await storage.setMikanEnabled(enabled);
-    final mikan = MikanProvider(service: _FakeMikanService(), storage: storage);
+    final mikan = MikanProvider(
+      service: _FakeMikanService(remoteSubscribed: remoteSubscribed),
+      storage: storage,
+    );
     if (mapping != null) {
       await mikan.saveMapping(mapping);
     }
@@ -139,7 +164,101 @@ void main() {
   ) async {
     await pumpMikanButton(tester, subject: _subject(type: 2));
 
-    expect(find.text('Mikan'), findsOneWidget);
+    expect(find.text('追番'), findsOneWidget);
+  });
+
+  testWidgets('logged-out Mikan button opens subscription dialog', (
+    tester,
+  ) async {
+    await pumpMikanButton(
+      tester,
+      subject: _subject(type: 2),
+      mapping: MikanSubjectMapping(
+        subjectId: 12345,
+        bangumiId: '681',
+        bangumiName: '测试动画',
+        subgroupId: '15',
+        subgroupName: '字幕组',
+        updatedAt: DateTime(2026, 5, 21),
+      ),
+    );
+
+    await tester.tap(find.text('追番'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mikan 订阅'), findsOneWidget);
+    expect(find.text('字幕组'), findsOneWidget);
+    expect(find.text('登录后订阅'), findsOneWidget);
+    expect(find.text('查看资源'), findsOneWidget);
+    expect(find.textContaining('Mikan 未订阅'), findsNothing);
+    expect(find.text('尚未关联 Mikan 番组'), findsNothing);
+    expect(find.text('更换 Mikan 番组/字幕组'), findsNothing);
+    expect(find.text('订阅这个字幕组'), findsNothing);
+    expect(find.text('取消订阅这个字幕组'), findsNothing);
+  });
+
+  testWidgets('Mikan subgroup row shows resources inside dialog', (
+    tester,
+  ) async {
+    await pumpMikanButton(
+      tester,
+      subject: _subject(type: 2),
+      loggedIn: true,
+      remoteSubscribed: true,
+      mapping: MikanSubjectMapping(
+        subjectId: 12345,
+        bangumiId: '681',
+        bangumiName: '测试动画',
+        subgroupId: '15',
+        subgroupName: '字幕组',
+        subscribed: true,
+        updatedAt: DateTime(2026, 5, 21),
+      ),
+    );
+
+    await tester.tap(find.text('追番'));
+    await tester.pumpAndSettle();
+    expect(find.text('取消订阅'), findsOneWidget);
+    expect(find.text('查看资源'), findsOneWidget);
+
+    await tester.tap(find.text('查看资源'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mikan 资源'), findsNothing);
+    expect(find.text('测试资源'), findsOneWidget);
+  });
+
+  testWidgets('portrait Mikan resources open as drawer', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpMikanButton(
+      tester,
+      subject: _subject(type: 2),
+      loggedIn: true,
+      remoteSubscribed: true,
+      mapping: MikanSubjectMapping(
+        subjectId: 12345,
+        bangumiId: '681',
+        bangumiName: '测试动画',
+        subgroupId: '15',
+        subgroupName: '字幕组',
+        subscribed: true,
+        updatedAt: DateTime(2026, 5, 21),
+      ),
+    );
+
+    await tester.tap(find.text('追番'));
+    await tester.pumpAndSettle();
+    expect(find.text('字幕组 资源'), findsNothing);
+
+    await tester.tap(find.text('查看资源'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('字幕组 资源'), findsOneWidget);
+    expect(find.text('测试资源'), findsOneWidget);
   });
 
   testWidgets('Mikan subscription button is hidden when feature is disabled', (
@@ -148,7 +267,7 @@ void main() {
     await pumpMikanButton(tester, subject: _subject(type: 2), enabled: false);
 
     expect(find.text('Mikan'), findsNothing);
-    expect(find.text('订阅 Mikan'), findsNothing);
+    expect(find.text('追番'), findsNothing);
     expect(find.text('已订阅'), findsNothing);
   });
 
@@ -170,7 +289,8 @@ void main() {
       ),
     );
 
-    expect(find.text('已订阅'), findsOneWidget);
+    expect(find.text('追番'), findsOneWidget);
+    expect(find.text('已订阅'), findsNothing);
   });
 }
 

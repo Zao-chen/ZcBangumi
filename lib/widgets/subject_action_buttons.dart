@@ -120,7 +120,6 @@ class MikanSubscriptionButton extends StatefulWidget {
 }
 
 class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
-  bool _loading = false;
   MikanSubjectMapping? _mapping;
 
   bool get _isAnime => widget.subject.type == BgmConst.subjectAnime;
@@ -143,29 +142,18 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
 
     final mapping = _mapping ?? mikan.mappingForSubject(widget.subject.id);
     final subscribed = mapping?.subscribed == true;
-    final label = !mikan.isLoggedIn
-        ? 'Mikan'
-        : subscribed
-        ? '已订阅'
-        : '订阅 Mikan';
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: OutlinedButton.icon(
-        onPressed: _loading ? null : _handlePressed,
-        icon: _loading
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(
-                subscribed
-                    ? Icons.notifications_active
-                    : Icons.notifications_none_outlined,
-                size: 18,
-              ),
-        label: Text(label, style: const TextStyle(fontSize: 13)),
+        onPressed: _handlePressed,
+        icon: Icon(
+          subscribed
+              ? Icons.notifications_active
+              : Icons.notifications_none_outlined,
+          size: 18,
+        ),
+        label: const Text('追番', style: TextStyle(fontSize: 13)),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         ),
@@ -174,54 +162,348 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
   }
 
   Future<void> _handlePressed() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _MikanSubscriptionDialog(subject: widget.subject),
+    );
+    if (!mounted) return;
+    setState(() {
+      _mapping = context.read<MikanProvider>().mappingForSubject(
+        widget.subject.id,
+      );
+    });
+  }
+}
+
+class _MikanSubscriptionDialog extends StatefulWidget {
+  final Subject subject;
+
+  const _MikanSubscriptionDialog({required this.subject});
+
+  @override
+  State<_MikanSubscriptionDialog> createState() =>
+      _MikanSubscriptionDialogState();
+}
+
+class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
+  bool _loading = false;
+  MikanSubjectMapping? _mapping;
+  MikanSubjectMapping? _resourceMapping;
+  Future<MikanBangumiDetail>? _detailFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _mapping = context.read<MikanProvider>().mappingForSubject(
+      widget.subject.id,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshMapping());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final mikan = context.watch<MikanProvider>();
+    final mapping = _mapping ?? mikan.mappingForSubject(widget.subject.id);
+    final subjectTitle = widget.subject.nameCn.isNotEmpty
+        ? widget.subject.nameCn
+        : widget.subject.name;
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape &&
+        size.width >= 700;
+
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: size.width * 0.06,
+        vertical: size.height * 0.06,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: size.width * 0.88,
+        height: size.height * 0.88,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Mikan 订阅',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          subjectTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _loading ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: '关闭',
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (mapping == null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _loading ? null : _selectBangumi,
+                          icon: const Icon(Icons.search),
+                          label: const Text('选择 Mikan 番组'),
+                        ),
+                      ),
+                    ] else ...[
+                      _buildSubgroupList(
+                        context,
+                        mikan,
+                        mapping,
+                        isLandscape: isLandscape,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _loading ? null : () => Navigator.pop(context),
+                    child: const Text('关闭'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubgroupList(
+    BuildContext context,
+    MikanProvider mikan,
+    MikanSubjectMapping mapping, {
+    required bool isLandscape,
+  }) {
+    _detailFuture ??= mikan.getBangumiDetail(mapping.bangumiId);
+    return FutureBuilder<MikanBangumiDetail>(
+      future: _detailFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return Text('字幕组加载失败: ${snapshot.error}');
+        }
+
+        final detail = snapshot.data;
+        final subgroups = detail?.subgroupBangumis ?? const [];
+        if (detail == null || subgroups.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: Text('暂无字幕组')),
+          );
+        }
+
+        final subgroupList = Column(
+          children: subgroups
+              .map(
+                (item) => _MikanSubgroupActionTile(
+                  mapping: _mappingForSubgroup(mapping, detail, item),
+                  subgroup: item,
+                  loggedIn: mikan.isLoggedIn,
+                  loading: _loading,
+                  onSubscribe: () => _syncSubgroup(
+                    mapping: _mappingForSubgroup(mapping, detail, item),
+                    subscribe: !item.subscribed,
+                  ),
+                  onLogin: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  ),
+                  onResources: () {
+                    final target = _mappingForSubgroup(mapping, detail, item);
+                    if (isLandscape) {
+                      setState(() => _resourceMapping = target);
+                    } else {
+                      _showResourceDrawer(detail, target);
+                    }
+                  },
+                ),
+              )
+              .toList(),
+        );
+        final resources = _buildInlineResources(
+          context,
+          detail,
+          _resourceMapping,
+        );
+
+        if (!isLandscape) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [subgroupList],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 5, child: subgroupList),
+            const SizedBox(width: 20),
+            Expanded(flex: 6, child: resources),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showResourceDrawer(
+    MikanBangumiDetail detail,
+    MikanSubjectMapping mapping,
+  ) {
+    final records = _recordsForMapping(detail, mapping);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _MikanResourceDrawer(
+        title: mapping.subgroupName.isEmpty
+            ? '资源'
+            : '${mapping.subgroupName} 资源',
+        records: records,
+      ),
+    );
+  }
+
+  Widget _buildInlineResources(
+    BuildContext context,
+    MikanBangumiDetail detail,
+    MikanSubjectMapping? resourceMapping,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final mapping = resourceMapping;
+    if (mapping == null || mapping.subgroupId.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '选择一个字幕组后查看资源',
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+
+    final records = _recordsForMapping(detail, mapping);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          mapping.subgroupName.isEmpty ? '资源' : '${mapping.subgroupName} 资源',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        if (records.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              border: Border.all(color: colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(child: Text('暂无资源')),
+          )
+        else
+          ...records.map((item) => _MikanRecordTile(item: item)),
+      ],
+    );
+  }
+
+  List<MikanRecordItem> _recordsForMapping(
+    MikanBangumiDetail detail,
+    MikanSubjectMapping mapping,
+  ) {
+    return detail.subgroupBangumis
+        .where((item) => item.dataId == mapping.subgroupId)
+        .expand((item) => item.records)
+        .toList();
+  }
+
+  Future<void> _refreshMapping() async {
     final mikan = context.read<MikanProvider>();
-    if (!mikan.isLoggedIn) {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+    final saved = _mapping;
+    if (saved == null) {
+      final exact = await _runWithLoading(
+        () => mikan.findExactMapping(widget.subject),
+      );
+      if (!mounted || exact == null) return;
+      setState(() {
+        _mapping = exact;
+        _resourceMapping = null;
+        _detailFuture = null;
+      });
       return;
     }
 
-    var mapping = await _ensureMapping(refresh: true);
-    if (mapping == null || !mounted) return;
-    await _showActions(mapping);
+    final refreshed = await _runWithLoading(() => mikan.refreshMapping(saved));
+    if (!mounted || refreshed == null) return;
+    setState(() {
+      _mapping = refreshed;
+      _resourceMapping = null;
+      _detailFuture = null;
+    });
   }
 
-  Future<MikanSubjectMapping?> _ensureMapping({bool refresh = false}) async {
-    final mikan = context.read<MikanProvider>();
-    final existing = _mapping ?? mikan.mappingForSubject(widget.subject.id);
-    if (existing != null) {
-      if (!refresh) return existing;
-      final refreshed = await _runWithLoading(
-        () => mikan.refreshMapping(existing),
-      );
-      if (refreshed != null && mounted) {
-        setState(() => _mapping = refreshed);
-      }
-      return refreshed;
-    }
-
-    final exact = await _runWithLoading(
-      () => mikan.findExactMapping(widget.subject),
-    );
-    if (exact != null) {
-      if (mounted) setState(() => _mapping = exact);
-      return exact;
-    }
-    return _pickMikanMapping();
-  }
-
-  Future<MikanSubjectMapping?> _pickMikanMapping() async {
+  Future<void> _selectBangumi() async {
     final mikan = context.read<MikanProvider>();
     final candidates = await _runWithLoading(
       () => mikan.searchBangumiCandidates(widget.subject),
     );
-    if (!mounted || candidates == null) return null;
+    if (!mounted || candidates == null) return;
     if (candidates.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('没有找到 Mikan 候选番组')));
-      return null;
+      return;
     }
 
     final selectedBangumi = await showModalBottomSheet<MikanBangumi>(
@@ -229,32 +511,12 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
       showDragHandle: true,
       builder: (context) => _MikanBangumiPicker(candidates: candidates),
     );
-    if (selectedBangumi == null || !mounted) return null;
+    if (selectedBangumi == null || !mounted) return;
 
     final detail = await _runWithLoading(
       () => mikan.getBangumiDetail(selectedBangumi.id),
     );
-    if (detail == null || !mounted) return null;
-
-    MikanSubgroupBangumi? selectedSubgroup;
-    final subscribedSubgroups = detail.subgroupBangumis
-        .where((item) => item.subscribed)
-        .toList(growable: false);
-    if (subscribedSubgroups.isNotEmpty) {
-      selectedSubgroup = subscribedSubgroups.first;
-    } else if (detail.subgroupBangumis.length == 1) {
-      selectedSubgroup = detail.subgroupBangumis.first;
-    } else if (detail.subgroupBangumis.isNotEmpty) {
-      selectedSubgroup = await showModalBottomSheet<MikanSubgroupBangumi>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => _MikanSubgroupPicker(
-          bangumiName: selectedBangumi.name,
-          subgroups: detail.subgroupBangumis,
-        ),
-      );
-      if (selectedSubgroup == null) return null;
-    }
+    if (detail == null || !mounted) return;
 
     final mapping = MikanSubjectMapping.fromSelection(
       subjectId: widget.subject.id,
@@ -264,35 +526,18 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
         cover: detail.cover.isNotEmpty ? detail.cover : selectedBangumi.cover,
         subscribed: detail.subscribed || selectedBangumi.subscribed,
       ),
-      subgroup: selectedSubgroup,
     );
     await mikan.saveMapping(mapping);
-    if (mounted) setState(() => _mapping = mapping);
-    return mapping;
+    if (!mounted) return;
+    setState(() {
+      _mapping = mapping;
+      _resourceMapping = null;
+      _detailFuture = Future.value(detail);
+    });
   }
 
-  Future<void> _showActions(MikanSubjectMapping mapping) async {
-    final action = await showModalBottomSheet<_MikanSubscriptionAction>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => _MikanSubscriptionActionsSheet(mapping: mapping),
-    );
-    if (action == null || !mounted) return;
-
-    switch (action) {
-      case _MikanSubscriptionAction.subscribe:
-        await _sync(mapping, subscribe: true);
-      case _MikanSubscriptionAction.unsubscribe:
-        await _sync(mapping, subscribe: false);
-      case _MikanSubscriptionAction.change:
-        await _pickMikanMapping();
-      case _MikanSubscriptionAction.records:
-        await _showMikanRecords(mapping);
-    }
-  }
-
-  Future<void> _sync(
-    MikanSubjectMapping mapping, {
+  Future<void> _syncSubgroup({
+    required MikanSubjectMapping mapping,
     required bool subscribe,
   }) async {
     final mikan = context.read<MikanProvider>();
@@ -301,28 +546,31 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
       return mikan.refreshMapping(mapping);
     });
     if (!mounted || next == null) return;
-    setState(() => _mapping = next);
+    setState(() {
+      _mapping = next;
+      _resourceMapping = _resourceMapping?.subgroupId == next.subgroupId
+          ? next
+          : _resourceMapping;
+      _detailFuture = null;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(subscribe ? 'Mikan 已订阅' : 'Mikan 已取消订阅')),
     );
   }
 
-  Future<void> _showMikanRecords(MikanSubjectMapping mapping) async {
-    final detail = await _runWithLoading(
-      () => context.read<MikanProvider>().getBangumiDetail(mapping.bangumiId),
-    );
-    if (!mounted || detail == null) return;
-    final subgroups = mapping.subgroupId.isEmpty
-        ? detail.subgroupBangumis
-        : detail.subgroupBangumis
-              .where((item) => item.dataId == mapping.subgroupId)
-              .toList();
-    final records = subgroups.expand((item) => item.records).toList();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => _MikanRecordsSheet(records: records),
+  MikanSubjectMapping _mappingForSubgroup(
+    MikanSubjectMapping base,
+    MikanBangumiDetail detail,
+    MikanSubgroupBangumi subgroup,
+  ) {
+    return base.copyWith(
+      bangumiName: detail.name.isNotEmpty ? detail.name : base.bangumiName,
+      bangumiCover: detail.cover.isNotEmpty ? detail.cover : base.bangumiCover,
+      subgroupId: subgroup.dataId,
+      subgroupName: subgroup.name,
+      rss: subgroup.rss,
+      subscribed: subgroup.subscribed,
+      updatedAt: DateTime.now(),
     );
   }
 
@@ -340,61 +588,6 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-}
-
-enum _MikanSubscriptionAction { subscribe, unsubscribe, change, records }
-
-class _MikanSubscriptionActionsSheet extends StatelessWidget {
-  final MikanSubjectMapping mapping;
-
-  const _MikanSubscriptionActionsSheet({required this.mapping});
-
-  @override
-  Widget build(BuildContext context) {
-    final subscribed = mapping.subscribed;
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            title: Text(mapping.bangumiName),
-            subtitle: Text(
-              [
-                if (mapping.subgroupName.isNotEmpty) mapping.subgroupName,
-                subscribed ? 'Mikan 已订阅' : 'Mikan 未订阅',
-              ].join(' · '),
-            ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: Icon(
-              subscribed
-                  ? Icons.notifications_off_outlined
-                  : Icons.notifications_active_outlined,
-            ),
-            title: Text(subscribed ? '取消订阅这个字幕组' : '订阅这个字幕组'),
-            onTap: () => Navigator.of(context).pop(
-              subscribed
-                  ? _MikanSubscriptionAction.unsubscribe
-                  : _MikanSubscriptionAction.subscribe,
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.swap_horiz_rounded),
-            title: const Text('更换 Mikan 番组/字幕组'),
-            onTap: () =>
-                Navigator.of(context).pop(_MikanSubscriptionAction.change),
-          ),
-          ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: const Text('查看资源'),
-            onTap: () =>
-                Navigator.of(context).pop(_MikanSubscriptionAction.records),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -958,76 +1151,119 @@ class _MikanBangumiPicker extends StatelessWidget {
   }
 }
 
-class _MikanSubgroupPicker extends StatelessWidget {
-  final String bangumiName;
-  final List<MikanSubgroupBangumi> subgroups;
+class _MikanSubgroupActionTile extends StatelessWidget {
+  final MikanSubjectMapping mapping;
+  final MikanSubgroupBangumi subgroup;
+  final bool loggedIn;
+  final bool loading;
+  final VoidCallback onSubscribe;
+  final VoidCallback onLogin;
+  final VoidCallback onResources;
 
-  const _MikanSubgroupPicker({
-    required this.bangumiName,
-    required this.subgroups,
+  const _MikanSubgroupActionTile({
+    required this.mapping,
+    required this.subgroup,
+    required this.loggedIn,
+    required this.loading,
+    required this.onSubscribe,
+    required this.onLogin,
+    required this.onResources,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      bangumiName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                ],
+    final colorScheme = Theme.of(context).colorScheme;
+    final subscribed = subgroup.subscribed;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                subscribed
+                    ? Icons.notifications_active
+                    : Icons.subscriptions_outlined,
+                color: subscribed
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
               ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.separated(
-                itemCount: subgroups.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final item = subgroups[index];
-                  return ListTile(
-                    leading: Icon(
-                      item.subscribed
-                          ? Icons.notifications_active
-                          : Icons.subscriptions_outlined,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subgroup.name,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    title: Text(item.name),
-                    subtitle: Text(
+                    const SizedBox(height: 2),
+                    Text(
                       [
-                        if (item.sublang.isNotEmpty) item.sublang,
-                        if (item.records.isNotEmpty)
-                          '${item.records.length} 个资源',
+                        subscribed ? '已订阅' : '未订阅',
+                        if (subgroup.sublang.isNotEmpty) subgroup.sublang,
+                        '${subgroup.records.length} 个资源',
                       ].join(' · '),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
-                    onTap: () => Navigator.of(context).pop(item),
-                  );
-                },
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: loading
+                    ? null
+                    : loggedIn
+                    ? onSubscribe
+                    : onLogin,
+                icon: Icon(
+                  loggedIn
+                      ? subscribed
+                            ? Icons.notifications_off_outlined
+                            : Icons.notifications_active_outlined
+                      : Icons.login_rounded,
+                ),
+                label: Text(
+                  loggedIn
+                      ? subscribed
+                            ? '取消订阅'
+                            : '订阅'
+                      : '登录后订阅',
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: loading ? null : onResources,
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('查看资源'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _MikanRecordsSheet extends StatelessWidget {
+class _MikanResourceDrawer extends StatelessWidget {
+  final String title;
   final List<MikanRecordItem> records;
 
-  const _MikanRecordsSheet({required this.records});
+  const _MikanResourceDrawer({required this.title, required this.records});
 
   @override
   Widget build(BuildContext context) {
@@ -1042,9 +1278,15 @@ class _MikanRecordsSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Row(
                 children: [
-                  Text(
-                    'Mikan 资源',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1054,52 +1296,11 @@ class _MikanRecordsSheet extends StatelessWidget {
               const Expanded(child: Center(child: Text('暂无资源')))
             else
               Expanded(
-                child: ListView.separated(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
                   itemCount: records.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = records[index];
-                    return ListTile(
-                      title: Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        [
-                          if (item.size.isNotEmpty) item.size,
-                          if (item.publishAt.isNotEmpty) item.publishAt,
-                        ].join(' · '),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: item.magnet.isEmpty
-                                ? null
-                                : () => _copyMagnet(context, item.magnet),
-                            icon: const Icon(Icons.copy),
-                            tooltip: '复制磁链',
-                          ),
-                          IconButton(
-                            onPressed: item.magnet.isEmpty
-                                ? null
-                                : () => _openUri(context, item.magnet),
-                            icon: const Icon(Icons.link),
-                            tooltip: '打开磁链',
-                          ),
-                          IconButton(
-                            onPressed: item.torrent.isEmpty
-                                ? null
-                                : () => _openUri(context, item.torrent),
-                            icon: const Icon(Icons.download_outlined),
-                            tooltip: '打开种子',
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  itemBuilder: (context, index) =>
+                      _MikanRecordTile(item: records[index]),
                 ),
               ),
           ],
@@ -1107,8 +1308,56 @@ class _MikanRecordsSheet extends StatelessWidget {
       ),
     );
   }
+}
 
-  static Future<void> _copyMagnet(BuildContext context, String magnet) async {
+class _MikanRecordTile extends StatelessWidget {
+  final MikanRecordItem item;
+
+  const _MikanRecordTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          [
+            if (item.size.isNotEmpty) item.size,
+            if (item.publishAt.isNotEmpty) item.publishAt,
+          ].join(' · '),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: item.magnet.isEmpty
+                  ? null
+                  : () => _copyMagnet(context, item.magnet),
+              icon: const Icon(Icons.copy),
+              tooltip: '复制磁链',
+            ),
+            IconButton(
+              onPressed: item.magnet.isEmpty
+                  ? null
+                  : () => _openUri(context, item.magnet),
+              icon: const Icon(Icons.link),
+              tooltip: '打开磁链',
+            ),
+            IconButton(
+              onPressed: item.torrent.isEmpty
+                  ? null
+                  : () => _openUri(context, item.torrent),
+              icon: const Icon(Icons.download_outlined),
+              tooltip: '打开种子',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyMagnet(BuildContext context, String magnet) async {
     await Clipboard.setData(ClipboardData(text: magnet));
     if (!context.mounted) return;
     ScaffoldMessenger.of(
@@ -1116,7 +1365,7 @@ class _MikanRecordsSheet extends StatelessWidget {
     ).showSnackBar(const SnackBar(content: Text('磁链已复制')));
   }
 
-  static Future<void> _openUri(BuildContext context, String raw) async {
+  Future<void> _openUri(BuildContext context, String raw) async {
     final uri = Uri.tryParse(raw);
     if (uri == null) return;
     final ok = await LinkNavigator.openBrowser(uri);
