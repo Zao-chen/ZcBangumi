@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:html/parser.dart' as html_parser;
 import '../constants.dart';
+import '../models/bangumi_tag.dart';
 import '../models/calendar.dart';
 import '../models/character.dart';
 import '../models/collection.dart';
@@ -306,6 +308,161 @@ class ApiClient {
     }
 
     return enriched;
+  }
+
+  Future<BangumiTagPageResult> getAnimeTags({int page = 1}) async {
+    final resp = await _webDio.get(
+      '/anime/tag',
+      queryParameters: page > 1 ? {'page': page} : null,
+    );
+    return _parseAnimeTagsHtml(resp.data as String, page: page);
+  }
+
+  Future<BangumiTagSubjectPageResult> getAnimeTagSubjects({
+    required String tag,
+    String sort = 'collects',
+    int page = 1,
+  }) async {
+    final query = <String, dynamic>{'sort': sort};
+    if (page > 1) query['page'] = page;
+    final resp = await _webDio.get(
+      '/anime/tag/${Uri.encodeComponent(tag)}',
+      queryParameters: query,
+    );
+    return _parseAnimeTagSubjectsHtml(resp.data as String, page: page);
+  }
+
+  BangumiTagPageResult _parseAnimeTagsHtml(String html, {required int page}) {
+    final document = html_parser.parse(html);
+    final tags = <BangumiTag>[];
+
+    for (final link in document.querySelectorAll(
+      '#tagList a[href^="/anime/tag/"]',
+    )) {
+      final name = _normalizeHtmlText(link.text);
+      final href = link.attributes['href'] ?? '';
+      if (name.isEmpty || href.isEmpty) continue;
+
+      final countText = link.nextElementSibling?.text ?? '';
+      final count =
+          int.tryParse(
+            RegExp(r'\((\d+)\)').firstMatch(countText)?.group(1) ?? '',
+          ) ??
+          0;
+
+      tags.add(BangumiTag(name: name, count: count, href: href));
+    }
+
+    return BangumiTagPageResult(
+      tags: tags,
+      page: page,
+      totalPages: _parseHtmlTotalPages(document.outerHtml),
+    );
+  }
+
+  BangumiTagSubjectPageResult _parseAnimeTagSubjectsHtml(
+    String html, {
+    required int page,
+  }) {
+    final document = html_parser.parse(html);
+    final subjects = <BangumiTagSubject>[];
+
+    for (final item in document.querySelectorAll('#browserItemList > li')) {
+      final idMatch = RegExp(
+        r'item_(\d+)',
+      ).firstMatch(item.attributes['id'] ?? '');
+      final id = int.tryParse(idMatch?.group(1) ?? '');
+      if (id == null) continue;
+
+      final titleLink = item.querySelector('h3 a[href^="/subject/"]');
+      final nameCn = _normalizeHtmlText(titleLink?.text ?? '');
+      final name = _normalizeHtmlText(
+        item.querySelector('h3 small.grey')?.text ?? '',
+      );
+      final imageUrl = _normalizeWebAssetUrl(
+        item.querySelector('.subjectCover img')?.attributes['src'] ?? '',
+      );
+      final info = _normalizeHtmlText(item.querySelector('p.info')?.text ?? '');
+      final rank =
+          int.tryParse(
+            RegExp(r'Rank\s*(\d+)', caseSensitive: false)
+                    .firstMatch(
+                      _normalizeHtmlText(
+                        item.querySelector('.rank')?.text ?? '',
+                      ),
+                    )
+                    ?.group(1) ??
+                '',
+          ) ??
+          0;
+      final score =
+          double.tryParse(
+            _normalizeHtmlText(
+              item.querySelector('.rateInfo small.fade')?.text ?? '',
+            ),
+          ) ??
+          0.0;
+      final ratingText = _normalizeHtmlText(
+        item.querySelector('.rateInfo .tip_j')?.text ?? '',
+      );
+      final ratingTotal =
+          int.tryParse(
+            RegExp(r'(\d+)').firstMatch(ratingText)?.group(1) ?? '',
+          ) ??
+          0;
+
+      final images = imageUrl.isEmpty
+          ? null
+          : SubjectImages(
+              large: imageUrl,
+              common: imageUrl,
+              medium: imageUrl,
+              small: imageUrl,
+              grid: imageUrl,
+            );
+
+      subjects.add(
+        BangumiTagSubject(
+          subject: SlimSubject(
+            id: id,
+            type: BgmConst.subjectAnime,
+            name: name,
+            nameCn: nameCn,
+            shortSummary: info,
+            images: images,
+            eps: 0,
+            volumes: 0,
+            collectionTotal: ratingTotal,
+            score: score,
+            rank: rank,
+          ),
+          info: info,
+          ratingTotal: ratingTotal,
+        ),
+      );
+    }
+
+    return BangumiTagSubjectPageResult(
+      subjects: subjects,
+      page: page,
+      totalPages: _parseHtmlTotalPages(document.outerHtml),
+    );
+  }
+
+  int _parseHtmlTotalPages(String html) {
+    final match = RegExp(r'\(\s*\d+\s*/\s*(\d+)\s*\)').firstMatch(html);
+    return int.tryParse(match?.group(1) ?? '') ?? 1;
+  }
+
+  String _normalizeHtmlText(String text) {
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _normalizeWebAssetUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.startsWith('//')) return 'https:$trimmed';
+    if (trimmed.startsWith('/')) return '${BgmConst.webBaseUrl}$trimmed';
+    return trimmed;
   }
 
   /// 获取条目详情

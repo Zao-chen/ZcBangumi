@@ -23,6 +23,7 @@ import '../widgets/subject_action_buttons.dart';
 import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/copyable_chip.dart';
+import 'anime_tag_page.dart';
 import 'character_page.dart';
 import 'web_page_viewer.dart';
 
@@ -1176,6 +1177,7 @@ class _SubjectPageState extends State<SubjectPage>
                             label: tag,
                             labelStyle: const TextStyle(fontSize: 12),
                             backgroundColor: colorScheme.surfaceContainerHigh,
+                            onTap: () => _openAnimeTagPage(tag),
                           );
                         }).toList(),
                       ),
@@ -1268,6 +1270,7 @@ class _SubjectPageState extends State<SubjectPage>
                   label: tag,
                   labelStyle: const TextStyle(fontSize: 12),
                   backgroundColor: colorScheme.surfaceContainerHigh,
+                  onTap: () => _openAnimeTagPage(tag),
                 );
               }).toList(),
             ),
@@ -2900,6 +2903,12 @@ class _SubjectPageState extends State<SubjectPage>
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)),
     );
+  }
+
+  void _openAnimeTagPage(String tag) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => AnimeTagPage(initialTag: tag)));
   }
 
   void _showFullTitleDialog() {
