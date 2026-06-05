@@ -22,6 +22,7 @@ jobs:
 
     env:
       FLUTTER_VERSION: '3.41.9'
+      ZC_WEB_PROXY_BASE: ${{ vars.ZC_WEB_PROXY_BASE }}
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +52,7 @@ jobs:
             base_href="/$repo_name/"
           fi
 
-          flutter build web --release --base-href "$base_href"
+          flutter build web --release --base-href "$base_href" --dart-define="ZC_WEB_PROXY_BASE=$ZC_WEB_PROXY_BASE"
           cp build/web/index.html build/web/404.html
           touch build/web/.nojekyll
 

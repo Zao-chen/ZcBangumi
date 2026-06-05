@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../models/mikan.dart';
+import 'web_network_config.dart';
 
 class MikanService {
   static const String defaultBaseUrl = 'https://mikanani.me';
@@ -20,19 +22,25 @@ class MikanService {
   List<MikanSessionCookie> _cookies = const [];
 
   MikanService({Dio? dio, String baseUrl = defaultBaseUrl})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 15),
-              receiveTimeout: const Duration(seconds: 15),
-              responseType: ResponseType.plain,
-              headers: const {'User-Agent': userAgent},
-              validateStatus: (status) =>
-                  status != null && status >= 200 && status < 400,
-            ),
-          ),
+    : _dio = _createDio(dio),
       _baseUrl = _normalizeBaseUrl(baseUrl);
+
+  static Dio _createDio(Dio? dio) {
+    final client =
+        dio ??
+        Dio(
+          BaseOptions(
+            connectTimeout: const Duration(seconds: 15),
+            receiveTimeout: const Duration(seconds: 15),
+            responseType: ResponseType.plain,
+            headers: {if (!kIsWeb) 'User-Agent': userAgent},
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 400,
+          ),
+        );
+    WebNetworkConfig.installWebAdapter(client);
+    return client;
+  }
 
   String get baseUrl => _baseUrl;
 
@@ -60,13 +68,13 @@ class MikanService {
       '__RequestVerificationToken': token,
     };
 
-    final loginCookie = _cookieHeaderForUri(loginUri);
+    final loginCookie = kIsWeb ? null : _cookieHeaderForUri(loginUri);
     final loginHeaders = <String, String>{
       'Content-Type': 'application/x-www-form-urlencoded',
-      'Origin': _baseUrl,
-      'Referer': loginUri.toString(),
+      if (!kIsWeb) 'Origin': _baseUrl,
+      if (!kIsWeb) 'Referer': loginUri.toString(),
     };
-    if (loginCookie != null) {
+    if (!kIsWeb && loginCookie != null) {
       loginHeaders['Cookie'] = loginCookie;
     }
     final postResp = await _dio.postUri<String>(
@@ -173,9 +181,9 @@ class MikanService {
       data['SubtitleGroupID'] = subtitleGroupId;
     }
     final uri = _uri(path);
-    final cookie = _cookieHeaderForUri(uri);
+    final cookie = kIsWeb ? null : _cookieHeaderForUri(uri);
     final headers = <String, String>{'Content-Type': 'application/json'};
-    if (cookie != null) {
+    if (!kIsWeb && cookie != null) {
       headers['Cookie'] = cookie;
     }
     await _dio.postUri<String>(
@@ -186,9 +194,9 @@ class MikanService {
   }
 
   Future<Response<String>> _get(Uri uri) async {
-    final cookie = _cookieHeaderForUri(uri);
+    final cookie = kIsWeb ? null : _cookieHeaderForUri(uri);
     final headers = <String, String>{};
-    if (cookie != null) {
+    if (!kIsWeb && cookie != null) {
       headers['Cookie'] = cookie;
     }
     final resp = await _dio.getUri<String>(

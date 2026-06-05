@@ -15,6 +15,7 @@ import '../models/rakuen_topic_favorite.dart';
 import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
+import 'web_network_config.dart';
 
 /// Bangumi API 客户端
 class ApiClient {
@@ -33,11 +34,12 @@ class ApiClient {
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
         headers: {
-          'User-Agent': BgmConst.userAgent,
           'Accept': 'application/json',
+          if (!kIsWeb) 'User-Agent': BgmConst.userAgent,
         },
       ),
     );
+    WebNetworkConfig.installWebAdapter(_dio);
 
     // 初始化网页 Dio 实例
     _webDio = Dio(
@@ -46,16 +48,18 @@ class ApiClient {
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
         headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          if (!kIsWeb)
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
         responseType: ResponseType.plain,
       ),
     );
+    WebNetworkConfig.installWebAdapter(_webDio);
     _webDio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (options.headers['Cookie'] == null) {
+          if (!kIsWeb && options.headers['Cookie'] == null) {
             final cookieHeader = _buildCookieHeaderForUri(options.uri);
             if (cookieHeader != null && cookieHeader.isNotEmpty) {
               options.headers['Cookie'] = cookieHeader;
@@ -73,11 +77,12 @@ class ApiClient {
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
         headers: {
-          'User-Agent': BgmConst.userAgent,
+          if (!kIsWeb) 'User-Agent': BgmConst.userAgent,
           'Accept': 'application/json',
         },
       ),
     );
+    WebNetworkConfig.installWebAdapter(_nextDio);
 
     // 添加日志拦截器（仅在调试模式）
     if (kDebugMode) {
@@ -111,7 +116,9 @@ class ApiClient {
         print('[ApiClient] Cookie 已清除');
       }
     } else {
-      _webDio.options.headers['Cookie'] = _webCookie;
+      if (!kIsWeb) {
+        _webDio.options.headers['Cookie'] = _webCookie;
+      }
       if (kDebugMode) {
         print('[ApiClient] Cookie 已设置');
         print('[ApiClient]   长度: ${_webCookie!.length} 字符');
@@ -139,7 +146,7 @@ class ApiClient {
     final normalized = cookie == null ? null : sanitizeWebCookie(cookie);
     final resp = await _webDio.get(
       '/',
-      options: normalized == null
+      options: normalized == null || kIsWeb
           ? null
           : Options(headers: {'Cookie': normalized}),
     );
@@ -169,7 +176,7 @@ class ApiClient {
     if (cookieHeader == null || cookieHeader.isEmpty) return null;
     final resp = await _webDio.get(
       '/',
-      options: Options(headers: {'Cookie': cookieHeader}),
+      options: kIsWeb ? null : Options(headers: {'Cookie': cookieHeader}),
     );
     return _parseWebSessionInfo(resp.data as String);
   }
