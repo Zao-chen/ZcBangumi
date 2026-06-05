@@ -212,7 +212,7 @@ jobs:
       - name: Build macOS
         run: flutter build macos --release
 
-      - name: Package macOS app
+      - name: Prepare macOS app
         shell: bash
         run: |
           APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" -print -quit)
@@ -221,14 +221,15 @@ jobs:
             ls -la build/macos/Build/Products/Release || true
             exit 1
           fi
-          ZIP_NAME="zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.zip"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_NAME"
+          APP_NAME="zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.app"
+          rm -rf "$APP_NAME"
+          cp -R "$APP_PATH" "$APP_NAME"
 
-      - name: Upload macOS package
+      - name: Upload macOS app
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-release
-          path: zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.zip
+          name: macos-${{ matrix.arch }}-app
+          path: zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.app
 
   release:
     needs: [build, build-windows, build-macos]
@@ -285,8 +286,6 @@ jobs:
           files: |
             artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
             artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
-            artifacts/macos-x64-release/zc_bangumi-${{ github.event.inputs.release_tag }}-macos-x64.zip
-            artifacts/macos-arm64-release/zc_bangumi-${{ github.event.inputs.release_tag }}-macos-arm64.zip
           body: |
             ZC Bangumi ${{ github.event.inputs.release_tag }} 正式版本发布
             
