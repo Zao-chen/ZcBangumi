@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'services/api_client.dart';
 import 'services/mikan_service.dart';
+import 'services/platform_feature_support.dart';
 import 'services/storage_service.dart';
 import 'services/update_service.dart';
 import 'models/navigation_config.dart';
@@ -238,10 +239,12 @@ class _AppShellState extends State<_AppShell> {
 
       // 1. 尝试恢复登录状态
       final authProvider = context.read<AuthProvider>();
-      final mikanProvider = context.read<MikanProvider>();
-      await mikanProvider.tryRestoreSession();
+      if (PlatformFeatureSupport.mikan) {
+        final mikanProvider = context.read<MikanProvider>();
+        await mikanProvider.tryRestoreSession();
+      }
       await authProvider.tryRestoreSession();
-      if (mounted) {
+      if (mounted && PlatformFeatureSupport.rakuen) {
         await context.read<RakuenFavoriteProvider>().initialize(
           username: authProvider.username,
           syncCloud: authProvider.isLoggedIn,
@@ -269,7 +272,7 @@ class _AppShellState extends State<_AppShell> {
       }
 
       // 2. 检查更新
-      if (mounted) {
+      if (mounted && PlatformFeatureSupport.appUpdate) {
         await _checkForUpdateOnStartup();
       }
     } catch (e) {
@@ -294,7 +297,7 @@ class _AppShellState extends State<_AppShell> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
-    final tabIds = appState.enabledBottomNavTabIds;
+    final tabIds = appState.enabledBottomNavTabIds.where(_isSupportedTab);
 
     final shellTabs = tabIds
         .map((id) {
@@ -316,15 +319,15 @@ class _AppShellState extends State<_AppShell> {
     final safeTabs = shellTabs.isEmpty
         ? [
             _ShellTab(
-              id: AppNavTabId.timeline,
+              id: AppNavTabId.progress,
               item: const NavigationItem(
-                icon: Icons.rss_feed_outlined,
-                selectedIcon: Icons.rss_feed,
-                label: '动态',
+                icon: Icons.grid_view_outlined,
+                selectedIcon: Icons.grid_view_rounded,
+                label: '进度',
               ),
               page: _buildScrollablePage(
-                AppNavTabId.timeline,
-                const TimelinePage(),
+                AppNavTabId.progress,
+                const ProgressPage(),
               ),
             ),
           ]
@@ -353,6 +356,16 @@ class _AppShellState extends State<_AppShell> {
       items: safeTabs.map((tab) => tab.item).toList(growable: false),
       pages: safeTabs.map((tab) => tab.page).toList(growable: false),
     );
+  }
+
+  bool _isSupportedTab(String tabId) {
+    if (tabId == AppNavTabId.timeline && !PlatformFeatureSupport.timeline) {
+      return false;
+    }
+    if (tabId == AppNavTabId.rakuen && !PlatformFeatureSupport.rakuen) {
+      return false;
+    }
+    return true;
   }
 }
 

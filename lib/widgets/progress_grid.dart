@@ -6,6 +6,7 @@ import '../constants.dart';
 import '../models/episode.dart';
 import '../models/rakuen_topic.dart';
 import '../pages/rakuen_topic_page.dart';
+import '../services/platform_feature_support.dart';
 
 class ProgressGrid extends StatelessWidget {
   final List<UserEpisodeCollection> episodes;
@@ -821,6 +822,13 @@ class _EpisodeCell extends StatelessWidget {
     BuildContext context,
     Episode episodeInfo,
   ) async {
+    if (!PlatformFeatureSupport.rakuen) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Web 版暂不支持超展开讨论')));
+      return;
+    }
+
     final navigator = Navigator.of(context);
     final topic = RakuenTopic(
       id: 'ep_${episodeInfo.id}',

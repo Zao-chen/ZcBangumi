@@ -11,6 +11,7 @@ import '../providers/mikan_provider.dart';
 import '../pages/settings_page.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
+import '../services/platform_feature_support.dart';
 
 /// 条目操作按钮组件
 /// 包含编辑按钮，打开统一对话框修改收藏、评分、评论。
@@ -128,6 +129,7 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isAnime) return;
+    if (!PlatformFeatureSupport.mikan) return;
     _mapping ??= context.read<MikanProvider>().mappingForSubject(
       widget.subject.id,
     );
@@ -136,6 +138,7 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
   @override
   Widget build(BuildContext context) {
     if (!_isAnime) return const SizedBox.shrink();
+    if (!PlatformFeatureSupport.mikan) return const SizedBox.shrink();
 
     final mikan = context.watch<MikanProvider>();
     if (!mikan.isEnabled) return const SizedBox.shrink();

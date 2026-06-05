@@ -11,6 +11,7 @@ import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
 import '../providers/mikan_provider.dart';
 import '../services/mikan_service.dart';
+import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/update_dialog.dart';
 
@@ -341,15 +342,16 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildDisplaySettingsCard(ctx, appState)];
         },
       ),
-      _SettingsSection(
-        icon: Icons.view_day_outlined,
-        title: '默认分区',
-        subtitle: '动态与超展开进入分区',
-        builder: (ctx) {
-          final appState = ctx.watch<AppStateProvider>();
-          return [_buildDefaultTabSettingsCard(ctx, appState)];
-        },
-      ),
+      if (PlatformFeatureSupport.timeline || PlatformFeatureSupport.rakuen)
+        _SettingsSection(
+          icon: Icons.view_day_outlined,
+          title: '默认分区',
+          subtitle: PlatformFeatureSupport.rakuen ? '动态与超展开进入分区' : '动态进入分区',
+          builder: (ctx) {
+            final appState = ctx.watch<AppStateProvider>();
+            return [_buildDefaultTabSettingsCard(ctx, appState)];
+          },
+        ),
       _SettingsSection(
         icon: Icons.dashboard_customize_outlined,
         title: '\u6761\u76ee\u9875\u6807\u7b7e',
@@ -360,27 +362,29 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildSubjectTabSettingsCard(ctx, appState)];
         },
       ),
-      _SettingsSection(
-        icon: Icons.system_update_alt_rounded,
-        title: '更新设置',
-        subtitle: '检查频率、版本策略与手动检查',
-        builder: (ctx) {
-          final appState = ctx.watch<AppStateProvider>();
-          return [
-            const Card(child: CheckUpdateButton()),
-            _buildUpdateSettingsCard(ctx, appState),
-          ];
-        },
-      ),
-      _SettingsSection(
-        icon: Icons.cloud_sync_outlined,
-        title: 'Mikan 订阅',
-        subtitle: '账号、镜像与本地映射',
-        builder: (ctx) {
-          final mikan = ctx.watch<MikanProvider>();
-          return [_buildMikanSettingsCard(ctx, mikan)];
-        },
-      ),
+      if (PlatformFeatureSupport.appUpdate)
+        _SettingsSection(
+          icon: Icons.system_update_alt_rounded,
+          title: '更新设置',
+          subtitle: '检查频率、版本策略与手动检查',
+          builder: (ctx) {
+            final appState = ctx.watch<AppStateProvider>();
+            return [
+              const Card(child: CheckUpdateButton()),
+              _buildUpdateSettingsCard(ctx, appState),
+            ];
+          },
+        ),
+      if (PlatformFeatureSupport.mikan)
+        _SettingsSection(
+          icon: Icons.cloud_sync_outlined,
+          title: 'Mikan 订阅',
+          subtitle: '账号、镜像与本地映射',
+          builder: (ctx) {
+            final mikan = ctx.watch<MikanProvider>();
+            return [_buildMikanSettingsCard(ctx, mikan)];
+          },
+        ),
     ];
   }
 
@@ -710,47 +714,49 @@ class _SettingsPageState extends State<SettingsPage> {
             value: appState.restoreLastTabSelection,
             onChanged: appState.setRestoreLastTabSelection,
           ),
-          ListTile(
-            enabled: !appState.restoreLastTabSelection,
-            title: const Text('动态默认分区'),
-            trailing: DropdownButton<int>(
-              value: appState.defaultTimelineTabIndex,
-              onChanged: appState.restoreLastTabSelection
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        appState.setDefaultTimelineTabIndex(value);
-                      }
-                    },
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('全站')),
-                DropdownMenuItem(value: 1, child: Text('好友')),
-                DropdownMenuItem(value: 2, child: Text('我的')),
-              ],
+          if (PlatformFeatureSupport.timeline)
+            ListTile(
+              enabled: !appState.restoreLastTabSelection,
+              title: const Text('动态默认分区'),
+              trailing: DropdownButton<int>(
+                value: appState.defaultTimelineTabIndex,
+                onChanged: appState.restoreLastTabSelection
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          appState.setDefaultTimelineTabIndex(value);
+                        }
+                      },
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('全站')),
+                  DropdownMenuItem(value: 1, child: Text('好友')),
+                  DropdownMenuItem(value: 2, child: Text('我的')),
+                ],
+              ),
             ),
-          ),
-          ListTile(
-            enabled: !appState.restoreLastTabSelection,
-            title: const Text('超展开默认分区'),
-            trailing: DropdownButton<int>(
-              value: appState.defaultRakuenTabIndex,
-              onChanged: appState.restoreLastTabSelection
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        appState.setDefaultRakuenTabIndex(value);
-                      }
-                    },
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('全部')),
-                DropdownMenuItem(value: 1, child: Text('小组')),
-                DropdownMenuItem(value: 2, child: Text('条目')),
-                DropdownMenuItem(value: 3, child: Text('章节')),
-                DropdownMenuItem(value: 4, child: Text('角色')),
-                DropdownMenuItem(value: 5, child: Text('人物')),
-              ],
+          if (PlatformFeatureSupport.rakuen)
+            ListTile(
+              enabled: !appState.restoreLastTabSelection,
+              title: const Text('超展开默认分区'),
+              trailing: DropdownButton<int>(
+                value: appState.defaultRakuenTabIndex,
+                onChanged: appState.restoreLastTabSelection
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          appState.setDefaultRakuenTabIndex(value);
+                        }
+                      },
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('全部')),
+                  DropdownMenuItem(value: 1, child: Text('小组')),
+                  DropdownMenuItem(value: 2, child: Text('条目')),
+                  DropdownMenuItem(value: 3, child: Text('章节')),
+                  DropdownMenuItem(value: 4, child: Text('角色')),
+                  DropdownMenuItem(value: 5, child: Text('人物')),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -794,7 +800,9 @@ class _SettingsPageState extends State<SettingsPage> {
     BuildContext context,
     AppStateProvider appState,
   ) {
-    final order = appState.bottomNavOrder;
+    final order = appState.bottomNavOrder
+        .where(_isSupportedBottomNavTab)
+        .toList(growable: false);
 
     return Card(
       child: Padding(
@@ -852,7 +860,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 }
 
                 final isVisible = appState.isBottomNavTabVisible(tabId);
-                final enabledCount = appState.enabledBottomNavTabIds.length;
+                final enabledCount = appState.enabledBottomNavTabIds
+                    .where(_isSupportedBottomNavTab)
+                    .length;
                 final canToggle = !isVisible || enabledCount > 1;
                 final hiddenColor = Theme.of(
                   context,
@@ -1013,13 +1023,26 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   bool _isDefaultOrder(List<String> order) {
-    if (order.length != AppNavigationConfig.defaultOrder.length) {
+    final defaultOrder = AppNavigationConfig.defaultOrder
+        .where(_isSupportedBottomNavTab)
+        .toList(growable: false);
+    if (order.length != defaultOrder.length) {
       return false;
     }
     for (var i = 0; i < order.length; i++) {
-      if (order[i] != AppNavigationConfig.defaultOrder[i]) {
+      if (order[i] != defaultOrder[i]) {
         return false;
       }
+    }
+    return true;
+  }
+
+  bool _isSupportedBottomNavTab(String tabId) {
+    if (tabId == AppNavTabId.timeline && !PlatformFeatureSupport.timeline) {
+      return false;
+    }
+    if (tabId == AppNavTabId.rakuen && !PlatformFeatureSupport.rakuen) {
+      return false;
     }
     return true;
   }
