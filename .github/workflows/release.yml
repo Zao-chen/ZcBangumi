@@ -231,10 +231,48 @@ jobs:
           name: macos-${{ matrix.arch }}-app
           path: zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.app
 
+  build-ios:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build unsigned iOS app
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::No unsigned Runner.app found at $APP_PATH"
+            exit 1
+          fi
+
+          rm -rf build/ios/unsigned-ipa
+          mkdir -p build/ios/unsigned-ipa/Payload
+          cp -R "$APP_PATH" build/ios/unsigned-ipa/Payload/Runner.app
+          ditto -c -k --sequesterRsrc build/ios/unsigned-ipa/Payload "zc_bangumi-${{ github.event.inputs.release_tag }}-ios-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-release
+          path: zc_bangumi-${{ github.event.inputs.release_tag }}-ios-unsigned.ipa
+
   release:
-    needs: [build, build-windows, build-macos]
+    needs: [build, build-windows, build-macos, build-ios]
     runs-on: ubuntu-latest
-    if: ${{ needs.build.result == 'success' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' }}
+    if: ${{ needs.build.result == 'success' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-ios.result == 'success' }}
     permissions:
       contents: write
     
@@ -286,6 +324,7 @@ jobs:
           files: |
             artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
             artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
+            artifacts/ios-unsigned-release/zc_bangumi-${{ github.event.inputs.release_tag }}-ios-unsigned.ipa
           body: |
             ZC Bangumi ${{ github.event.inputs.release_tag }} 正式版本发布
             
