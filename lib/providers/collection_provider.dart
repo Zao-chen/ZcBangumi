@@ -4,11 +4,13 @@ import '../models/collection.dart';
 import '../models/episode.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
+import 'connectivity_provider.dart';
 
 /// 收藏数据管理
 class CollectionProvider extends ChangeNotifier {
   final ApiClient api;
   final StorageService storage;
+  final ConnectivityProvider? connectivity;
 
   // 按条目类型缓存收藏列表
   final Map<int, List<UserCollection>> _collections = {};
@@ -20,7 +22,11 @@ class CollectionProvider extends ChangeNotifier {
   final Map<int, List<UserEpisodeCollection>> _episodeProgress = {};
   final Map<int, bool> _episodeLoadingMap = {};
 
-  CollectionProvider({required this.api, required this.storage});
+  CollectionProvider({
+    required this.api,
+    required this.storage,
+    this.connectivity,
+  });
 
   /// 预加载缓存数据（应用启动时调用）
   void preloadCachesIfAvailable() {
@@ -111,6 +117,7 @@ class CollectionProvider extends ChangeNotifier {
       _collections[subjectType] = result.data;
       _totalMap[subjectType] = result.total;
       _errorMap[subjectType] = null;
+      connectivity?.reportNetworkSuccess();
       // 写入缓存
       storage.setCache(cacheKey, result.data.map((e) => e.toJson()).toList());
     } catch (e) {
@@ -118,6 +125,7 @@ class CollectionProvider extends ChangeNotifier {
       if ((_collections[subjectType] ?? []).isEmpty) {
         _errorMap[subjectType] = '加载失败: $e';
       }
+      connectivity?.reportNetworkFailure(e);
     } finally {
       _loadingMap[subjectType] = false;
       notifyListeners();
@@ -150,9 +158,11 @@ class CollectionProvider extends ChangeNotifier {
     try {
       final result = await api.getUserEpisodeCollections(subjectId: subjectId);
       _episodeProgress[subjectId] = result.data;
+      connectivity?.reportNetworkSuccess();
       // 写入缓存
       storage.setCache(cacheKey, result.data.map((e) => e.toJson()).toList());
     } catch (e) {
+      connectivity?.reportNetworkFailure(e);
       debugPrint('加载章节进度失败: $e');
     } finally {
       _episodeLoadingMap[subjectId] = false;
@@ -192,6 +202,7 @@ class CollectionProvider extends ChangeNotifier {
       }
       // 更新缓存
       _saveEpisodeCache(subjectId);
+      connectivity?.reportNetworkSuccess();
     } catch (e) {
       // 回滚
       if (idx < episodes.length && episodes[idx].episode.id == episodeId) {
@@ -201,6 +212,7 @@ class CollectionProvider extends ChangeNotifier {
         );
       }
       notifyListeners();
+      connectivity?.reportNetworkFailure(e);
       debugPrint('更新章节状态失败: $e');
     }
   }
@@ -244,8 +256,10 @@ class CollectionProvider extends ChangeNotifier {
       );
       // 更新缓存
       _saveEpisodeCache(subjectId);
+      connectivity?.reportNetworkSuccess();
     } catch (e) {
       // 失败后重新加载
+      connectivity?.reportNetworkFailure(e);
       debugPrint('批量更新失败: $e');
       await loadEpisodeProgress(subjectId);
     }
@@ -262,7 +276,10 @@ class CollectionProvider extends ChangeNotifier {
 
     try {
       await api.patchCollection(subjectId: subjectId, epStatus: epStatus);
+      _saveCollectionCacheForSubject(subjectId);
+      connectivity?.reportNetworkSuccess();
     } catch (e) {
+      connectivity?.reportNetworkFailure(e);
       debugPrint('更新条目进度失败: $e');
     }
   }
@@ -302,9 +319,12 @@ class CollectionProvider extends ChangeNotifier {
 
     try {
       await api.patchCollection(subjectId: subjectId, type: newType);
+      _saveCollectionCacheForSubject(subjectId);
+      connectivity?.reportNetworkSuccess();
     } catch (e) {
       _collections[subjectType] = oldList;
       notifyListeners();
+      connectivity?.reportNetworkFailure(e);
       debugPrint('更新收藏状态失败: $e');
     }
   }
@@ -339,6 +359,18 @@ class CollectionProvider extends ChangeNotifier {
       storage.setCache(
         'episodes_$subjectId',
         eps.map((e) => e.toJson()).toList(),
+      );
+    }
+  }
+
+  void _saveCollectionCacheForSubject(int subjectId) {
+    final username = storage.username;
+    if (username == null || username.isEmpty) return;
+    for (final entry in _collections.entries) {
+      if (!entry.value.any((c) => c.subjectId == subjectId)) continue;
+      storage.setCache(
+        'collections_${entry.key}_$username',
+        entry.value.map((e) => e.toJson()).toList(),
       );
     }
   }

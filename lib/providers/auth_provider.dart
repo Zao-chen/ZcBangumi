@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
+import 'connectivity_provider.dart';
 
 /// 认证状态管理
 class AuthProvider extends ChangeNotifier {
@@ -11,12 +12,24 @@ class AuthProvider extends ChangeNotifier {
   BangumiUser? _user;
   bool _loading = false;
   bool _initialized = false; // 是否完成初始化（区分"初始化中"和"初始化完成但未登陆"）
+  bool _offlineSession = false;
   String? _error;
 
-  AuthProvider({required this.api, required this.storage});
+  AuthProvider({
+    required this.api,
+    required this.storage,
+    ConnectivityProvider? connectivity,
+  }) : _connectivity = connectivity;
+
+  final ConnectivityProvider? _connectivity;
 
   BangumiUser? get user => _user;
   bool get isLoggedIn => _user != null;
+  bool get hasCachedLogin =>
+      storage.accessToken?.isNotEmpty == true &&
+      storage.username?.isNotEmpty == true;
+  bool get canUseAuthenticatedCache => isLoggedIn || _offlineSession;
+  bool get offlineSession => _offlineSession;
   bool get loading => _loading;
   bool get initialized => _initialized; // 是否已完成初始化检查
   String? get error => _error;
@@ -45,12 +58,28 @@ class AuthProvider extends ChangeNotifier {
     try {
       _user = await api.getMe();
       await storage.setUsername(_user!.username);
+      _offlineSession = false;
       _error = null;
+      _connectivity?.reportNetworkSuccess();
     } catch (e) {
-      // Token 可能已过期
-      _user = null;
-      api.setToken(null);
-      _error = '登录已过期，请重新登录';
+      if (ConnectivityProvider.isAuthExpired(e)) {
+        _user = null;
+        _offlineSession = false;
+        api.setToken(null);
+        await storage.clearAuth();
+        _error = '登录已过期，请重新登录';
+      } else if (ConnectivityProvider.isNetworkFailure(e) &&
+          storage.username?.isNotEmpty == true) {
+        _user = null;
+        _offlineSession = true;
+        _error = null;
+        _connectivity?.reportNetworkFailure(e, message: '网络不可用，正在显示本地缓存');
+      } else {
+        _user = null;
+        _offlineSession = false;
+        _error = '恢复登录失败，请稍后重试';
+        _connectivity?.reportNetworkFailure(e, message: '网络请求失败，正在显示本地缓存');
+      }
     } finally {
       _loading = false;
       _initialized = true; // 初始化检查完成
@@ -69,13 +98,16 @@ class AuthProvider extends ChangeNotifier {
       _user = await api.getMe();
       await storage.setAccessToken(token);
       await storage.setUsername(_user!.username);
+      _offlineSession = false;
       _error = null;
+      _connectivity?.reportNetworkSuccess();
       _loading = false;
       notifyListeners();
       return true;
     } catch (e) {
       api.setToken(null);
       _user = null;
+      _offlineSession = false;
       _error = '登录失败，请检查 Token 是否正确';
       _loading = false;
       notifyListeners();
@@ -86,6 +118,7 @@ class AuthProvider extends ChangeNotifier {
   /// 退出登录
   Future<void> logout() async {
     _user = null;
+    _offlineSession = false;
     api.setToken(null);
     await storage.clearAuth();
     _error = null;
