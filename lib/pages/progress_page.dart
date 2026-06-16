@@ -9,6 +9,7 @@ import '../pages/subject_page.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
+import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
 
 /// 进度页面 - 展示用户正在进行的收藏
@@ -100,7 +101,7 @@ class _ProgressPageState extends State<ProgressPage>
 
   Future<void> _refreshCurrentTab() async {
     final auth = context.read<AuthProvider>();
-    if (!auth.isLoggedIn || auth.username == null) return;
+    if (!auth.canUseAuthenticatedCache || auth.username == null) return;
     final appState = context.read<AppStateProvider>();
     final forceNetwork = appState.pullToRefreshForceNetwork;
 
@@ -124,17 +125,21 @@ class _ProgressPageState extends State<ProgressPage>
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final collectionProvider = context.watch<CollectionProvider>();
     final tabs = _visibleTabs(context.watch<AppStateProvider>());
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
+    final hasAnyCache = tabs.any(
+      (tab) => collectionProvider.getCollections(tab.type).isNotEmpty,
+    );
 
     // 初始化中显示骨架屏，避免显示登陆提示
     final isInitializing = !auth.initialized;
-    final bodyWidget = isInitializing
+    final bodyWidget = isInitializing && !hasAnyCache
         ? (isLandscape
               ? _buildLandscapeInitializingLayout()
               : _buildProgressPageSkeletonList())
-        : auth.isLoggedIn
+        : (auth.canUseAuthenticatedCache || hasAnyCache)
         ? isLandscape
               ? _buildLandscapeLayout()
               : TabBarView(
@@ -371,7 +376,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     final auth = context.read<AuthProvider>();
 
     // 监听登陆状态变化，如果用户刚登陆就重新加载
-    if (auth.isLoggedIn &&
+    if (auth.canUseAuthenticatedCache &&
         auth.username != null &&
         _lastUsername != auth.username) {
       _lastUsername = auth.username;
@@ -381,7 +386,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     // 监听初始化完成，立刻加载最新数据
     if (auth.initialized && !identical(_lastAuthProvider, auth)) {
       _lastAuthProvider = auth;
-      if (auth.isLoggedIn && auth.username != null) {
+      if (auth.canUseAuthenticatedCache && auth.username != null) {
         _loadDataIfNeeded();
       }
     }
@@ -392,7 +397,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     final collectionProvider = context.read<CollectionProvider>();
 
     // 已登陆：从API加载（自动会先尝试缓存）
-    if (auth.isLoggedIn && auth.username != null) {
+    if (auth.canUseAuthenticatedCache && auth.username != null) {
       collectionProvider.loadDoingCollections(
         username: auth.username!,
         subjectType: widget.subjectType,
@@ -405,7 +410,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     final auth = context.read<AuthProvider>();
     final collectionProvider = context.read<CollectionProvider>();
 
-    if (auth.isLoggedIn && auth.username != null) {
+    if (auth.canUseAuthenticatedCache && auth.username != null) {
       final collections = collectionProvider.getCollections(widget.subjectType);
       final isLoading = collectionProvider.isLoading(widget.subjectType);
 
@@ -431,6 +436,15 @@ class _ProgressTabViewState extends State<_ProgressTabView>
     // 逻辑：有缓存数据 -> 显示缓存；无缓存且初始化中 -> 显示骨架屏
     final hasCache = collections.isNotEmpty;
     final isInitializing = !auth.initialized;
+
+    if (auth.canUseAuthenticatedCache &&
+        auth.username != null &&
+        _lastUsername != auth.username) {
+      _lastUsername = auth.username;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadData();
+      });
+    }
 
     // 显示骨架屏的条件：初始化中 且 无缓存
     if (isInitializing && !hasCache) {
@@ -464,7 +478,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
       );
 
       // 已初始化但未登陆 -> 显示登陆提示
-      if (!auth.isLoggedIn) {
+      if (!auth.canUseAuthenticatedCache) {
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -497,7 +511,7 @@ class _ProgressTabViewState extends State<_ProgressTabView>
 
     return RefreshIndicator(
       onRefresh: () async {
-        if (auth.isLoggedIn && auth.username != null) {
+        if (auth.canUseAuthenticatedCache && auth.username != null) {
           final forceNetwork = context
               .read<AppStateProvider>()
               .pullToRefreshForceNetwork;
@@ -648,6 +662,10 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
+          final storage = context.read<StorageService>();
+          storage.touchCache('subject_${widget.collection.subjectId}');
+          storage.touchCache('subject_episodes_${widget.collection.subjectId}');
+          storage.touchCache('episodes_${widget.collection.subjectId}');
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => SubjectPage(

@@ -9,6 +9,7 @@ import 'services/update_service.dart';
 import 'models/navigation_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/collection_provider.dart';
+import 'providers/connectivity_provider.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/rakuen_favorite_provider.dart';
 import 'providers/update_provider.dart';
@@ -70,11 +71,20 @@ class ZCBangumiApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => AppStateProvider(storage: storage),
         ),
+        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(api: apiClient, storage: storage),
+          create: (context) => AuthProvider(
+            api: apiClient,
+            storage: storage,
+            connectivity: context.read<ConnectivityProvider>(),
+          ),
         ),
         ChangeNotifierProvider(
-          create: (_) => CollectionProvider(api: apiClient, storage: storage),
+          create: (context) => CollectionProvider(
+            api: apiClient,
+            storage: storage,
+            connectivity: context.read<ConnectivityProvider>(),
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) =>
@@ -232,15 +242,19 @@ class _AppShellState extends State<_AppShell> {
   Future<void> _backgroundInit() async {
     try {
       // 0. 预加载所有缓存数据（立刻替换骨架屏）
+      final storage = context.read<StorageService>();
+      final authProvider = context.read<AuthProvider>();
+      final mikanProvider = PlatformFeatureSupport.mikan
+          ? context.read<MikanProvider>()
+          : null;
       if (mounted) {
         final collectionProvider = context.read<CollectionProvider>();
         collectionProvider.preloadCachesIfAvailable();
+        await storage.pruneStaleDataCache();
       }
 
       // 1. 尝试恢复登录状态
-      final authProvider = context.read<AuthProvider>();
-      if (PlatformFeatureSupport.mikan) {
-        final mikanProvider = context.read<MikanProvider>();
+      if (mikanProvider != null) {
         await mikanProvider.tryRestoreSession();
       }
       await authProvider.tryRestoreSession();

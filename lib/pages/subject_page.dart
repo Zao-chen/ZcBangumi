@@ -15,6 +15,7 @@ import '../models/subject.dart';
 import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
@@ -219,6 +220,7 @@ class _SubjectPageState extends State<SubjectPage>
   Future<void> _loadAllData() async {
     final storage = context.read<StorageService>();
     final api = context.read<ApiClient>();
+    final connectivity = context.read<ConnectivityProvider>();
 
     if (_subject == null) {
       _subject = _readSubjectFromCache(storage);
@@ -284,6 +286,7 @@ class _SubjectPageState extends State<SubjectPage>
     if (_subject != null) {
       storage.setCache(_cacheName, _subject!.toJson());
       storage.saveRecentSubjectDetail(_subject!);
+      storage.touchCache(_cacheName);
     }
 
     setState(() {
@@ -315,6 +318,7 @@ class _SubjectPageState extends State<SubjectPage>
 
       if (subject != null) {
         _subject = subject;
+        connectivity.reportNetworkSuccess();
       }
 
       final charsFuture = api.getSubjectCharacters(widget.subjectId);
@@ -328,6 +332,7 @@ class _SubjectPageState extends State<SubjectPage>
         relatedFuture,
         commentsFuture,
       ], eagerError: false);
+      if (!mounted) return;
 
       setState(() {
         _characters = results[0] is List<Character>
@@ -366,6 +371,7 @@ class _SubjectPageState extends State<SubjectPage>
       _loadEpisodeProgress();
       _loadUserCollection();
     } catch (e) {
+      connectivity.reportNetworkFailure(e);
       if (_subject == null) {
         setState(() => _error = '加载失败: $e');
       }
@@ -386,8 +392,9 @@ class _SubjectPageState extends State<SubjectPage>
     final storage = context.read<StorageService>();
     final api = context.read<ApiClient>();
     final authProvider = context.read<AuthProvider>();
+    final connectivity = context.read<ConnectivityProvider>();
 
-    if (!authProvider.isLoggedIn) {
+    if (!authProvider.canUseAuthenticatedCache) {
       return;
     }
 
@@ -400,16 +407,19 @@ class _SubjectPageState extends State<SubjectPage>
       final result = await api.getUserEpisodeCollections(
         subjectId: widget.subjectId,
       );
+      if (!mounted) return;
 
       setState(() {
         _episodes = result.data;
       });
+      connectivity.reportNetworkSuccess();
 
       storage.setCache(
         _episodesCacheName,
         _episodes.map((e) => e.toJson()).toList(),
       );
     } catch (e) {
+      connectivity.reportNetworkFailure(e);
     } finally {
       if (mounted && _episodesLoading) {
         setState(() => _episodesLoading = false);
@@ -421,22 +431,26 @@ class _SubjectPageState extends State<SubjectPage>
     final api = context.read<ApiClient>();
     final authProvider = context.read<AuthProvider>();
     final storage = context.read<StorageService>();
+    final connectivity = context.read<ConnectivityProvider>();
+    final username = authProvider.username;
 
-    if (!authProvider.isLoggedIn) {
+    if (!authProvider.canUseAuthenticatedCache || username == null) {
       return;
     }
 
     try {
       final collection = await api.getUserCollection(
-        username: authProvider.user!.username,
+        username: username,
         subjectId: widget.subjectId,
       );
+      if (!mounted) return;
       if (mounted) {
         setState(() {
           _userCollection = collection;
         });
       }
       storage.setCache(_userCollectionCacheName, collection.toJson());
+      connectivity.reportNetworkSuccess();
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         if (mounted) {
@@ -445,8 +459,12 @@ class _SubjectPageState extends State<SubjectPage>
           });
         }
         storage.removeCache(_userCollectionCacheName);
+      } else {
+        connectivity.reportNetworkFailure(e);
       }
-    } catch (e) {}
+    } catch (e) {
+      connectivity.reportNetworkFailure(e);
+    }
   }
 
   Future<void> _setEpisodeStatus(int episodeId, int newType) async {
