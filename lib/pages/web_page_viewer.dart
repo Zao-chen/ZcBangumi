@@ -1,10 +1,20 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zc_bangumi/services/internal_link_handler.dart';
 import 'package:zc_bangumi/services/link_navigator.dart';
+
+Set<Factory<OneSequenceGestureRecognizer>> _webViewVerticalDragGestures() {
+  return {
+    Factory<OneSequenceGestureRecognizer>(
+      () => VerticalDragGestureRecognizer(),
+    ),
+  };
+}
 
 class EmbeddedWebPageView extends StatefulWidget {
   final Uri initialUri;
@@ -620,6 +630,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                   ),
                 Expanded(
                   child: InAppWebView(
+                    gestureRecognizers: _webViewVerticalDragGestures(),
                     initialSettings: InAppWebViewSettings(
                       useShouldOverrideUrlLoading: true,
                       useOnLoadResource: false,
@@ -837,6 +848,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
           ),
         ),
         body: InAppWebView(
+          gestureRecognizers: _webViewVerticalDragGestures(),
           initialUrlRequest: URLRequest(url: WebUri.uri(widget.initialUri)),
           initialSettings: InAppWebViewSettings(
             supportZoom: true,
