@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -342,6 +343,13 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildDisplaySettingsCard(ctx, appState)];
         },
       ),
+      if (kIsWeb)
+        _SettingsSection(
+          icon: Icons.public_outlined,
+          title: '静态网页版',
+          subtitle: '跨域与站点会话限制',
+          builder: _buildStaticWebLimitationsCards,
+        ),
       if (PlatformFeatureSupport.timeline || PlatformFeatureSupport.rakuen)
         _SettingsSection(
           icon: Icons.view_day_outlined,
@@ -385,6 +393,35 @@ class _SettingsPageState extends State<SettingsPage> {
             return [_buildMikanSettingsCard(ctx, mikan)];
           },
         ),
+    ];
+  }
+
+  List<Widget> _buildStaticWebLimitationsCards(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return [
+      Card(
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text('GitHub Pages 静态部署'),
+              subtitle: const Text('浏览器无法代替客户端发送跨站 Cookie 或绕过目标站跨域策略'),
+              iconColor: colorScheme.primary,
+            ),
+            const Divider(height: 1),
+            const ListTile(
+              leading: Icon(Icons.hide_source_outlined),
+              title: Text('动态与超展开'),
+              subtitle: Text('静态网页版隐藏相关入口，可在桌面或移动端使用'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.cloud_off_outlined),
+              title: Text('Mikan 订阅'),
+              subtitle: Text('登录、订阅和取消订阅需要站点会话，静态网页版不显示入口'),
+            ),
+          ],
+        ),
+      ),
     ];
   }
 

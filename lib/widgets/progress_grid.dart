@@ -825,7 +825,7 @@ class _EpisodeCell extends StatelessWidget {
     if (!PlatformFeatureSupport.rakuen) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Web 版暂不支持超展开讨论')));
+      ).showSnackBar(const SnackBar(content: Text('静态网页版暂不支持超展开讨论')));
       return;
     }
 
