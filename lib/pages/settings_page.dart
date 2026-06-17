@@ -13,6 +13,7 @@ import '../providers/collection_provider.dart';
 import '../providers/mikan_provider.dart';
 import '../services/mikan_service.dart';
 import '../services/platform_feature_support.dart';
+import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/update_dialog.dart';
 
@@ -408,6 +409,13 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: const Text('浏览器无法代替客户端发送跨站 Cookie 或绕过目标站跨域策略'),
               iconColor: colorScheme.primary,
             ),
+            ListTile(
+              leading: const Icon(Icons.system_update_alt_rounded),
+              title: const Text('查看完整应用版'),
+              subtitle: const Text('下载 Android / Windows 版本，或查看完整更新说明'),
+              trailing: const Icon(Icons.open_in_new_rounded),
+              onTap: () => _openFullAppReleasePage(context),
+            ),
             const Divider(height: 1),
             const ListTile(
               leading: Icon(Icons.hide_source_outlined),
@@ -423,6 +431,17 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     ];
+  }
+
+  Future<void> _openFullAppReleasePage(BuildContext context) async {
+    final ok = await LinkNavigator.openBrowser(
+      Uri.parse(BgmConst.githubReleasesUrl),
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开完整应用版页面')));
+    }
   }
 
   Widget _buildMikanSettingsCard(BuildContext context, MikanProvider mikan) {

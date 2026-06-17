@@ -14,6 +14,14 @@ class BgmConst {
   /// User-Agent
   static const String userAgent = 'ZCBangumi/0.1.0 (Flutter App)';
 
+  /// 项目 GitHub Releases 页面
+  static const String githubReleasesUrl =
+      'https://github.com/Zao-chen/ZcBangumi/releases';
+
+  /// 项目 GitHub Releases API
+  static const String githubReleasesApiUrl =
+      'https://api.github.com/repos/Zao-chen/ZcBangumi/releases';
+
   /// Access Token 获取地址
   static const String tokenUrl = 'https://next.bgm.tv/demo/access-token';
 
