@@ -160,13 +160,13 @@ class ApiClient {
     }
     if (!kDebugMode) return;
     if (_webSession == null) {
-      print('[ApiClient] Web session cleared');
+      debugPrint('[ApiClient] Web session cleared');
       return;
     }
-    print('[ApiClient] Web session set');
-    print('[ApiClient]   user: @${_webSession!.username}');
-    print('[ApiClient]   uid: ${_webSession!.uid}');
-    print('[ApiClient]   cookies: ${_webSession!.cookies.length}');
+    debugPrint('[ApiClient] Web session set');
+    debugPrint('[ApiClient]   user: @${_webSession!.username}');
+    debugPrint('[ApiClient]   uid: ${_webSession!.uid}');
+    debugPrint('[ApiClient]   cookies: ${_webSession!.cookies.length}');
   }
 
   Future<WebSessionInfo?> validateWebSession(BangumiWebSession session) async {
@@ -1392,182 +1392,6 @@ class ApiClient {
     );
   }
 
-  /// 解析时间线 HTML
-  static List<TimelineItem> _parseTimelineHtml(String html) {
-    final items = <TimelineItem>[];
-
-    // 匹配每个 tml_item
-    final itemRegex = RegExp(
-      r'<li\s+id="tml_\d+"[^>]*class="[^"]*tml_item[^"]*"[^>]*data-item-user="([^"]*)"[^>]*>([\s\S]*?)</li>',
-    );
-
-    for (final match in itemRegex.allMatches(html)) {
-      try {
-        final username = match.group(1) ?? '';
-        final content = match.group(2) ?? '';
-        final item = _parseSingleItem(username, content);
-        if (item != null) items.add(item);
-      } catch (_) {
-        // 跳过解析失败的条目
-      }
-    }
-    return items;
-  }
-
-  /// 解析单个时间线条目
-  static TimelineItem? _parseSingleItem(String username, String html) {
-    // 提取头像 URL
-    final avatarMatch = RegExp(
-      r"background-image:url\('([^']+)'\)",
-    ).firstMatch(html);
-    var avatarUrl = avatarMatch?.group(1) ?? '';
-    if (avatarUrl.startsWith('//')) avatarUrl = 'https:$avatarUrl';
-
-    // 提取昵称
-    final nicknameMatch = RegExp(
-      r'<a\s+href="[^"]*"\s+class="l">([^<]+)</a>',
-    ).firstMatch(html);
-    final nickname = nicknameMatch?.group(1) ?? username;
-
-    // 提取 info 区域
-    final infoMatch = RegExp(
-      r'<span\s+class="info[^"]*">([\s\S]*?)</span>\s*$',
-    ).firstMatch(html);
-    if (infoMatch == null) return null;
-    final infoHtml = infoMatch.group(1) ?? '';
-
-    // 提取动作文本: 昵称链接之后、下一个链接或 <div 之前的纯文本
-    final actionMatch = RegExp(
-      r'class="l">[^<]*</a>\s*([^<]+?)\s*<',
-    ).firstMatch(infoHtml);
-    final actionText = actionMatch?.group(1)?.trim() ?? '';
-
-    // 提取动作目标（第二个链接文本）
-    final allLinks = RegExp(
-      r'<a\s+href="([^"]*)"[^>]*class="l"[^>]*>([^<]+)</a>',
-    ).allMatches(infoHtml).toList();
-    String? targetText;
-    if (allLinks.length >= 2) {
-      targetText = allLinks[1].group(2);
-    }
-
-    // 提取条目卡片信息
-    int? subjectId;
-    String? subjectName;
-    String? subjectNameCn;
-    String? subjectCoverUrl;
-    String? subjectInfo;
-    double? score;
-    String? rank;
-
-    final cardMatch = RegExp(
-      r'<div\s+class="card[^"]*">([\s\S]*?)</div>\s*</div>\s*</div>',
-    ).firstMatch(infoHtml);
-
-    if (cardMatch != null) {
-      final cardHtml = cardMatch.group(1) ?? '';
-
-      // subject ID
-      final subjectIdMatch = RegExp(
-        r'href="[^"]*?/subject/(\d+)"',
-      ).firstMatch(cardHtml);
-      if (subjectIdMatch != null) {
-        subjectId = int.tryParse(subjectIdMatch.group(1) ?? '');
-      }
-
-      // cover
-      final coverMatch = RegExp(r'<img\s+src="([^"]+)"').firstMatch(cardHtml);
-      if (coverMatch != null) {
-        var url = coverMatch.group(1) ?? '';
-        if (url.startsWith('//')) url = 'https:$url';
-        subjectCoverUrl = url;
-      }
-
-      // title (original) and subtitle (Chinese or vice versa)
-      final titleMatch = RegExp(
-        r'class="title">\s*<a[^>]*>([^<]+)',
-      ).firstMatch(cardHtml);
-      if (titleMatch != null) {
-        subjectName = titleMatch.group(1)?.trim();
-      }
-
-      final subtitleMatch = RegExp(
-        r'<small\s+class="subtitle[^"]*">([^<]+)</small>',
-      ).firstMatch(cardHtml);
-      if (subtitleMatch != null) {
-        subjectNameCn = subtitleMatch.group(1)?.trim();
-      }
-
-      // 如果 title 里含中文且 subtitle 含日文，交换
-      if (subjectName != null && _hasChinese(subjectName)) {
-        final tmp = subjectName;
-        subjectName = subjectNameCn;
-        subjectNameCn = tmp;
-      }
-
-      // info line
-      final infoLineMatch = RegExp(
-        r'class="info tip">\s*([\s\S]*?)\s*</p>',
-      ).firstMatch(cardHtml);
-      if (infoLineMatch != null) {
-        subjectInfo = infoLineMatch
-            .group(1)
-            ?.replaceAll(RegExp(r'<[^>]+>'), '')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
-      }
-
-      // score
-      final scoreMatch = RegExp(
-        r'class="fade">\s*([\d.]+)\s*</small>',
-      ).firstMatch(cardHtml);
-      if (scoreMatch != null) {
-        score = double.tryParse(scoreMatch.group(1) ?? '');
-      }
-
-      // rank
-      final rankMatch = RegExp(
-        r'class="rank">\s*([^<]+)\s*</span>',
-      ).firstMatch(cardHtml);
-      if (rankMatch != null) {
-        rank = rankMatch.group(1)?.trim();
-      }
-    }
-
-    // 如果没有卡片但有链接，从链接提取 subjectId
-    if (subjectId == null && allLinks.length >= 2) {
-      final href = allLinks[1].group(1) ?? '';
-      final idMatch = RegExp(r'/subject/(\d+)').firstMatch(href);
-      if (idMatch != null) {
-        subjectId = int.tryParse(idMatch.group(1) ?? '');
-      }
-    }
-
-    // 提取时间
-    final timeMatch = RegExp(
-      r'class="titleTip"[^>]*>([^<]+)</span>',
-    ).firstMatch(infoHtml);
-    final timeText = timeMatch?.group(1)?.trim() ?? '';
-
-    if (nickname.isEmpty && actionText.isEmpty) return null;
-
-    return TimelineItem(
-      username: username,
-      nickname: nickname,
-      avatarUrl: avatarUrl,
-      actionText: actionText,
-      targetText: targetText,
-      subjectId: subjectId,
-      subjectName: subjectName,
-      subjectNameCn: subjectNameCn,
-      subjectCoverUrl: subjectCoverUrl,
-      subjectInfo: subjectInfo,
-      score: score,
-      rank: rank,
-      timeText: timeText,
-    );
-  }
-
   static List<RakuenTopic> _parseRakuenTopicsHtml(String html) {
     final topics = <RakuenTopic>[];
     final itemRegex = RegExp(
@@ -2397,11 +2221,6 @@ class ApiClient {
     final candidate = session ?? _webSession;
     if (candidate == null || !candidate.isValid) return null;
     return candidate.buildCookieHeaderForUri(uri);
-  }
-
-  /// 检测字符串是否包含中文字符
-  static bool _hasChinese(String text) {
-    return RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
   }
 }
 

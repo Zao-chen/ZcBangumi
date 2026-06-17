@@ -222,9 +222,7 @@ class _SubjectPageState extends State<SubjectPage>
     final api = context.read<ApiClient>();
     final connectivity = context.read<ConnectivityProvider>();
 
-    if (_subject == null) {
-      _subject = _readSubjectFromCache(storage);
-    }
+    _subject ??= _readSubjectFromCache(storage);
 
     if (_characters.isEmpty) {
       final charsCached = storage.getCache(_charsCacheName);
@@ -600,7 +598,7 @@ class _SubjectPageState extends State<SubjectPage>
     final content = ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: 5,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         return Container(
           height: index == 0 ? 120 : 88,
@@ -1997,9 +1995,9 @@ class _SubjectPageState extends State<SubjectPage>
         scrollEvent.localPosition,
       );
       final nextMatrix = Matrix4.copy(_mindMapTransformController.value)
-        ..translate(focalScenePoint.dx, focalScenePoint.dy)
-        ..scale(scaleChange)
-        ..translate(-focalScenePoint.dx, -focalScenePoint.dy);
+        ..translateByDouble(focalScenePoint.dx, focalScenePoint.dy, 0.0, 1.0)
+        ..scaleByDouble(scaleChange, scaleChange, scaleChange, 1.0)
+        ..translateByDouble(-focalScenePoint.dx, -focalScenePoint.dy, 0.0, 1.0);
       _mindMapTransformController.value = nextMatrix;
     });
   }
@@ -2049,8 +2047,8 @@ class _SubjectPageState extends State<SubjectPage>
     final ty = (viewportSize.height - layout.height * fitScale) / 2;
 
     final matrix = Matrix4.identity()
-      ..translate(tx, ty)
-      ..scale(fitScale);
+      ..translateByDouble(tx, ty, 0.0, 1.0)
+      ..scaleByDouble(fitScale, fitScale, fitScale, 1.0);
     _mindMapTransformController.value = matrix;
   }
 
@@ -2101,8 +2099,8 @@ class _SubjectPageState extends State<SubjectPage>
                           painter: _MindMapLinePainter(
                             edges: layout.edges,
                             lineColor: colorScheme.outlineVariant,
-                            highlightColor: colorScheme.primary.withOpacity(
-                              0.8,
+                            highlightColor: colorScheme.primary.withValues(
+                              alpha: 0.8,
                             ),
                           ),
                         ),
@@ -2210,7 +2208,7 @@ class _SubjectPageState extends State<SubjectPage>
         decoration: BoxDecoration(
           color: colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colorScheme.primary.withOpacity(0.3)),
+          border: Border.all(color: colorScheme.primary.withValues(alpha: 0.3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2229,7 +2227,7 @@ class _SubjectPageState extends State<SubjectPage>
             Text(
               '关联 ${_relatedSubjects.length}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onPrimaryContainer.withOpacity(0.85),
+                color: colorScheme.onPrimaryContainer.withValues(alpha: 0.85),
               ),
             ),
           ],
@@ -2245,7 +2243,9 @@ class _SubjectPageState extends State<SubjectPage>
         decoration: BoxDecoration(
           color: colorScheme.secondaryContainer,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: colorScheme.secondary.withOpacity(0.28)),
+          border: Border.all(
+            color: colorScheme.secondary.withValues(alpha: 0.28),
+          ),
         ),
         child: Row(
           children: [

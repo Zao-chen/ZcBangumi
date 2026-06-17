@@ -1,10 +1,20 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zc_bangumi/services/internal_link_handler.dart';
 import 'package:zc_bangumi/services/link_navigator.dart';
+
+Set<Factory<OneSequenceGestureRecognizer>> _webViewVerticalDragGestures() {
+  return {
+    Factory<OneSequenceGestureRecognizer>(
+      () => VerticalDragGestureRecognizer(),
+    ),
+  };
+}
 
 class EmbeddedWebPageView extends StatefulWidget {
   final Uri initialUri;
@@ -203,7 +213,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                   Expanded(
                     child: ListView.separated(
                       itemCount: results.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = results[index];
                         return ListTile(
@@ -620,6 +630,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                   ),
                 Expanded(
                   child: InAppWebView(
+                    gestureRecognizers: _webViewVerticalDragGestures(),
                     initialSettings: InAppWebViewSettings(
                       useShouldOverrideUrlLoading: true,
                       useOnLoadResource: false,
@@ -718,6 +729,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
   WebUri? _currentUrl;
   String? _pageTitle;
   int _progress = 0;
+  bool _allowRoutePop = false;
 
   String get _resolvedTitle {
     final currentTitle = _pageTitle?.trim() ?? '';
@@ -751,6 +763,20 @@ class _WebPageViewerState extends State<WebPageViewer> {
 
     await controller.goBack();
     return false;
+  }
+
+  Future<void> _handlePopInvoked(bool didPop, Object? result) async {
+    if (didPop) {
+      return;
+    }
+
+    final shouldPopRoute = await _handleBackPressed();
+    if (!shouldPopRoute || !mounted) {
+      return;
+    }
+
+    setState(() => _allowRoutePop = true);
+    Navigator.of(context).pop(result);
   }
 
   Future<NavigationActionPolicy> _handleNavigationAction(
@@ -787,8 +813,9 @@ class _WebPageViewerState extends State<WebPageViewer> {
     final colorScheme = Theme.of(context).colorScheme;
     final showProgress = _progress > 0 && _progress < 100;
 
-    return WillPopScope(
-      onWillPop: _handleBackPressed,
+    return PopScope<Object?>(
+      canPop: _allowRoutePop,
+      onPopInvokedWithResult: _handlePopInvoked,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -821,6 +848,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
           ),
         ),
         body: InAppWebView(
+          gestureRecognizers: _webViewVerticalDragGestures(),
           initialUrlRequest: URLRequest(url: WebUri.uri(widget.initialUri)),
           initialSettings: InAppWebViewSettings(
             supportZoom: true,

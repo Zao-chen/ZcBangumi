@@ -93,8 +93,9 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       if (!mounted) return;
       setState(() => _error = '加载失败: $e');
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -863,8 +864,10 @@ class _RakuenPostBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final onMainUserTap = () =>
-        _openUserPage(context, post.username, post.nickname);
+    void onMainUserTap() {
+      _openUserPage(context, post.username, post.nickname);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -901,8 +904,10 @@ class _RakuenPostBlock extends StatelessWidget {
             padding: EdgeInsets.only(left: avatarSize + 12),
             child: Column(
               children: post.subReplies.map((reply) {
-                final onReplyUserTap = () =>
-                    _openUserPage(context, reply.username, reply.nickname);
+                void onReplyUserTap() {
+                  _openUserPage(context, reply.username, reply.nickname);
+                }
+
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(10),
