@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../constants.dart';
 import '../providers/connectivity_provider.dart';
+import '../services/link_navigator.dart';
 
 /// 响应式 Scaffold
 /// 竖屏时底部导航栏，横屏时左侧导航栏
@@ -107,28 +110,119 @@ class ResponsiveScaffold extends StatelessWidget {
   }
 }
 
-class _CacheAwareContent extends StatelessWidget {
+class _CacheAwareContent extends StatefulWidget {
   final Widget child;
 
   const _CacheAwareContent({required this.child});
 
   @override
+  State<_CacheAwareContent> createState() => _CacheAwareContentState();
+}
+
+class _CacheAwareContentState extends State<_CacheAwareContent> {
+  bool _webLimitationsDismissed = false;
+
+  Future<void> _openFullAppReleasePage() async {
+    final ok = await LinkNavigator.openBrowser(
+      Uri.parse(BgmConst.githubReleasesUrl),
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开完整应用版页面')));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final connectivity = context.watch<ConnectivityProvider>();
-    final showBanner = connectivity.shouldShowBanner;
+    final showCacheBanner = connectivity.shouldShowBanner;
+    final showWebLimitationsBanner = kIsWeb && !_webLimitationsDismissed;
+
     return Column(
       children: [
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
-          child: showBanner
-              ? _OfflineCacheBanner(
-                  message: connectivity.bannerMessage,
-                  onClose: context.read<ConnectivityProvider>().dismissBanner,
+          child: showWebLimitationsBanner
+              ? _WebLimitationsBanner(
+                  onOpenFullApp: _openFullAppReleasePage,
+                  onClose: () {
+                    setState(() => _webLimitationsDismissed = true);
+                  },
                 )
               : const SizedBox.shrink(),
         ),
-        Expanded(child: child),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: showCacheBanner
+              ? _OfflineCacheBanner(
+                  message: connectivity.bannerMessage,
+                  onClose: context.read<ConnectivityProvider>().dismissBanner,
+                  safeAreaTop: !showWebLimitationsBanner,
+                )
+              : const SizedBox.shrink(),
+        ),
+        Expanded(child: widget.child),
       ],
+    );
+  }
+}
+
+class _WebLimitationsBanner extends StatelessWidget {
+  final VoidCallback onOpenFullApp;
+  final VoidCallback onClose;
+
+  const _WebLimitationsBanner({
+    required this.onOpenFullApp,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: colorScheme.secondaryContainer,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.public_off_rounded,
+                color: colorScheme.onSecondaryContainer,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '静态网页版部分跨站功能不可用',
+                  style: TextStyle(
+                    color: colorScheme.onSecondaryContainer,
+                    fontSize: 13,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                tooltip: '查看完整应用版',
+                onPressed: onOpenFullApp,
+                icon: const Icon(Icons.open_in_new_rounded),
+                color: colorScheme.onSecondaryContainer,
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                tooltip: '关闭',
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded),
+                color: colorScheme.onSecondaryContainer,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -136,8 +230,13 @@ class _CacheAwareContent extends StatelessWidget {
 class _OfflineCacheBanner extends StatelessWidget {
   final String message;
   final VoidCallback onClose;
+  final bool safeAreaTop;
 
-  const _OfflineCacheBanner({required this.message, required this.onClose});
+  const _OfflineCacheBanner({
+    required this.message,
+    required this.onClose,
+    this.safeAreaTop = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +244,7 @@ class _OfflineCacheBanner extends StatelessWidget {
     return Material(
       color: colorScheme.tertiaryContainer,
       child: SafeArea(
+        top: safeAreaTop,
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
