@@ -13,8 +13,22 @@ on:
         default: ''
         type: string
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.release_tag }}
+  cancel-in-progress: false
+
+env:
+  APP_DISPLAY_NAME: 'ZC Bangumi'
+  ARTIFACT_PREFIX: 'zc_bangumi'
+  FLUTTER_VERSION: '3.41.9'
+  RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+
 jobs:
-  build:
+  android:
+    name: Build Android APK
     runs-on: ubuntu-latest
     
     steps:
@@ -29,7 +43,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.2'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Get dependencies
@@ -112,15 +126,16 @@ jobs:
       - name: Rename APK
         shell: bash
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk zc_bangumi-${{ github.event.inputs.release_tag }}.apk
+          mv build/app/outputs/flutter-apk/app-release.apk "${ARTIFACT_PREFIX}-${RELEASE_TAG}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: zc_bangumi-${{ github.event.inputs.release_tag }}.apk
+          name: android-apk
+          path: ${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}.apk
 
-  build-windows:
+  windows:
+    name: Build Windows Installer
     runs-on: windows-2022
     
     steps:
@@ -129,7 +144,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.2'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Get dependencies
@@ -145,12 +160,14 @@ jobs:
       - name: Create NSIS installer script
         shell: pwsh
         run: |
-          $tag = "${{ github.event.inputs.release_tag }}"
+          $appName = "${{ env.APP_DISPLAY_NAME }}"
+          $artifactPrefix = "${{ env.ARTIFACT_PREFIX }}"
+          $releaseTag = "${{ env.RELEASE_TAG }}"
           $nsisscript = @"
           `!include "MUI2.nsh"
           
-          Name "ZC Bangumi"
-          OutFile "zc_bangumi-$tag-windows.exe"
+          Name "$appName"
+          OutFile "$artifactPrefix-$releaseTag-windows.exe"
           InstallDir "`$PROGRAMFILES\ZCBangumi"
           
           `!insertmacro MUI_PAGE_DIRECTORY
@@ -180,10 +197,11 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release
-          path: zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
+          name: windows-installer
+          path: ${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-windows.exe
 
-  build-macos:
+  macos:
+    name: Build macOS App (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -200,7 +218,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.2'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Enable macOS desktop
@@ -212,26 +230,30 @@ jobs:
       - name: Build macOS
         run: flutter build macos --release
 
-      - name: Prepare macOS app
+      - name: Package macOS DMG
         shell: bash
         run: |
-          APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" -print -quit)
-          if [ -z "$APP_PATH" ]; then
+          app_path=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" -print -quit)
+          if [ -z "$app_path" ]; then
             echo "::error::No .app bundle found in build/macos/Build/Products/Release"
             ls -la build/macos/Build/Products/Release || true
             exit 1
           fi
-          APP_NAME="zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.app"
-          rm -rf "$APP_NAME"
-          cp -R "$APP_PATH" "$APP_NAME"
 
-      - name: Upload macOS app
+          app_name="${ARTIFACT_PREFIX}-${RELEASE_TAG}-macos-${{ matrix.arch }}.app"
+          dmg_name="${ARTIFACT_PREFIX}-${RELEASE_TAG}-macos-${{ matrix.arch }}.dmg"
+          rm -rf "$app_name"
+          cp -R "$app_path" "$app_name"
+          hdiutil create -volname "${APP_DISPLAY_NAME}" -srcfolder "$app_name" -ov -format UDZO "$dmg_name"
+
+      - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-app
-          path: zc_bangumi-${{ github.event.inputs.release_tag }}-macos-${{ matrix.arch }}.app
+          name: macos-${{ matrix.arch }}-dmg
+          path: ${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-macos-${{ matrix.arch }}.dmg
 
-  build-ios:
+  ios:
+    name: Build unsigned iOS IPA
     runs-on: macos-15
 
     steps:
@@ -240,7 +262,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.9'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Get dependencies
@@ -261,18 +283,21 @@ jobs:
           rm -rf build/ios/unsigned-ipa
           mkdir -p build/ios/unsigned-ipa/Payload
           cp -R "$APP_PATH" build/ios/unsigned-ipa/Payload/Runner.app
-          ditto -c -k --sequesterRsrc build/ios/unsigned-ipa/Payload "zc_bangumi-${{ github.event.inputs.release_tag }}-ios-unsigned.ipa"
+          (
+            cd build/ios/unsigned-ipa
+            ditto -c -k --sequesterRsrc --keepParent Payload "${GITHUB_WORKSPACE}/${ARTIFACT_PREFIX}-${RELEASE_TAG}-ios-unsigned.ipa"
+          )
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-release
-          path: zc_bangumi-${{ github.event.inputs.release_tag }}-ios-unsigned.ipa
+          name: ios-unsigned-ipa
+          path: ${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-ios-unsigned.ipa
 
   release:
-    needs: [build, build-windows, build-macos, build-ios]
+    name: Publish GitHub Release
+    needs: [android, windows, macos, ios]
     runs-on: ubuntu-latest
-    if: ${{ needs.build.result == 'success' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-ios.result == 'success' }}
     permissions:
       contents: write
     
@@ -286,50 +311,18 @@ jobs:
         with:
           path: artifacts
 
-      - name: Generate Changelog
-        id: changelog
-        shell: bash
-        run: |
-          # 获取最后一个tag之后的提交信息
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            RAW_CHANGELOG=$(git log --format="%s" | head -20)
-          else
-            RAW_CHANGELOG=$(git log "$PREVIOUS_TAG"..HEAD --format="%s")
-          fi
-
-          # 移除 conventional commit 前缀（feat/fix/chore 等）并格式化成列表
-          CHANGELOG=$(echo "$RAW_CHANGELOG" \
-            | sed -E 's/^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([^)]+\))?!?:[[:space:]]*//I' \
-            | sed '/^[[:space:]]*$/d' \
-            | sed 's/^/- /')
-
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- 本次发布未检测到可展示的提交说明"
-          fi
-          
-          # 设置多行输出（使用 EOF delimiter 可直接保留换行符）
-          {
-            echo "CHANGELOG<<EOF"
-            echo "$CHANGELOG"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.event.inputs.release_tag }}
-          name: ${{ github.event.inputs.release_title != '' && github.event.inputs.release_title || format('ZC Bangumi {0}', github.event.inputs.release_tag) }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ github.event.inputs.release_title != '' && github.event.inputs.release_title || format('{0} {1}', env.APP_DISPLAY_NAME, env.RELEASE_TAG) }}
           files: |
-            artifacts/app-release/zc_bangumi-${{ github.event.inputs.release_tag }}.apk
-            artifacts/windows-release/zc_bangumi-${{ github.event.inputs.release_tag }}-windows.exe
-            artifacts/ios-unsigned-release/zc_bangumi-${{ github.event.inputs.release_tag }}-ios-unsigned.ipa
-          body: |
-            ZC Bangumi ${{ github.event.inputs.release_tag }} 正式版本发布
-            
-            ## What's Changed
-            ${{ steps.changelog.outputs.CHANGELOG }}
+            artifacts/android-apk/${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}.apk
+            artifacts/windows-installer/${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-windows.exe
+            artifacts/macos-x64-dmg/${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-macos-x64.dmg
+            artifacts/macos-arm64-dmg/${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-macos-arm64.dmg
+            artifacts/ios-unsigned-ipa/${{ env.ARTIFACT_PREFIX }}-${{ env.RELEASE_TAG }}-ios-unsigned.ipa
           draft: false
           prerelease: false
-          generate_release_notes: false
+          generate_release_notes: true
