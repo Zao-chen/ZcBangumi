@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import '../providers/collection_provider.dart';
 import '../providers/mikan_provider.dart';
 import '../services/mikan_service.dart';
 import '../services/platform_feature_support.dart';
+import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/update_dialog.dart';
 
@@ -342,6 +344,13 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildDisplaySettingsCard(ctx, appState)];
         },
       ),
+      if (kIsWeb)
+        _SettingsSection(
+          icon: Icons.public_outlined,
+          title: '静态网页版',
+          subtitle: '跨域与站点会话限制',
+          builder: _buildStaticWebLimitationsCards,
+        ),
       if (PlatformFeatureSupport.timeline || PlatformFeatureSupport.rakuen)
         _SettingsSection(
           icon: Icons.view_day_outlined,
@@ -386,6 +395,53 @@ class _SettingsPageState extends State<SettingsPage> {
           },
         ),
     ];
+  }
+
+  List<Widget> _buildStaticWebLimitationsCards(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return [
+      Card(
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text('GitHub Pages 静态部署'),
+              subtitle: const Text('浏览器无法代替客户端发送跨站 Cookie 或绕过目标站跨域策略'),
+              iconColor: colorScheme.primary,
+            ),
+            ListTile(
+              leading: const Icon(Icons.system_update_alt_rounded),
+              title: const Text('查看完整应用版'),
+              subtitle: const Text('下载 Android / Windows 版本，或查看完整更新说明'),
+              trailing: const Icon(Icons.open_in_new_rounded),
+              onTap: () => _openFullAppReleasePage(context),
+            ),
+            const Divider(height: 1),
+            const ListTile(
+              leading: Icon(Icons.hide_source_outlined),
+              title: Text('动态与超展开'),
+              subtitle: Text('静态网页版隐藏相关入口，可在桌面或移动端使用'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.cloud_off_outlined),
+              title: Text('Mikan 订阅'),
+              subtitle: Text('登录、订阅和取消订阅需要站点会话，静态网页版不显示入口'),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Future<void> _openFullAppReleasePage(BuildContext context) async {
+    final ok = await LinkNavigator.openBrowser(
+      Uri.parse(BgmConst.githubReleasesUrl),
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开完整应用版页面')));
+    }
   }
 
   Widget _buildMikanSettingsCard(BuildContext context, MikanProvider mikan) {

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../constants.dart';
 import '../models/update_info.dart';
 import 'storage_service.dart';
 
@@ -49,9 +50,6 @@ class UpdateService {
   final StorageService _storage;
   String? _downloadedPackagePath;
 
-  // GitHub Release 配置
-  static const String githubOwner = 'Zao-chen';
-  static const String githubRepo = 'ZcBangumi';
   static const String apkAssetNameKeyword = 'app-release';
   static const String windowsAssetNameKeyword = 'windows';
 
@@ -99,8 +97,7 @@ class UpdateService {
 
       final packageInfo = await getCurrentVersion();
       final currentVersion = packageInfo.version;
-      final apiUrl =
-          'https://api.github.com/repos/$githubOwner/$githubRepo/releases?per_page=100';
+      final apiUrl = '${BgmConst.githubReleasesApiUrl}?per_page=100';
 
       final response = await _updateDio.get(
         apiUrl,

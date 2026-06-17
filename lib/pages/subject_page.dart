@@ -873,14 +873,72 @@ class _SubjectPageState extends State<SubjectPage>
     final uri = _buildMoegirlUri();
     if (uri == null) {
       return Center(
-        child: Text(
-          'No subject name',
-          style: TextStyle(color: Colors.grey[600]),
-        ),
+        child: Text('暂无可用于搜索的条目名', style: TextStyle(color: Colors.grey[600])),
       );
     }
 
+    if (kIsWeb) {
+      return _buildMoegirlWebOpenTab(uri);
+    }
+
     return EmbeddedWebPageView(initialUri: uri);
+  }
+
+  Widget _buildMoegirlWebOpenTab(Uri uri) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final subjectName = _subject?.displayName ?? '';
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.travel_explore_rounded,
+                    size: 40,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    '萌娘百科',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    subjectName.isEmpty ? '在新标签页中查看相关页面' : subjectName,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () => _openMoegirlInBrowser(uri),
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: const Text('在萌娘百科打开'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMoegirlInBrowser(Uri uri) async {
+    final ok = await LinkNavigator.openBrowser(uri);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('打开萌娘百科失败')));
+    }
   }
 
   bool get _shouldLockTabSwipeForMindMap =>
