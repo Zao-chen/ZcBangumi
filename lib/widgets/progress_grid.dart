@@ -403,8 +403,9 @@ class _BookProgressSelector extends StatelessWidget {
                             childDelegate: ListWheelChildBuilderDelegate(
                               childCount: sorts.length,
                               builder: (context, index) {
-                                if (index < 0 || index >= sorts.length)
+                                if (index < 0 || index >= sorts.length) {
                                   return null;
+                                }
                                 final isSelected = index == selectedIndex;
                                 return Center(
                                   child: Text(
@@ -773,6 +774,9 @@ class _EpisodeCell extends StatelessWidget {
       ),
     );
 
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     showMenu<int>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -787,7 +791,7 @@ class _EpisodeCell extends StatelessWidget {
       if (value == _menuWatchUpTo) {
         onWatchUpTo?.call(ep.episode.sort.toInt());
       } else if (value == _menuOpenDiscussion) {
-        await _openEpisodeDiscussion(context, ep.episode);
+        await _openEpisodeDiscussion(navigator, messenger, ep.episode);
       } else {
         onSetStatus?.call(ep.episode.id, value);
       }
@@ -819,17 +823,15 @@ class _EpisodeCell extends StatelessWidget {
   }
 
   Future<void> _openEpisodeDiscussion(
-    BuildContext context,
+    NavigatorState navigator,
+    ScaffoldMessengerState messenger,
     Episode episodeInfo,
   ) async {
     if (!PlatformFeatureSupport.rakuen) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('静态网页版暂不支持超展开讨论')));
+      messenger.showSnackBar(const SnackBar(content: Text('静态网页版暂不支持超展开讨论')));
       return;
     }
 
-    final navigator = Navigator.of(context);
     final topic = RakuenTopic(
       id: 'ep_${episodeInfo.id}',
       type: 'ep',
@@ -936,7 +938,9 @@ class _IndeterminateProgressOverlayState
       child: AnimatedBuilder(
         animation: _opacityAnim,
         builder: (context, child) {
-          return Container(color: baseColor.withOpacity(_opacityAnim.value));
+          return Container(
+            color: baseColor.withValues(alpha: _opacityAnim.value),
+          );
         },
       ),
     );

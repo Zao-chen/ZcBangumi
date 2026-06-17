@@ -203,7 +203,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                   Expanded(
                     child: ListView.separated(
                       itemCount: results.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = results[index];
                         return ListTile(
@@ -718,6 +718,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
   WebUri? _currentUrl;
   String? _pageTitle;
   int _progress = 0;
+  bool _allowRoutePop = false;
 
   String get _resolvedTitle {
     final currentTitle = _pageTitle?.trim() ?? '';
@@ -751,6 +752,20 @@ class _WebPageViewerState extends State<WebPageViewer> {
 
     await controller.goBack();
     return false;
+  }
+
+  Future<void> _handlePopInvoked(bool didPop, Object? result) async {
+    if (didPop) {
+      return;
+    }
+
+    final shouldPopRoute = await _handleBackPressed();
+    if (!shouldPopRoute || !mounted) {
+      return;
+    }
+
+    setState(() => _allowRoutePop = true);
+    Navigator.of(context).pop(result);
   }
 
   Future<NavigationActionPolicy> _handleNavigationAction(
@@ -787,8 +802,9 @@ class _WebPageViewerState extends State<WebPageViewer> {
     final colorScheme = Theme.of(context).colorScheme;
     final showProgress = _progress > 0 && _progress < 100;
 
-    return WillPopScope(
-      onWillPop: _handleBackPressed,
+    return PopScope<Object?>(
+      canPop: _allowRoutePop,
+      onPopInvokedWithResult: _handlePopInvoked,
       child: Scaffold(
         appBar: AppBar(
           title: Text(

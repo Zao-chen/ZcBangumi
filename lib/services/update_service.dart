@@ -270,7 +270,7 @@ class UpdateService {
     return compareVersion(currentVersion, newVersion) < 0;
   }
 
-  /// 版本比较：current<target 返回 -1，= 返回 0，> 返回 1。
+  /// 版本比较：`current < target` 返回 -1，= 返回 0，> 返回 1。
   int compareVersion(String currentVersion, String targetVersion) {
     final current = _parseVersion(currentVersion);
     final target = _parseVersion(targetVersion);
