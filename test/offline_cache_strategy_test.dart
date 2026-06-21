@@ -95,7 +95,9 @@ void main() {
       });
       final storage = StorageService();
       await storage.init();
-      final connectivity = ConnectivityProvider();
+      final connectivity = ConnectivityProvider(
+        failureBannerDelay: Duration.zero,
+      );
       final auth = AuthProvider(
         api: _AuthApi(
           error: DioException(
@@ -129,7 +131,9 @@ void main() {
         'collections_${BgmConst.subjectAnime}_alice',
         cached,
       );
-      final connectivity = ConnectivityProvider();
+      final connectivity = ConnectivityProvider(
+        failureBannerDelay: Duration.zero,
+      );
       final provider = CollectionProvider(
         api: _CollectionApi(
           error: DioException(
@@ -152,6 +156,27 @@ void main() {
       expect(connectivity.shouldShowBanner, isTrue);
     },
   );
+
+  test('ConnectivityProvider suppresses transient network failures', () async {
+    final connectivity = ConnectivityProvider(
+      failureBannerDelay: const Duration(milliseconds: 20),
+    );
+
+    connectivity.reportNetworkFailure(
+      DioException(
+        requestOptions: RequestOptions(path: '/collections'),
+        type: DioExceptionType.connectionTimeout,
+        error: 'slow request',
+      ),
+    );
+    connectivity.reportNetworkSuccess();
+
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    expect(connectivity.shouldShowBanner, isFalse);
+    expect(connectivity.usingCache, isFalse);
+    connectivity.dispose();
+  });
 }
 
 Map<String, dynamic> _entry(dynamic data, DateTime accessedAt, int count) => {

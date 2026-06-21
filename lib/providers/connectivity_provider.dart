@@ -1,11 +1,20 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 class ConnectivityProvider extends ChangeNotifier {
+  ConnectivityProvider({
+    this.failureBannerDelay = const Duration(milliseconds: 800),
+  });
+
+  final Duration failureBannerDelay;
+
   bool _usingCache = false;
   bool _bannerDismissed = false;
   String? _message;
   Object? _lastError;
+  Timer? _failureTimer;
 
   bool get usingCache => _usingCache;
   bool get shouldShowBanner =>
@@ -14,6 +23,17 @@ class ConnectivityProvider extends ChangeNotifier {
   Object? get lastError => _lastError;
 
   void reportNetworkFailure(Object error, {String? message}) {
+    _failureTimer?.cancel();
+    if (failureBannerDelay == Duration.zero) {
+      _showNetworkFailure(error, message: message);
+      return;
+    }
+    _failureTimer = Timer(failureBannerDelay, () {
+      _showNetworkFailure(error, message: message);
+    });
+  }
+
+  void _showNetworkFailure(Object error, {String? message}) {
     _usingCache = true;
     _bannerDismissed = false;
     _lastError = error;
@@ -22,6 +42,8 @@ class ConnectivityProvider extends ChangeNotifier {
   }
 
   void reportNetworkSuccess() {
+    _failureTimer?.cancel();
+    _failureTimer = null;
     if (!_usingCache && _lastError == null && _message == null) return;
     _usingCache = false;
     _bannerDismissed = false;
@@ -34,6 +56,12 @@ class ConnectivityProvider extends ChangeNotifier {
     if (_bannerDismissed) return;
     _bannerDismissed = true;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _failureTimer?.cancel();
+    super.dispose();
   }
 
   static bool isNetworkFailure(Object error) {
