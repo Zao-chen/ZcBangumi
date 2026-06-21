@@ -4,6 +4,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../models/mikan.dart';
+import 'app_log_service.dart';
 import 'web_network_config.dart';
 
 class MikanService {
@@ -21,11 +22,14 @@ class MikanService {
   String _baseUrl;
   List<MikanSessionCookie> _cookies = const [];
 
-  MikanService({Dio? dio, String baseUrl = defaultBaseUrl})
-    : _dio = _createDio(dio),
-      _baseUrl = _normalizeBaseUrl(baseUrl);
+  MikanService({
+    Dio? dio,
+    String baseUrl = defaultBaseUrl,
+    AppLogService? logService,
+  }) : _dio = _createDio(dio, logService: logService),
+       _baseUrl = _normalizeBaseUrl(baseUrl);
 
-  static Dio _createDio(Dio? dio) {
+  static Dio _createDio(Dio? dio, {AppLogService? logService}) {
     final client =
         dio ??
         Dio(
@@ -39,6 +43,9 @@ class MikanService {
           ),
         );
     WebNetworkConfig.installWebAdapter(client);
+    if (logService != null) {
+      client.interceptors.add(AppLogDioInterceptor(logService));
+    }
     return client;
   }
 

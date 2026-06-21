@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'services/app_log_service.dart';
 import 'services/api_client.dart';
 import 'services/mikan_service.dart';
 import 'services/platform_feature_support.dart';
@@ -28,13 +29,23 @@ void main() async {
   final storage = StorageService();
   await storage.init();
 
+  final logService = AppLogService();
+  await logService.init();
+
   // 初始化 API 客户端
-  final apiClient = ApiClient();
+  final apiClient = ApiClient(logService: logService);
   apiClient.setWebSession(storage.webSession);
 
   // 初始化更新服务
-  final updateService = UpdateService(apiClient.dio, storage);
-  final mikanService = MikanService(baseUrl: storage.mikanBaseUrl);
+  final updateService = UpdateService(
+    apiClient.dio,
+    storage,
+    logService: logService,
+  );
+  final mikanService = MikanService(
+    baseUrl: storage.mikanBaseUrl,
+    logService: logService,
+  );
 
   runApp(
     ZCBangumiApp(
@@ -42,6 +53,7 @@ void main() async {
       storage: storage,
       updateService: updateService,
       mikanService: mikanService,
+      logService: logService,
     ),
   );
 }
@@ -51,6 +63,7 @@ class ZCBangumiApp extends StatelessWidget {
   final StorageService storage;
   final UpdateService updateService;
   final MikanService mikanService;
+  final AppLogService logService;
 
   const ZCBangumiApp({
     super.key,
@@ -58,6 +71,7 @@ class ZCBangumiApp extends StatelessWidget {
     required this.storage,
     required this.updateService,
     required this.mikanService,
+    required this.logService,
   });
 
   @override
@@ -68,10 +82,13 @@ class ZCBangumiApp extends StatelessWidget {
         Provider<StorageService>.value(value: storage),
         Provider<UpdateService>.value(value: updateService),
         Provider<MikanService>.value(value: mikanService),
+        ChangeNotifierProvider<AppLogService>.value(value: logService),
         ChangeNotifierProvider(
           create: (_) => AppStateProvider(storage: storage),
         ),
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+        ChangeNotifierProvider(
+          create: (_) => ConnectivityProvider(logService: logService),
+        ),
         ChangeNotifierProvider(
           create: (context) => AuthProvider(
             api: apiClient,

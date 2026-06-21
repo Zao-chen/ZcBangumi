@@ -3,18 +3,26 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/app_log_service.dart';
+
 class ConnectivityProvider extends ChangeNotifier {
   ConnectivityProvider({
     this.failureBannerDelay = const Duration(milliseconds: 800),
-  });
+    AppLogService? logService,
+    FutureOr<bool> Function()? canReachBangumi,
+  }) : _logService = logService,
+       _canReachBangumi = canReachBangumi ?? _defaultCanReachBangumi;
 
   final Duration failureBannerDelay;
+  final AppLogService? _logService;
+  final FutureOr<bool> Function() _canReachBangumi;
 
   bool _usingCache = false;
   bool _bannerDismissed = false;
   String? _message;
   Object? _lastError;
   Timer? _failureTimer;
+  int _probeGeneration = 0;
 
   bool get usingCache => _usingCache;
   bool get shouldShowBanner =>
@@ -24,13 +32,44 @@ class ConnectivityProvider extends ChangeNotifier {
 
   void reportNetworkFailure(Object error, {String? message}) {
     _failureTimer?.cancel();
+    final generation = ++_probeGeneration;
     if (failureBannerDelay == Duration.zero) {
-      _showNetworkFailure(error, message: message);
+      unawaited(
+        _confirmNetworkFailure(error, message: message, generation: generation),
+      );
       return;
     }
     _failureTimer = Timer(failureBannerDelay, () {
-      _showNetworkFailure(error, message: message);
+      unawaited(
+        _confirmNetworkFailure(error, message: message, generation: generation),
+      );
     });
+  }
+
+  Future<void> _confirmNetworkFailure(
+    Object error, {
+    String? message,
+    required int generation,
+  }) async {
+    final reachable = await _checkBangumiReachable();
+    if (generation != _probeGeneration || reachable) {
+      if (reachable) {
+        unawaited(_logService?.info('network', 'bgm.tv 连通，忽略单次请求失败'));
+        if (_usingCache) {
+          reportNetworkSuccess();
+        }
+      }
+      return;
+    }
+    _showNetworkFailure(error, message: message);
+  }
+
+  Future<bool> _checkBangumiReachable() async {
+    try {
+      return await _canReachBangumi();
+    } catch (_) {
+      return false;
+    }
   }
 
   void _showNetworkFailure(Object error, {String? message}) {
@@ -38,17 +77,20 @@ class ConnectivityProvider extends ChangeNotifier {
     _bannerDismissed = false;
     _lastError = error;
     _message = message ?? _messageForError(error);
+    unawaited(_logService?.warning('cache', _message!));
     notifyListeners();
   }
 
   void reportNetworkSuccess() {
     _failureTimer?.cancel();
     _failureTimer = null;
+    _probeGeneration++;
     if (!_usingCache && _lastError == null && _message == null) return;
     _usingCache = false;
     _bannerDismissed = false;
     _lastError = null;
     _message = null;
+    unawaited(_logService?.info('cache', '网络请求恢复，停止显示本地缓存提示'));
     notifyListeners();
   }
 
@@ -62,6 +104,26 @@ class ConnectivityProvider extends ChangeNotifier {
   void dispose() {
     _failureTimer?.cancel();
     super.dispose();
+  }
+
+  static Future<bool> _defaultCanReachBangumi() async {
+    if (kIsWeb) return true;
+    try {
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+      await dio.get<String>(
+        'https://bgm.tv',
+        options: Options(responseType: ResponseType.plain),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool isNetworkFailure(Object error) {
