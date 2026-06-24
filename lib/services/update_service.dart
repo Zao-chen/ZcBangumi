@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../constants.dart';
 import '../models/update_info.dart';
+import 'app_log_service.dart';
 import 'storage_service.dart';
 
 enum UpdateCheckStatus {
@@ -53,7 +54,7 @@ class UpdateService {
   static const String apkAssetNameKeyword = 'app-release';
   static const String windowsAssetNameKeyword = 'windows';
 
-  UpdateService(Dio dio, this._storage)
+  UpdateService(Dio dio, this._storage, {AppLogService? logService})
     : _updateDio = Dio(
         BaseOptions(
           connectTimeout: dio.options.connectTimeout,
@@ -68,6 +69,9 @@ class UpdateService {
     // Do not forward app auth to GitHub endpoints, otherwise invalid bearer
     // tokens can cause 401 on version checks.
     _updateDio.options.headers.remove('Authorization');
+    if (logService != null) {
+      _updateDio.interceptors.add(AppLogDioInterceptor(logService));
+    }
   }
 
   /// 获取当前应用版本信息

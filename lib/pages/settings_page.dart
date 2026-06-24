@@ -11,6 +11,7 @@ import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
 import '../providers/mikan_provider.dart';
+import '../pages/log_page.dart';
 import '../services/mikan_service.dart';
 import '../services/platform_feature_support.dart';
 import '../services/link_navigator.dart';
@@ -384,6 +385,14 @@ class _SettingsPageState extends State<SettingsPage> {
             ];
           },
         ),
+      _SettingsSection(
+        icon: Icons.article_outlined,
+        title: '诊断日志',
+        subtitle: '查看、复制、导出排错日志',
+        builder: (ctx) {
+          return [_buildLogSettingsCard(ctx)];
+        },
+      ),
       if (PlatformFeatureSupport.mikan)
         _SettingsSection(
           icon: Icons.cloud_sync_outlined,
@@ -395,6 +404,32 @@ class _SettingsPageState extends State<SettingsPage> {
           },
         ),
     ];
+  }
+
+  Widget _buildLogSettingsCard(BuildContext context) {
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.article_outlined),
+            title: const Text('查看诊断日志'),
+            subtitle: const Text('包含网络失败、接口状态和应用诊断事件'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const LogPage()));
+            },
+          ),
+          const Divider(height: 1),
+          const ListTile(
+            leading: Icon(Icons.privacy_tip_outlined),
+            title: Text('隐私说明'),
+            subtitle: Text('日志不会记录 Cookie、Token 或完整请求参数'),
+          ),
+        ],
+      ),
+    );
   }
 
   List<Widget> _buildStaticWebLimitationsCards(BuildContext context) {

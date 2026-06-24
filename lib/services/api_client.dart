@@ -15,6 +15,7 @@ import '../models/rakuen_topic_favorite.dart';
 import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
+import 'app_log_service.dart';
 import 'web_network_config.dart';
 
 /// Bangumi API 客户端
@@ -27,7 +28,7 @@ class ApiClient {
   /// 公开 Dio 实例供其他服务使用
   Dio get dio => _dio;
 
-  ApiClient() {
+  ApiClient({AppLogService? logService}) {
     _dio = Dio(
       BaseOptions(
         baseUrl: BgmConst.apiBaseUrl,
@@ -40,6 +41,9 @@ class ApiClient {
       ),
     );
     WebNetworkConfig.installWebAdapter(_dio);
+    if (logService != null) {
+      _dio.interceptors.add(AppLogDioInterceptor(logService));
+    }
 
     // 初始化网页 Dio 实例
     _webDio = Dio(
@@ -56,6 +60,9 @@ class ApiClient {
       ),
     );
     WebNetworkConfig.installWebAdapter(_webDio);
+    if (logService != null) {
+      _webDio.interceptors.add(AppLogDioInterceptor(logService));
+    }
     _webDio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -83,6 +90,9 @@ class ApiClient {
       ),
     );
     WebNetworkConfig.installWebAdapter(_nextDio);
+    if (logService != null) {
+      _nextDio.interceptors.add(AppLogDioInterceptor(logService));
+    }
 
     // 添加日志拦截器（仅在调试模式）
     if (kDebugMode) {

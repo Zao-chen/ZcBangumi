@@ -81,6 +81,7 @@ void main() {
       );
 
       await auth.tryRestoreSession();
+      await Future<void>.delayed(const Duration(milliseconds: 1));
 
       expect(auth.isLoggedIn, isFalse);
       expect(auth.canUseAuthenticatedCache, isFalse);
@@ -97,6 +98,7 @@ void main() {
       await storage.init();
       final connectivity = ConnectivityProvider(
         failureBannerDelay: Duration.zero,
+        canReachBangumi: () => false,
       );
       final auth = AuthProvider(
         api: _AuthApi(
@@ -111,6 +113,7 @@ void main() {
       );
 
       await auth.tryRestoreSession();
+      await Future<void>.delayed(const Duration(milliseconds: 1));
 
       expect(auth.isLoggedIn, isFalse);
       expect(auth.offlineSession, isTrue);
@@ -133,6 +136,7 @@ void main() {
       );
       final connectivity = ConnectivityProvider(
         failureBannerDelay: Duration.zero,
+        canReachBangumi: () => false,
       );
       final provider = CollectionProvider(
         api: _CollectionApi(
@@ -150,6 +154,7 @@ void main() {
         username: 'alice',
         subjectType: BgmConst.subjectAnime,
       );
+      await Future<void>.delayed(const Duration(milliseconds: 1));
 
       expect(provider.getCollections(BgmConst.subjectAnime), hasLength(1));
       expect(provider.getError(BgmConst.subjectAnime), isNull);
@@ -160,6 +165,7 @@ void main() {
   test('ConnectivityProvider suppresses transient network failures', () async {
     final connectivity = ConnectivityProvider(
       failureBannerDelay: const Duration(milliseconds: 20),
+      canReachBangumi: () => false,
     );
 
     connectivity.reportNetworkFailure(
@@ -177,6 +183,30 @@ void main() {
     expect(connectivity.usingCache, isFalse);
     connectivity.dispose();
   });
+
+  test(
+    'ConnectivityProvider ignores request failures while bgm.tv is reachable',
+    () async {
+      final connectivity = ConnectivityProvider(
+        failureBannerDelay: Duration.zero,
+        canReachBangumi: () => true,
+      );
+
+      connectivity.reportNetworkFailure(
+        DioException(
+          requestOptions: RequestOptions(path: '/collections'),
+          type: DioExceptionType.connectionTimeout,
+          error: 'slow request',
+        ),
+      );
+
+      await Future<void>.delayed(Duration.zero);
+
+      expect(connectivity.shouldShowBanner, isFalse);
+      expect(connectivity.usingCache, isFalse);
+      connectivity.dispose();
+    },
+  );
 }
 
 Map<String, dynamic> _entry(dynamic data, DateTime accessedAt, int count) => {
