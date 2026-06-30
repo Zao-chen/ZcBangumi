@@ -44,7 +44,7 @@ void main() {
       </div>
       <table>
         <tr class="js-search-results-row">
-          <td></td>
+          <td><input data-magnet="magnet:?xt=urn:btih:search123"></td>
           <td><a href="/Home/Episode/1">[字幕组] 测试动画 [GB][1080P][MP4]</a></td>
           <td>300MB</td>
           <td>1月1日 12:00</td>
@@ -62,6 +62,8 @@ void main() {
       result.records.single.torrent,
       'https://mikanani.me/Download/1.torrent',
     );
+    expect(result.records.single.magnet, 'magnet:?xt=urn:btih:search123');
+    expect(result.records.single.subtitleType, '简中');
     expect(result.records.single.tags, containsAll(['简', '1080P', 'MP4']));
   });
 
@@ -111,6 +113,83 @@ void main() {
       detail.subgroupBangumis.single.records.single.magnet,
       'magnet:?xt=urn:btih:test123',
     );
+    expect(detail.subgroupBangumis.single.records.single.subtitleType, '简中');
+  });
+
+  test('parses episode and subtitle type from long Mikan title', () {
+    const html = '''
+      <div id="sk-container">
+        <div class="pull-left leftbar-container">
+          <p class="bangumi-title"><a href="/Home/Bangumi?bangumiId=3927">一叠间漫画咖啡屋生活！</a></p>
+        </div>
+        <div class="central-container">
+          <div class="episode-table">
+            <div class="subgroup-text" id="615">
+              <a href="/Home/PublishGroup/392">三明治摆烂组</a>
+            </div>
+            <table>
+              <tbody>
+                <tr>
+                  <td><input data-magnet="magnet:?xt=urn:btih:test123"></td>
+                  <td><a class="magnet-link-wrap" href="/Home/Episode/1">[三明治摆烂组] 一叠间漫画咖啡屋生活！ / Apo... - 12 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]</a></td>
+                  <td>434.6 MB</td>
+                  <td>2026/06/22 07:23</td>
+                  <td><a href="/Download/1.torrent">种子</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ''';
+
+    final detail = MikanHtmlParser.parseBangumi(
+      html,
+      baseUrl: baseUrl,
+      fallbackId: '3927',
+    );
+
+    final record = detail.subgroupBangumis.single.records.single;
+    expect(record.episode, '12');
+    expect(record.subtitleType, '简繁内封字幕');
+  });
+
+  test('parses common episode and subtitle variants', () {
+    const html = '''
+      <div id="sk-container">
+        <div class="pull-left leftbar-container">
+          <p class="bangumi-title"><a href="/Home/Bangumi?bangumiId=3927">测试动画</a></p>
+        </div>
+        <div class="central-container">
+          <div class="episode-table">
+            <div class="subgroup-text" id="615">
+              <a href="/Home/PublishGroup/392">字幕组</a>
+            </div>
+            <table>
+              <tbody>
+                <tr><td></td><td><a class="magnet-link-wrap">[字幕组] 测试动画 - S01E03 [1080p][CHS_JPN]</a></td><td>100MB</td><td>now</td><td></td></tr>
+                <tr><td></td><td><a class="magnet-link-wrap">[字幕组] 测试动画 [04v2][1080P][CHT_JPN]</a></td><td>100MB</td><td>now</td><td></td></tr>
+                <tr><td></td><td><a class="magnet-link-wrap">[字幕组] 测试动画 第5話 [CHS&CHT][HEVC]</a></td><td>100MB</td><td>now</td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ''';
+
+    final detail = MikanHtmlParser.parseBangumi(
+      html,
+      baseUrl: baseUrl,
+      fallbackId: '3927',
+    );
+
+    final records = detail.subgroupBangumis.single.records;
+    expect(records[0].episode, '03');
+    expect(records[0].subtitleType, '简日双语');
+    expect(records[1].episode, '04');
+    expect(records[1].subtitleType, '繁日双语');
+    expect(records[2].episode, '5');
+    expect(records[2].subtitleType, '简繁字幕');
   });
 
   test('parses real Mikan subgroup names from publish-group links', () {
