@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'services/app_log_service.dart';
 import 'services/api_client.dart';
 import 'services/mikan_service.dart';
+import 'services/network_proxy_config.dart';
 import 'services/platform_feature_support.dart';
 import 'services/storage_service.dart';
 import 'services/update_service.dart';
@@ -31,6 +32,8 @@ void main() async {
 
   final logService = AppLogService();
   await logService.init();
+
+  NetworkProxyConfig.initialize(storage.networkProxySettings);
 
   // 初始化 API 客户端
   final apiClient = ApiClient(logService: logService);

@@ -207,6 +207,59 @@ void main() {
       connectivity.dispose();
     },
   );
+
+  test(
+    'ConnectivityProvider retry clears cache banner when reachable',
+    () async {
+      var reachable = false;
+      final connectivity = ConnectivityProvider(
+        failureBannerDelay: Duration.zero,
+        canReachBangumi: () => reachable,
+      );
+
+      connectivity.reportNetworkFailure(
+        DioException(
+          requestOptions: RequestOptions(path: '/collections'),
+          type: DioExceptionType.connectionTimeout,
+          error: 'slow request',
+        ),
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(connectivity.shouldShowBanner, isTrue);
+
+      reachable = true;
+      final ok = await connectivity.retryConnection();
+
+      expect(ok, isTrue);
+      expect(connectivity.shouldShowBanner, isFalse);
+      expect(connectivity.usingCache, isFalse);
+      connectivity.dispose();
+    },
+  );
+
+  test('ConnectivityProvider retry keeps cache banner when offline', () async {
+    final connectivity = ConnectivityProvider(
+      failureBannerDelay: Duration.zero,
+      canReachBangumi: () => false,
+    );
+
+    connectivity.reportNetworkFailure(
+      DioException(
+        requestOptions: RequestOptions(path: '/collections'),
+        type: DioExceptionType.connectionTimeout,
+        error: 'slow request',
+      ),
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    final ok = await connectivity.retryConnection();
+
+    expect(ok, isFalse);
+    expect(connectivity.shouldShowBanner, isTrue);
+    expect(connectivity.bannerMessage, '网络仍不可用，正在显示本地缓存');
+    connectivity.dispose();
+  });
 }
 
 Map<String, dynamic> _entry(dynamic data, DateTime accessedAt, int count) => {

@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 
 import '../models/mikan.dart';
 import 'app_log_service.dart';
+import 'network_proxy_config.dart';
 import 'web_network_config.dart';
 
 class MikanService {
@@ -42,6 +43,7 @@ class MikanService {
                 status != null && status >= 200 && status < 400,
           ),
         );
+    NetworkProxyConfig.installDio(client);
     WebNetworkConfig.installWebAdapter(client);
     if (logService != null) {
       client.interceptors.add(AppLogDioInterceptor(logService));

@@ -234,6 +234,13 @@ class _ProfilePageState extends State<ProfilePage> {
             collectionTitle: '我的收藏',
             persistViewState: true,
           )
+        : auth.offlineSession && auth.username?.isNotEmpty == true
+        ? _ProfileContent(
+            user: _offlineUser(auth.username!),
+            collectionTitle: '我的收藏（离线缓存）',
+            persistViewState: true,
+            offline: true,
+          )
         : const _LoginView();
 
     return Scaffold(
@@ -253,6 +260,17 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
       body: bodyWidget,
+    );
+  }
+
+  BangumiUser _offlineUser(String username) {
+    return BangumiUser(
+      id: 0,
+      username: username,
+      nickname: username,
+      avatar: UserAvatar(large: '', medium: '', small: ''),
+      sign: '',
+      userGroup: 0,
     );
   }
 
@@ -839,11 +857,13 @@ class _ProfileContent extends StatefulWidget {
   final BangumiUser user;
   final String collectionTitle;
   final bool persistViewState;
+  final bool offline;
 
   const _ProfileContent({
     required this.user,
     this.collectionTitle = '我的收藏',
     this.persistViewState = true,
+    this.offline = false,
   });
 
   @override
@@ -1173,6 +1193,10 @@ class _ProfileContentState extends State<_ProfileContent> {
         children: [
           if (includeHeader) ...[
             _buildUserCard(colorScheme),
+            if (widget.offline) ...[
+              const SizedBox(height: 8),
+              _buildOfflineNotice(colorScheme),
+            ],
             const SizedBox(height: 20),
             Text(
               widget.collectionTitle,
@@ -1189,6 +1213,36 @@ class _ProfileContentState extends State<_ProfileContent> {
           _buildSearchField(colorScheme),
           const SizedBox(height: 8),
           _buildList(colorScheme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineNotice(ColorScheme colorScheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 18,
+            color: colorScheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '当前为离线会话，正在显示本地缓存',
+              style: TextStyle(
+                color: colorScheme.onTertiaryContainer,
+                fontSize: 13,
+              ),
+            ),
+          ),
         ],
       ),
     );

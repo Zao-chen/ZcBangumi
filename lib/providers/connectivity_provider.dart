@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/app_log_service.dart';
+import '../services/network_proxy_config.dart';
 
 class ConnectivityProvider extends ChangeNotifier {
   ConnectivityProvider({
@@ -23,12 +24,14 @@ class ConnectivityProvider extends ChangeNotifier {
   Object? _lastError;
   Timer? _failureTimer;
   int _probeGeneration = 0;
+  bool _rechecking = false;
 
   bool get usingCache => _usingCache;
   bool get shouldShowBanner =>
       _usingCache && !_bannerDismissed && (_message?.isNotEmpty ?? false);
   String get bannerMessage => _message ?? '网络不可用，正在显示本地缓存';
   Object? get lastError => _lastError;
+  bool get rechecking => _rechecking;
 
   void reportNetworkFailure(Object error, {String? message}) {
     _failureTimer?.cancel();
@@ -100,6 +103,26 @@ class ConnectivityProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> retryConnection() async {
+    if (_rechecking) return false;
+    _failureTimer?.cancel();
+    _failureTimer = null;
+    _rechecking = true;
+    notifyListeners();
+
+    final reachable = await _checkBangumiReachable();
+    if (reachable) {
+      reportNetworkSuccess();
+    } else {
+      _message = '网络仍不可用，正在显示本地缓存';
+      unawaited(_logService?.warning('cache', _message!));
+    }
+
+    _rechecking = false;
+    notifyListeners();
+    return reachable;
+  }
+
   @override
   void dispose() {
     _failureTimer?.cancel();
@@ -116,6 +139,7 @@ class ConnectivityProvider extends ChangeNotifier {
           validateStatus: (status) => status != null && status < 500,
         ),
       );
+      NetworkProxyConfig.installDio(dio);
       await dio.get<String>(
         'https://bgm.tv',
         options: Options(responseType: ResponseType.plain),

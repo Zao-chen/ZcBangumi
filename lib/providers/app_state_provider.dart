@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import '../constants.dart';
 import '../models/navigation_config.dart';
+import '../models/network_proxy_settings.dart';
 import '../models/subject_tab_config.dart';
+import '../services/network_proxy_config.dart';
 import '../services/storage_service.dart';
 
 /// 应用全局状态管理 Provider
@@ -43,8 +45,11 @@ class AppStateProvider extends ChangeNotifier {
   int _defaultRakuenTabIndex = 0;
   int _updateCheckIntervalHours = 24; // 0=仅手动, 24=每天, 168=每周
   bool _updateStableOnly = true;
+  NetworkProxySettings _networkProxySettings =
+      const NetworkProxySettings.direct();
 
   AppStateProvider({required this.storage}) {
+    _networkProxySettings = storage.networkProxySettings;
     _loadState();
   }
 
@@ -82,6 +87,7 @@ class AppStateProvider extends ChangeNotifier {
   int get defaultRakuenTabIndex => _defaultRakuenTabIndex;
   int get updateCheckIntervalHours => _updateCheckIntervalHours;
   bool get updateStableOnly => _updateStableOnly;
+  NetworkProxySettings get networkProxySettings => _networkProxySettings;
   int get initialTimelineTabIndex =>
       _restoreLastTabSelection ? _timelineTabIndex : _defaultTimelineTabIndex;
   int get initialRakuenTabIndex =>
@@ -392,6 +398,15 @@ class AppStateProvider extends ChangeNotifier {
       notifyListeners();
       _saveState();
     }
+  }
+
+  Future<void> setNetworkProxySettings(NetworkProxySettings settings) async {
+    final normalized = settings.normalized();
+    if (_networkProxySettings == normalized) return;
+    _networkProxySettings = normalized;
+    NetworkProxyConfig.update(normalized);
+    notifyListeners();
+    await storage.setNetworkProxySettings(normalized);
   }
 
   // ==================== 持久化 ====================

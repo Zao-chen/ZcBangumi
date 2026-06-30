@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bangumi_web_session.dart';
 import '../models/mikan.dart';
+import '../models/network_proxy_settings.dart';
 import '../models/subject.dart';
 
 /// 本地存储服务
@@ -25,6 +26,7 @@ class StorageService {
   static const String _keyMikanBaseUrl = 'mikan_base_url';
   static const String _keyMikanEnabled = 'mikan_enabled';
   static const String _keyMikanSubjectMappings = 'mikan_subject_mappings';
+  static const String _keyNetworkProxySettings = 'network_proxy_settings';
 
   late final SharedPreferences _prefs;
 
@@ -181,6 +183,34 @@ class StorageService {
   Future<void> clearMikanData() async {
     await _prefs.remove(_keyMikanSession);
     await removeCache(_keyMikanSubjectMappings);
+  }
+
+  NetworkProxySettings get networkProxySettings {
+    final raw = _prefs.getString(_keyNetworkProxySettings);
+    if (raw == null || raw.isEmpty) {
+      return const NetworkProxySettings.direct();
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const NetworkProxySettings.direct();
+      return NetworkProxySettings.fromJson(
+        decoded.map((key, value) => MapEntry('$key', value)),
+      );
+    } catch (_) {
+      return const NetworkProxySettings.direct();
+    }
+  }
+
+  Future<void> setNetworkProxySettings(NetworkProxySettings settings) async {
+    final normalized = settings.normalized();
+    if (normalized.mode == NetworkProxyMode.direct) {
+      await _prefs.remove(_keyNetworkProxySettings);
+      return;
+    }
+    await _prefs.setString(
+      _keyNetworkProxySettings,
+      jsonEncode(normalized.toJson()),
+    );
   }
 
   Future<void> _migrateLegacyWebSession() async {
