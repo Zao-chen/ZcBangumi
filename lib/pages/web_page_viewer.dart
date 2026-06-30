@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zc_bangumi/services/internal_link_handler.dart';
 import 'package:zc_bangumi/services/link_navigator.dart';
+import 'package:zc_bangumi/services/network_proxy_config.dart';
 
 Set<Factory<OneSequenceGestureRecognizer>> _webViewVerticalDragGestures() {
   return {
@@ -50,6 +51,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
             status != null && status >= 200 && status < 400,
       ),
     );
+    NetworkProxyConfig.installDio(_dio);
     _loadContent();
   }
 

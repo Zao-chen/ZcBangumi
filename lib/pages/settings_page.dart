@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../constants.dart';
 import '../models/navigation_config.dart';
+import '../models/network_proxy_settings.dart';
 import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
@@ -90,9 +91,9 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 _buildAppInfoCard(colorScheme),
                 const SizedBox(height: 16),
-                _buildCategoryMenuCard(context, isTwoPane: false),
-                const SizedBox(height: 16),
                 _buildAccountCard(auth),
+                const SizedBox(height: 16),
+                _buildCategoryMenuCard(context, isTwoPane: false),
               ],
             ),
           ),
@@ -127,9 +128,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       _buildAppInfoCard(colorScheme, compact: true),
                       const SizedBox(height: 12),
-                      _buildCategoryMenuCard(context, isTwoPane: true),
-                      const SizedBox(height: 12),
                       _buildAccountCard(auth),
+                      const SizedBox(height: 12),
+                      _buildCategoryMenuCard(context, isTwoPane: true),
                     ],
                   ),
                 ),
@@ -309,13 +310,31 @@ class _SettingsPageState extends State<SettingsPage> {
 
   List<_SettingsSection> _settingsSections(BuildContext context) {
     return [
+      if (PlatformFeatureSupport.mikan)
+        _SettingsSection(
+          icon: Icons.cloud_sync_outlined,
+          title: '账号与订阅',
+          subtitle: 'Mikan 登录、镜像与本地映射',
+          builder: (ctx) {
+            final mikan = ctx.watch<MikanProvider>();
+            return [_buildMikanSettingsCard(ctx, mikan)];
+          },
+        ),
       _SettingsSection(
-        icon: Icons.tune_rounded,
-        title: '底栏自定义',
-        subtitle: '排序、显隐与恢复默认',
+        icon: Icons.palette_outlined,
+        title: '外观与布局',
+        subtitle: '底栏、显示、默认分区与页面标签',
         builder: (ctx) {
           final appState = ctx.watch<AppStateProvider>();
-          return [_buildBottomNavSettingsCard(ctx, appState)];
+          return [
+            _buildBottomNavSettingsCard(ctx, appState),
+            _buildDisplaySettingsCard(ctx, appState),
+            if (PlatformFeatureSupport.timeline ||
+                PlatformFeatureSupport.rakuen)
+              _buildDefaultTabSettingsCard(ctx, appState),
+            _buildProgressSubjectTypeSettingsCard(ctx, appState),
+            _buildSubjectTabSettingsCard(ctx, appState),
+          ];
         },
       ),
       _SettingsSection(
@@ -327,24 +346,16 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildDataAndRefreshSettingsCard(ctx, appState)];
         },
       ),
-      _SettingsSection(
-        icon: Icons.playlist_play_outlined,
-        title: '进度分区',
-        subtitle: '控制进度页显示的条目类型',
-        builder: (ctx) {
-          final appState = ctx.watch<AppStateProvider>();
-          return [_buildProgressSubjectTypeSettingsCard(ctx, appState)];
-        },
-      ),
-      _SettingsSection(
-        icon: Icons.palette_outlined,
-        title: '阅读与显示',
-        subtitle: '密度、圆角与信息展示',
-        builder: (ctx) {
-          final appState = ctx.watch<AppStateProvider>();
-          return [_buildDisplaySettingsCard(ctx, appState)];
-        },
-      ),
+      if (PlatformFeatureSupport.networkProxy)
+        _SettingsSection(
+          icon: Icons.settings_ethernet_rounded,
+          title: '网络代理',
+          subtitle: '配置 API、网页与更新请求代理',
+          builder: (ctx) {
+            final appState = ctx.watch<AppStateProvider>();
+            return [_NetworkProxySettingsCard(appState: appState)];
+          },
+        ),
       if (kIsWeb)
         _SettingsSection(
           icon: Icons.public_outlined,
@@ -352,26 +363,6 @@ class _SettingsPageState extends State<SettingsPage> {
           subtitle: '跨域与站点会话限制',
           builder: _buildStaticWebLimitationsCards,
         ),
-      if (PlatformFeatureSupport.timeline || PlatformFeatureSupport.rakuen)
-        _SettingsSection(
-          icon: Icons.view_day_outlined,
-          title: '默认分区',
-          subtitle: PlatformFeatureSupport.rakuen ? '动态与超展开进入分区' : '动态进入分区',
-          builder: (ctx) {
-            final appState = ctx.watch<AppStateProvider>();
-            return [_buildDefaultTabSettingsCard(ctx, appState)];
-          },
-        ),
-      _SettingsSection(
-        icon: Icons.dashboard_customize_outlined,
-        title: '\u6761\u76ee\u9875\u6807\u7b7e',
-        subtitle:
-            '\u6392\u5e8f\u3001\u663e\u9690\u4e0e\u6062\u590d\u9ed8\u8ba4',
-        builder: (ctx) {
-          final appState = ctx.watch<AppStateProvider>();
-          return [_buildSubjectTabSettingsCard(ctx, appState)];
-        },
-      ),
       if (PlatformFeatureSupport.appUpdate)
         _SettingsSection(
           icon: Icons.system_update_alt_rounded,
@@ -393,16 +384,6 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildLogSettingsCard(ctx)];
         },
       ),
-      if (PlatformFeatureSupport.mikan)
-        _SettingsSection(
-          icon: Icons.cloud_sync_outlined,
-          title: 'Mikan 订阅',
-          subtitle: '账号、镜像与本地映射',
-          builder: (ctx) {
-            final mikan = ctx.watch<MikanProvider>();
-            return [_buildMikanSettingsCard(ctx, mikan)];
-          },
-        ),
     ];
   }
 
@@ -1328,5 +1309,219 @@ class _SettingsSectionPage extends StatelessWidget {
         children: builder(context),
       ),
     );
+  }
+}
+
+class _NetworkProxySettingsCard extends StatefulWidget {
+  final AppStateProvider appState;
+
+  const _NetworkProxySettingsCard({required this.appState});
+
+  @override
+  State<_NetworkProxySettingsCard> createState() =>
+      _NetworkProxySettingsCardState();
+}
+
+class _NetworkProxySettingsCardState extends State<_NetworkProxySettingsCard> {
+  final TextEditingController _hostController = TextEditingController();
+  final TextEditingController _portController = TextEditingController();
+  NetworkProxyMode _mode = NetworkProxyMode.direct;
+  NetworkProxySettings? _lastSyncedSettings;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFromSettings(widget.appState.networkProxySettings);
+  }
+
+  @override
+  void didUpdateWidget(covariant _NetworkProxySettingsCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final settings = widget.appState.networkProxySettings;
+    if (settings != _lastSyncedSettings) {
+      _syncFromSettings(settings);
+    }
+  }
+
+  @override
+  void dispose() {
+    _hostController.dispose();
+    _portController.dispose();
+    super.dispose();
+  }
+
+  void _syncFromSettings(NetworkProxySettings settings) {
+    _lastSyncedSettings = settings;
+    _mode = settings.mode;
+    _hostController.text = settings.host;
+    _portController.text = settings.port?.toString() ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = widget.appState.networkProxySettings;
+    final canEditManual = _mode == NetworkProxyMode.manual;
+    final nextSettings = _buildDraftSettings();
+    final changed = nextSettings != settings;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.settings_ethernet_rounded),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '网络代理',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    settings.displayText,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<NetworkProxyMode>(
+              segments: const [
+                ButtonSegment(
+                  value: NetworkProxyMode.direct,
+                  icon: Icon(Icons.link_off_rounded),
+                  label: Text('直连'),
+                ),
+                ButtonSegment(
+                  value: NetworkProxyMode.system,
+                  icon: Icon(Icons.computer_rounded),
+                  label: Text('系统'),
+                ),
+                ButtonSegment(
+                  value: NetworkProxyMode.manual,
+                  icon: Icon(Icons.tune_rounded),
+                  label: Text('手动'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (values) {
+                setState(() => _mode = values.first);
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _hostController,
+                    enabled: canEditManual,
+                    decoration: const InputDecoration(
+                      labelText: '代理主机',
+                      hintText: '127.0.0.1',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.dns_outlined),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _portController,
+                    enabled: canEditManual,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '端口',
+                      hintText: '7890',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.numbers_rounded),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: changed ? () => _save(nextSettings) : null,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('保存'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  NetworkProxySettings _buildDraftSettings() {
+    final parsedHost = _parseProxyHost(_hostController.text);
+    final port =
+        int.tryParse(_portController.text.trim()) ?? parsedHost.parsedPort;
+    return NetworkProxySettings(
+      mode: _mode,
+      host: parsedHost.host,
+      port: port,
+    ).normalized();
+  }
+
+  ({String host, int? parsedPort}) _parseProxyHost(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return (host: '', parsedPort: null);
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+      return (host: uri.host, parsedPort: uri.hasPort ? uri.port : null);
+    }
+
+    final withoutPath = trimmed.split('/').first;
+    if (withoutPath.startsWith('[')) {
+      final end = withoutPath.indexOf(']');
+      if (end > 0) {
+        final rest = withoutPath.substring(end + 1);
+        final port = rest.startsWith(':')
+            ? int.tryParse(rest.substring(1))
+            : null;
+        return (host: withoutPath.substring(1, end), parsedPort: port);
+      }
+    }
+
+    final lastColon = withoutPath.lastIndexOf(':');
+    if (lastColon > 0 && withoutPath.indexOf(':') == lastColon) {
+      final port = int.tryParse(withoutPath.substring(lastColon + 1));
+      if (port != null) {
+        return (host: withoutPath.substring(0, lastColon), parsedPort: port);
+      }
+    }
+    return (host: withoutPath, parsedPort: null);
+  }
+
+  Future<void> _save(NetworkProxySettings settings) async {
+    if (settings.mode == NetworkProxyMode.manual && !settings.isManualValid) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入有效的代理主机和端口')));
+      return;
+    }
+    await widget.appState.setNetworkProxySettings(settings);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('网络代理设置已保存')));
   }
 }

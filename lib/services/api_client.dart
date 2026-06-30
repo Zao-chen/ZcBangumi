@@ -16,6 +16,7 @@ import '../models/subject.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
 import 'app_log_service.dart';
+import 'network_proxy_config.dart';
 import 'web_network_config.dart';
 
 /// Bangumi API 客户端
@@ -40,6 +41,7 @@ class ApiClient {
         },
       ),
     );
+    NetworkProxyConfig.installDio(_dio);
     WebNetworkConfig.installWebAdapter(_dio);
     if (logService != null) {
       _dio.interceptors.add(AppLogDioInterceptor(logService));
@@ -59,6 +61,7 @@ class ApiClient {
         responseType: ResponseType.plain,
       ),
     );
+    NetworkProxyConfig.installDio(_webDio);
     WebNetworkConfig.installWebAdapter(_webDio);
     if (logService != null) {
       _webDio.interceptors.add(AppLogDioInterceptor(logService));
@@ -89,6 +92,7 @@ class ApiClient {
         },
       ),
     );
+    NetworkProxyConfig.installDio(_nextDio);
     WebNetworkConfig.installWebAdapter(_nextDio);
     if (logService != null) {
       _nextDio.interceptors.add(AppLogDioInterceptor(logService));

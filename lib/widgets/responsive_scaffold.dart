@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants.dart';
+import '../providers/auth_provider.dart';
 import '../providers/connectivity_provider.dart';
+import '../providers/mikan_provider.dart';
 import '../services/link_navigator.dart';
+import '../services/platform_feature_support.dart';
 
 /// 响应式 Scaffold
 /// 竖屏时底部导航栏，横屏时左侧导航栏
@@ -133,6 +136,19 @@ class _CacheAwareContentState extends State<_CacheAwareContent> {
     }
   }
 
+  Future<bool> _retryConnectionAndRestoreSession() async {
+    final connected = await context
+        .read<ConnectivityProvider>()
+        .retryConnection();
+    if (!connected || !mounted) return connected;
+
+    await context.read<AuthProvider>().tryRestoreSession();
+    if (PlatformFeatureSupport.mikan && mounted) {
+      await context.read<MikanProvider>().tryRestoreSession();
+    }
+    return connected;
+  }
+
   @override
   Widget build(BuildContext context) {
     final connectivity = context.watch<ConnectivityProvider>();
@@ -157,6 +173,8 @@ class _CacheAwareContentState extends State<_CacheAwareContent> {
           child: showCacheBanner
               ? _OfflineCacheBanner(
                   message: connectivity.bannerMessage,
+                  rechecking: connectivity.rechecking,
+                  onRetry: _retryConnectionAndRestoreSession,
                   onClose: context.read<ConnectivityProvider>().dismissBanner,
                   safeAreaTop: !showWebLimitationsBanner,
                 )
@@ -229,11 +247,15 @@ class _WebLimitationsBanner extends StatelessWidget {
 
 class _OfflineCacheBanner extends StatelessWidget {
   final String message;
+  final bool rechecking;
+  final Future<bool> Function() onRetry;
   final VoidCallback onClose;
   final bool safeAreaTop;
 
   const _OfflineCacheBanner({
     required this.message,
+    required this.rechecking,
+    required this.onRetry,
     required this.onClose,
     this.safeAreaTop = true,
   });
@@ -266,6 +288,22 @@ class _OfflineCacheBanner extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              IconButton(
+                tooltip: '重新连接',
+                onPressed: rechecking ? null : onRetry,
+                icon: rechecking
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.onTertiaryContainer,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded),
+                color: colorScheme.onTertiaryContainer,
+                visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 tooltip: '关闭',
