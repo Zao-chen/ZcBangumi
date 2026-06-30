@@ -39,11 +39,23 @@ class _FakeMikanService extends MikanService {
               title: '测试资源',
               episode: '12',
               subtitleType: '简繁内封字幕',
+              tags: ['1080P', 'MP4'],
               magnet: 'magnet:?xt=urn:test',
               size: '434.6 MB',
               publishAt: '2026/06/22 07:23',
               url: 'https://mikanani.me/Home/Episode/1',
               torrent: 'https://mikanani.me/Download/1.torrent',
+            ),
+            MikanRecordItem(
+              title: '测试资源 13',
+              episode: '13',
+              subtitleType: '繁日双语',
+              tags: ['720P', 'MKV'],
+              magnet: 'magnet:?xt=urn:test13',
+              size: '397.7 MB',
+              publishAt: '2026/06/29 07:23',
+              url: 'https://mikanani.me/Home/Episode/2',
+              torrent: 'https://mikanani.me/Download/2.torrent',
             ),
           ],
         ),
@@ -268,8 +280,8 @@ void main() {
 
     expect(find.text('字幕组 资源'), findsOneWidget);
     expect(find.text('测试资源'), findsOneWidget);
-    expect(find.text('EP.12'), findsOneWidget);
-    expect(find.text('简繁内封字幕'), findsOneWidget);
+    expect(find.text('EP.12'), findsWidgets);
+    expect(find.text('简繁内封字幕'), findsWidgets);
   });
 
   testWidgets('Mikan resource tile opens detail sheet', (tester) async {
@@ -304,6 +316,62 @@ void main() {
     expect(find.text('资源详情'), findsOneWidget);
     expect(find.text('434.6 MB'), findsOneWidget);
     expect(find.text('2026/06/22 07:23'), findsOneWidget);
+  });
+
+  testWidgets('Mikan resources can be filtered by episode and subtitle type', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpMikanButton(
+      tester,
+      subject: _subject(type: 2),
+      loggedIn: true,
+      remoteSubscribed: true,
+      mapping: MikanSubjectMapping(
+        subjectId: 12345,
+        bangumiId: '681',
+        bangumiName: '测试动画',
+        subgroupId: '15',
+        subgroupName: '字幕组',
+        subscribed: true,
+        updatedAt: DateTime(2026, 5, 21),
+      ),
+    );
+
+    await tester.tap(find.text('追番'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('查看资源'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试资源'), findsOneWidget);
+    expect(find.text('测试资源 13'), findsOneWidget);
+    expect(find.text('2 / 2'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('mikan_episode_filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('集数: EP.12').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试资源'), findsOneWidget);
+    expect(find.text('测试资源 13'), findsNothing);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('mikan_episode_filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('集数: 全部').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mikan_subtitle_filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('字幕: 繁日双语').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试资源'), findsNothing);
+    expect(find.text('测试资源 13'), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
   });
 
   testWidgets('Mikan subscription button is hidden when feature is disabled', (

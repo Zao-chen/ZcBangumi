@@ -456,7 +456,7 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
             child: const Center(child: Text('暂无资源')),
           )
         else
-          ...records.map((item) => _MikanRecordTile(item: item)),
+          _MikanResourceList(records: records, scrollable: false),
       ],
     );
   }
@@ -1298,15 +1298,329 @@ class _MikanResourceDrawer extends StatelessWidget {
             if (records.isEmpty)
               const Expanded(child: Center(child: Text('暂无资源')))
             else
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                  itemCount: records.length,
-                  itemBuilder: (context, index) =>
-                      _MikanRecordTile(item: records[index]),
+              Expanded(child: _MikanResourceList(records: records)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MikanResourceList extends StatefulWidget {
+  final List<MikanRecordItem> records;
+  final bool scrollable;
+
+  const _MikanResourceList({required this.records, this.scrollable = true});
+
+  @override
+  State<_MikanResourceList> createState() => _MikanResourceListState();
+}
+
+class _MikanResourceListState extends State<_MikanResourceList> {
+  String _episode = '';
+  String _subtitleType = '';
+  String _tag = '';
+
+  @override
+  void didUpdateWidget(_MikanResourceList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.records == widget.records) return;
+    final episodes = _episodes;
+    final subtitleTypes = _subtitleTypes;
+    final tags = _tags;
+    if (_episode.isNotEmpty && !episodes.contains(_episode)) {
+      _episode = '';
+    }
+    if (_subtitleType.isNotEmpty && !subtitleTypes.contains(_subtitleType)) {
+      _subtitleType = '';
+    }
+    if (_tag.isNotEmpty && !tags.contains(_tag)) {
+      _tag = '';
+    }
+  }
+
+  List<String> get _episodes {
+    final values = widget.records
+        .map((item) => item.episode)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    values.sort(_compareEpisode);
+    return values;
+  }
+
+  List<String> get _subtitleTypes {
+    final values = widget.records
+        .map((item) => item.subtitleType)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    values.sort();
+    return values;
+  }
+
+  List<String> get _tags {
+    final values = widget.records
+        .expand((item) => item.tags)
+        .where((tag) => tag.isNotEmpty && tag != '简' && tag != '繁')
+        .toSet()
+        .toList();
+    values.sort(_compareTag);
+    return values;
+  }
+
+  List<MikanRecordItem> get _filteredRecords {
+    return widget.records.where((item) {
+      if (_episode.isNotEmpty && item.episode != _episode) return false;
+      if (_subtitleType.isNotEmpty && item.subtitleType != _subtitleType) {
+        return false;
+      }
+      if (_tag.isNotEmpty && !item.tags.contains(_tag)) return false;
+      return true;
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredRecords = _filteredRecords;
+    final children = [
+      if (_episodes.isNotEmpty || _subtitleTypes.isNotEmpty || _tags.isNotEmpty)
+        Padding(
+          padding: EdgeInsets.fromLTRB(12, widget.scrollable ? 12 : 0, 12, 8),
+          child: _MikanResourceFilters(
+            episodes: _episodes,
+            subtitleTypes: _subtitleTypes,
+            tags: _tags,
+            selectedEpisode: _episode,
+            selectedSubtitleType: _subtitleType,
+            selectedTag: _tag,
+            filteredCount: filteredRecords.length,
+            totalCount: widget.records.length,
+            onEpisodeChanged: (value) => setState(() => _episode = value),
+            onSubtitleTypeChanged: (value) =>
+                setState(() => _subtitleType = value),
+            onTagChanged: (value) => setState(() => _tag = value),
+          ),
+        ),
+      if (filteredRecords.isEmpty)
+        const Padding(
+          padding: EdgeInsets.all(24),
+          child: Center(child: Text('没有符合筛选的资源')),
+        )
+      else if (widget.scrollable)
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+            itemCount: filteredRecords.length,
+            itemBuilder: (context, index) =>
+                _MikanRecordTile(item: filteredRecords[index]),
+          ),
+        )
+      else
+        ...filteredRecords.map(
+          (item) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 0),
+            child: _MikanRecordTile(item: item),
+          ),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  int _compareEpisode(String a, String b) {
+    final aNumber = num.tryParse(a);
+    final bNumber = num.tryParse(b);
+    if (aNumber != null && bNumber != null) {
+      return aNumber.compareTo(bNumber);
+    }
+    return a.compareTo(b);
+  }
+
+  int _compareTag(String a, String b) {
+    final aResolution = _resolution(a);
+    final bResolution = _resolution(b);
+    if (aResolution != null && bResolution != null) {
+      return bResolution.compareTo(aResolution);
+    }
+    if (aResolution != null) return -1;
+    if (bResolution != null) return 1;
+    return a.compareTo(b);
+  }
+
+  int? _resolution(String value) {
+    final match = RegExp(r'^(\d{3,4})P$').firstMatch(value.toUpperCase());
+    return int.tryParse(match?.group(1) ?? '');
+  }
+}
+
+class _MikanResourceFilters extends StatelessWidget {
+  final List<String> episodes;
+  final List<String> subtitleTypes;
+  final List<String> tags;
+  final String selectedEpisode;
+  final String selectedSubtitleType;
+  final String selectedTag;
+  final int filteredCount;
+  final int totalCount;
+  final ValueChanged<String> onEpisodeChanged;
+  final ValueChanged<String> onSubtitleTypeChanged;
+  final ValueChanged<String> onTagChanged;
+
+  const _MikanResourceFilters({
+    required this.episodes,
+    required this.subtitleTypes,
+    required this.tags,
+    required this.selectedEpisode,
+    required this.selectedSubtitleType,
+    required this.selectedTag,
+    required this.filteredCount,
+    required this.totalCount,
+    required this.onEpisodeChanged,
+    required this.onSubtitleTypeChanged,
+    required this.onTagChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.filter_list, size: 18, color: colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  '$filteredCount / $totalCount',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (episodes.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            _MikanFilterDropdown(
+              key: const ValueKey('mikan_episode_filter'),
+              label: '集数',
+              options: episodes,
+              selected: selectedEpisode,
+              optionLabel: (value) => 'EP.$value',
+              onChanged: onEpisodeChanged,
+            ),
+          ],
+          if (subtitleTypes.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            _MikanFilterDropdown(
+              key: const ValueKey('mikan_subtitle_filter'),
+              label: '字幕',
+              options: subtitleTypes,
+              selected: selectedSubtitleType,
+              onChanged: onSubtitleTypeChanged,
+            ),
+          ],
+          if (tags.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            _MikanFilterDropdown(
+              key: const ValueKey('mikan_tag_filter'),
+              label: '标签',
+              options: tags,
+              selected: selectedTag,
+              onChanged: onTagChanged,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MikanFilterDropdown extends StatelessWidget {
+  final String label;
+  final List<String> options;
+  final String selected;
+  final String Function(String value)? optionLabel;
+  final ValueChanged<String> onChanged;
+
+  const _MikanFilterDropdown({
+    super.key,
+    required this.label,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+    this.optionLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textStyle = Theme.of(context).textTheme.labelLarge;
+    final width = switch (label) {
+      '字幕' => 148.0,
+      '集数' => 106.0,
+      _ => 104.0,
+    };
+    return Container(
+      height: 40,
+      width: width,
+      padding: const EdgeInsets.only(left: 10, right: 6),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          focusColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: selected,
+            isDense: true,
+            isExpanded: true,
+            focusColor: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            style: textStyle?.copyWith(color: colorScheme.onSurface),
+            icon: const Icon(Icons.arrow_drop_down, size: 20),
+            onChanged: (value) {
+              if (value == null) return;
+              onChanged(value);
+            },
+            items: [
+              DropdownMenuItem(value: '', child: Text('$label: 全部')),
+              ...options.map(
+                (value) => DropdownMenuItem(
+                  value: value,
+                  child: Text('$label: ${optionLabel?.call(value) ?? value}'),
                 ),
               ),
-          ],
+            ],
+            selectedItemBuilder: (context) => [
+              Text('$label: 全部', overflow: TextOverflow.ellipsis),
+              ...options.map(
+                (value) => Text(
+                  '$label: ${optionLabel?.call(value) ?? value}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
