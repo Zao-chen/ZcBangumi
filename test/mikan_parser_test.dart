@@ -44,7 +44,7 @@ void main() {
       </div>
       <table>
         <tr class="js-search-results-row">
-          <td></td>
+          <td><input data-magnet="magnet:?xt=urn:btih:search123"></td>
           <td><a href="/Home/Episode/1">[字幕组] 测试动画 [GB][1080P][MP4]</a></td>
           <td>300MB</td>
           <td>1月1日 12:00</td>
@@ -62,6 +62,7 @@ void main() {
       result.records.single.torrent,
       'https://mikanani.me/Download/1.torrent',
     );
+    expect(result.records.single.magnet, 'magnet:?xt=urn:btih:search123');
     expect(result.records.single.subtitleType, '简中');
     expect(result.records.single.tags, containsAll(['简', '1080P', 'MP4']));
   });

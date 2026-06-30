@@ -31,18 +31,22 @@ class MikanService {
        _baseUrl = _normalizeBaseUrl(baseUrl);
 
   static Dio _createDio(Dio? dio, {AppLogService? logService}) {
-    final client =
-        dio ??
-        Dio(
-          BaseOptions(
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(seconds: 15),
-            responseType: ResponseType.plain,
-            headers: {if (!kIsWeb) 'User-Agent': userAgent},
-            validateStatus: (status) =>
-                status != null && status >= 200 && status < 400,
-          ),
-        );
+    if (dio != null) {
+      if (logService != null) {
+        dio.interceptors.add(AppLogDioInterceptor(logService));
+      }
+      return dio;
+    }
+    final client = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        responseType: ResponseType.plain,
+        headers: {if (!kIsWeb) 'User-Agent': userAgent},
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
+      ),
+    );
     NetworkProxyConfig.installDio(client);
     WebNetworkConfig.installWebAdapter(client);
     if (logService != null) {
@@ -151,11 +155,88 @@ class MikanService {
 
   Future<MikanBangumiDetail> getBangumi(String bangumiId) async {
     final resp = await _get(_uri('/Home/Bangumi/$bangumiId'));
-    return MikanHtmlParser.parseBangumi(
+    final detail = MikanHtmlParser.parseBangumi(
       resp.data ?? '',
       baseUrl: _baseUrl,
       fallbackId: bangumiId,
     );
+    return _completeBangumiRecords(detail);
+  }
+
+  Future<MikanBangumiDetail> _completeBangumiRecords(
+    MikanBangumiDetail detail,
+  ) async {
+    if (detail.name.isEmpty || detail.subgroupBangumis.isEmpty) {
+      return detail;
+    }
+
+    final completed = <MikanSubgroupBangumi>[];
+    var changed = false;
+    for (final subgroup in detail.subgroupBangumis) {
+      if (subgroup.dataId.isEmpty || subgroup.records.length < 15) {
+        completed.add(subgroup);
+        continue;
+      }
+
+      try {
+        final searchResult = await search(
+          detail.name,
+          subgroupId: subgroup.dataId,
+        );
+        final merged = _mergeRecords(subgroup.records, searchResult.records);
+        changed = changed || merged.length != subgroup.records.length;
+        completed.add(
+          MikanSubgroupBangumi(
+            dataId: subgroup.dataId,
+            name: subgroup.name,
+            subscribed: subgroup.subscribed,
+            sublang: subgroup.sublang,
+            rss: subgroup.rss,
+            state: subgroup.state,
+            subgroups: subgroup.subgroups,
+            records: merged,
+          ),
+        );
+      } catch (_) {
+        completed.add(subgroup);
+      }
+    }
+
+    if (!changed) return detail;
+    return MikanBangumiDetail(
+      id: detail.id,
+      name: detail.name,
+      cover: detail.cover,
+      intro: detail.intro,
+      subscribed: detail.subscribed,
+      more: detail.more,
+      subgroupBangumis: completed,
+    );
+  }
+
+  List<MikanRecordItem> _mergeRecords(
+    List<MikanRecordItem> primary,
+    List<MikanRecordItem> extra,
+  ) {
+    final seen = <String>{};
+    final merged = <MikanRecordItem>[];
+    for (final item in [...primary, ...extra]) {
+      final key = _recordKey(item);
+      if (key.isNotEmpty && !seen.add(key)) continue;
+      merged.add(item);
+    }
+    return merged;
+  }
+
+  String _recordKey(MikanRecordItem item) {
+    if (item.url.isNotEmpty) return 'url:${item.url}';
+    if (item.torrent.isNotEmpty) return 'torrent:${item.torrent}';
+    final magnetHash = RegExp(
+      r'btih:([^&]+)',
+      caseSensitive: false,
+    ).firstMatch(item.magnet)?.group(1);
+    if (magnetHash != null && magnetHash.isNotEmpty) return 'btih:$magnetHash';
+    return 'title:${item.title}|${item.size}|${item.publishAt}';
   }
 
   Future<void> subscribeBangumi(
@@ -576,6 +657,16 @@ class MikanHtmlParser {
       episode: parsed.episode,
       subtitleType: parsed.subtitleType,
       tags: parsed.tags,
+      magnet:
+          _textAttr(
+            cells.first.querySelector('[data-magnet]'),
+            'data-magnet',
+          ) ??
+          _textAttr(
+            cells[1].querySelector('[data-clipboard-text]'),
+            'data-clipboard-text',
+          ) ??
+          '',
       url: _resolveUrl(baseUrl, _textAttr(link, 'href') ?? ''),
       size: _normalizeText(cells[2].text),
       publishAt: _normalizeText(cells[3].text),
