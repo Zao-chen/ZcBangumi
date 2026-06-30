@@ -226,6 +226,8 @@ class MikanRecordItem {
   final String id;
   final String name;
   final String title;
+  final String episode;
+  final String subtitleType;
   final String publishAt;
   final String url;
   final String magnet;
@@ -237,6 +239,8 @@ class MikanRecordItem {
     this.id = '',
     this.name = '',
     this.title = '',
+    this.episode = '',
+    this.subtitleType = '',
     this.publishAt = '',
     this.url = '',
     this.magnet = '',

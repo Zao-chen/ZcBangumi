@@ -573,6 +573,8 @@ class MikanHtmlParser {
     final parsed = _parseTagsAndTitle(titleText);
     return MikanRecordItem(
       title: parsed.title,
+      episode: parsed.episode,
+      subtitleType: parsed.subtitleType,
       tags: parsed.tags,
       url: _resolveUrl(baseUrl, _textAttr(link, 'href') ?? ''),
       size: _normalizeText(cells[2].text),
@@ -609,6 +611,8 @@ class MikanHtmlParser {
     return MikanRecordItem(
       magnet: magnet,
       title: parsed.title,
+      episode: parsed.episode,
+      subtitleType: parsed.subtitleType,
       tags: parsed.tags,
       url: _resolveUrl(baseUrl, _textAttr(link, 'href') ?? ''),
       size: _normalizeText(sizeCell.text),
@@ -622,8 +626,12 @@ class MikanHtmlParser {
 
   static _ParsedTitle _parseTagsAndTitle(String text) {
     final tags = <String>{};
+    final bracketValues = <String>[];
     for (final match in RegExp(r'\[([^\]]+)\]').allMatches(text)) {
       final raw = match.group(1)?.trim() ?? '';
+      if (raw.isNotEmpty) {
+        bracketValues.add(raw);
+      }
       final upper = raw.toUpperCase();
       if (upper == 'GB' || upper == 'CHS' || raw == '简中') {
         tags.add('简');
@@ -636,7 +644,127 @@ class MikanHtmlParser {
         tags.add(raw.contains('特别篇') ? '特别篇' : 'SP');
       }
     }
-    return _ParsedTitle(title: text, tags: tags.toList()..sort());
+    return _ParsedTitle(
+      title: text,
+      episode: _parseEpisodeLabel(text, bracketValues),
+      subtitleType: _parseSubtitleType(bracketValues),
+      tags: tags.toList()..sort(),
+    );
+  }
+
+  static String _parseEpisodeLabel(String text, List<String> bracketValues) {
+    for (final value in bracketValues) {
+      final episode = _episodeFromBracket(value);
+      if (episode.isNotEmpty) return episode;
+    }
+
+    final normalized = text.replaceAll(RegExp(r'[_]+'), ' ');
+    final patterns = [
+      RegExp(
+        r'(?:^|[\s\-_])S\d{1,2}E(\d{1,3}(?:\.\d+)?)',
+        caseSensitive: false,
+      ),
+      RegExp(r'(?:第\s*)?(\d{1,3}(?:\.\d+)?)(?:\s*[话話集集])'),
+      RegExp(
+        r'(?:^|[\s\-_])(?:EP?|Episode)\.?\s*(\d{1,3}(?:\.\d+)?)',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'(?:^|[\s\-_#])#?(\d{1,3}(?:\.\d+)?)(?:\s*v\d+)?(?=\s*(?:\[[^\]]+\])*$|[\s\[_-])',
+      ),
+      RegExp(r'(?:^|[\s\-_])(\d{1,3}(?:\.\d+)?)(?=\s*(?:v\d+)?(?:\s|\[|$|-))'),
+    ];
+    for (final pattern in patterns) {
+      final matches = pattern.allMatches(normalized).toList();
+      if (matches.isEmpty) continue;
+      final value = matches.last.group(1)?.trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  static String _episodeFromBracket(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    if (RegExp(r'^\d{3,4}\s*[pP]$').hasMatch(value)) return '';
+    if (RegExp(
+      r'^\d{1,3}(?:\.\d+)?(?:\s*v\d+)?$',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return RegExp(r'\d{1,3}(?:\.\d+)?').firstMatch(value)?.group(0) ?? '';
+    }
+    final match = RegExp(
+      r'^(?:EP?|Episode)\.?\s*(\d{1,3}(?:\.\d+)?)(?:\s*v\d+)?$',
+      caseSensitive: false,
+    ).firstMatch(value);
+    return match?.group(1) ?? '';
+  }
+
+  static String _parseSubtitleType(List<String> bracketValues) {
+    for (final raw in bracketValues.reversed) {
+      final value = raw.trim();
+      final upper = value.toUpperCase();
+      if (value.contains('简繁') ||
+          value.contains('繁简') ||
+          (value.contains('简') && value.contains('繁'))) {
+        return value;
+      }
+      if (value.contains('简中') ||
+          value.contains('简体') ||
+          value.contains('简日') ||
+          value.contains('简英') ||
+          value.contains('简') && value.contains('字幕')) {
+        return _readableSubtitleType(value, fallback: '简中');
+      }
+      if (value.contains('繁中') ||
+          value.contains('繁体') ||
+          value.contains('繁日') ||
+          value.contains('繁英') ||
+          value.contains('繁') && value.contains('字幕')) {
+        return _readableSubtitleType(value, fallback: '繁中');
+      }
+      if (upper.contains('CHS') ||
+          upper.contains('CHT') ||
+          upper.contains('BIG5') ||
+          RegExp(r'(^|[^A-Z])GB([^A-Z]|$)').hasMatch(upper)) {
+        return _readableSubtitleType(value, fallback: '');
+      }
+      if (value.contains('字幕')) return value;
+    }
+    return '';
+  }
+
+  static String _readableSubtitleType(
+    String value, {
+    required String fallback,
+  }) {
+    final upper = value.toUpperCase();
+    final hasSimplified =
+        value.contains('简') ||
+        upper.contains('CHS') ||
+        RegExp(r'(^|[^A-Z])GB([^A-Z]|$)').hasMatch(upper);
+    final hasTraditional =
+        value.contains('繁') || upper.contains('CHT') || upper.contains('BIG5');
+    final hasJapanese =
+        value.contains('日') || upper.contains('JPN') || upper.contains('JP');
+    final hasEnglish =
+        value.contains('英') || upper.contains('ENG') || upper.contains('EN');
+
+    if (value.contains('字幕') ||
+        value.contains('双语') ||
+        value.contains('内封') ||
+        value.contains('外挂')) {
+      return value;
+    }
+    if (hasSimplified && hasTraditional && hasJapanese) return '简繁日字幕';
+    if (hasSimplified && hasTraditional) return '简繁字幕';
+    if (hasSimplified && hasJapanese) return '简日双语';
+    if (hasTraditional && hasJapanese) return '繁日双语';
+    if (hasSimplified && hasEnglish) return '简英双语';
+    if (hasTraditional && hasEnglish) return '繁英双语';
+    if (hasSimplified) return '简中';
+    if (hasTraditional) return '繁中';
+    return fallback;
   }
 
   static String _normalizeText(String text) {
@@ -658,7 +786,14 @@ class MikanHtmlParser {
 
 class _ParsedTitle {
   final String title;
+  final String episode;
+  final String subtitleType;
   final List<String> tags;
 
-  const _ParsedTitle({required this.title, required this.tags});
+  const _ParsedTitle({
+    required this.title,
+    required this.episode,
+    required this.subtitleType,
+    required this.tags,
+  });
 }

@@ -1320,41 +1320,86 @@ class _MikanRecordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-          [
-            if (item.size.isNotEmpty) item.size,
-            if (item.publishAt.isNotEmpty) item.publishAt,
-          ].join(' · '),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showDetails(context),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.title,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              _MikanRecordMeta(item: item),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      [
+                        if (item.size.isNotEmpty) item.size,
+                        if (item.publishAt.isNotEmpty) item.publishAt,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: item.magnet.isEmpty
+                        ? null
+                        : () => _copyMagnet(context, item.magnet),
+                    icon: const Icon(Icons.copy),
+                    tooltip: '复制磁链',
+                  ),
+                  IconButton(
+                    onPressed: item.magnet.isEmpty
+                        ? null
+                        : () => _openUri(context, item.magnet),
+                    icon: const Icon(Icons.link),
+                    tooltip: '打开磁链',
+                  ),
+                  IconButton(
+                    onPressed: item.torrent.isEmpty
+                        ? null
+                        : () => _openUri(context, item.torrent),
+                    icon: const Icon(Icons.download_outlined),
+                    tooltip: '打开种子',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              onPressed: item.magnet.isEmpty
-                  ? null
-                  : () => _copyMagnet(context, item.magnet),
-              icon: const Icon(Icons.copy),
-              tooltip: '复制磁链',
-            ),
-            IconButton(
-              onPressed: item.magnet.isEmpty
-                  ? null
-                  : () => _openUri(context, item.magnet),
-              icon: const Icon(Icons.link),
-              tooltip: '打开磁链',
-            ),
-            IconButton(
-              onPressed: item.torrent.isEmpty
-                  ? null
-                  : () => _openUri(context, item.torrent),
-              icon: const Icon(Icons.download_outlined),
-              tooltip: '打开种子',
-            ),
-          ],
+      ),
+    );
+  }
+
+  Future<void> _showDetails(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: _MikanRecordDetails(
+            item: item,
+            onCopyMagnet: () => _copyMagnet(context, item.magnet),
+            onOpenMagnet: () => _openUri(context, item.magnet),
+            onOpenTorrent: () => _openUri(context, item.torrent),
+            onOpenPage: () => _openUri(context, item.url),
+          ),
         ),
       ),
     );
@@ -1377,5 +1422,150 @@ class _MikanRecordTile extends StatelessWidget {
         context,
       ).showSnackBar(const SnackBar(content: Text('打开失败')));
     }
+  }
+}
+
+class _MikanRecordMeta extends StatelessWidget {
+  final MikanRecordItem item;
+
+  const _MikanRecordMeta({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = [
+      if (item.episode.isNotEmpty) 'EP.${item.episode}',
+      if (item.subtitleType.isNotEmpty) item.subtitleType,
+      ...item.tags.where((tag) => tag != item.subtitleType),
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    final colorScheme = Theme.of(context).colorScheme;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: chips
+          .map(
+            (label) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _MikanRecordDetails extends StatelessWidget {
+  final MikanRecordItem item;
+  final VoidCallback onCopyMagnet;
+  final VoidCallback onOpenMagnet;
+  final VoidCallback onOpenTorrent;
+  final VoidCallback onOpenPage;
+
+  const _MikanRecordDetails({
+    required this.item,
+    required this.onCopyMagnet,
+    required this.onOpenMagnet,
+    required this.onOpenTorrent,
+    required this.onOpenPage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '资源详情',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            item.title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          _MikanRecordMeta(item: item),
+          const SizedBox(height: 14),
+          _MikanDetailRow(label: '大小', value: item.size),
+          _MikanDetailRow(label: '发布时间', value: item.publishAt),
+          _MikanDetailRow(label: '资源页', value: item.url),
+          if (item.magnet.isNotEmpty)
+            _MikanDetailRow(label: '磁链', value: item.magnet),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: item.magnet.isEmpty ? null : onCopyMagnet,
+                icon: const Icon(Icons.copy),
+                label: const Text('复制磁链'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: item.magnet.isEmpty ? null : onOpenMagnet,
+                icon: const Icon(Icons.link),
+                label: const Text('打开磁链'),
+              ),
+              OutlinedButton.icon(
+                onPressed: item.torrent.isEmpty ? null : onOpenTorrent,
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('打开种子'),
+              ),
+              OutlinedButton.icon(
+                onPressed: item.url.isEmpty ? null : onOpenPage,
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('资源页'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MikanDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MikanDetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    if (value.isEmpty) return const SizedBox.shrink();
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 2),
+          SelectableText(value),
+        ],
+      ),
+    );
   }
 }
