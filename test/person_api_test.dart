@@ -104,6 +104,18 @@ void main() {
                 'staff': '主角',
               },
             ]);
+          case '/v0/characters/10/subjects':
+            return _jsonResponse([
+              {
+                'id': 253,
+                'type': 2,
+                'name': 'COWBOY BEBOP',
+                'name_cn': '星际牛仔',
+                'image': 'cover.jpg',
+                'staff': '主角',
+                'eps': '1-26',
+              },
+            ]);
           default:
             return _jsonResponse({'title': 'not found'}, statusCode: 404);
         }
@@ -115,6 +127,7 @@ void main() {
       final person = await client.getPerson(1);
       final subjects = await client.getPersonSubjects(1);
       final characters = await client.getPersonCharacters(1);
+      final appearances = await client.getCharacterSubjects(10);
 
       expect(staff.single.relation, '声优');
       expect(staff.single.eps, '1-26');
@@ -122,11 +135,14 @@ void main() {
       expect(subjects.single.displayName, '星际牛仔');
       expect(characters.single.name, '角色一');
       expect(characters.single.displaySubjectName, '星际牛仔');
+      expect(appearances.single.displayName, '星际牛仔');
+      expect(appearances.single.staff, '主角');
       expect(adapter.requests.map((request) => request.uri.path), [
         '/v0/subjects/253/persons',
         '/v0/persons/1',
         '/v0/persons/1/subjects',
         '/v0/persons/1/characters',
+        '/v0/characters/10/subjects',
       ]);
     });
 
