@@ -11,6 +11,7 @@ import '../models/collection.dart';
 import '../models/comment.dart';
 import '../pages/profile_page.dart';
 import '../models/episode.dart';
+import '../models/person.dart';
 import '../models/subject.dart';
 import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
@@ -24,8 +25,11 @@ import '../widgets/subject_action_buttons.dart';
 import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/copyable_chip.dart';
+import '../widgets/mono_detail_scaffold.dart';
+import '../widgets/mono_entity_widgets.dart';
 import 'anime_tag_page.dart';
 import 'character_page.dart';
+import 'person_page.dart';
 import 'web_page_viewer.dart';
 
 class SubjectPage extends StatefulWidget {
@@ -60,11 +64,13 @@ class _SubjectPageState extends State<SubjectPage>
   Subject? _subject;
   UserCollection? _userCollection;
   List<Character> _characters = [];
+  List<RelatedPerson> _persons = [];
   List<RelatedSubject> _relatedSubjects = [];
   List<UserEpisodeCollection> _episodes = [];
   List<Comment> _comments = [];
   bool _loading = true;
   bool _charactersLoading = false;
+  bool _personsLoading = false;
   bool _relatedLoading = false;
   bool _commentsLoading = false;
   bool _episodesLoading = false;
@@ -193,6 +199,7 @@ class _SubjectPageState extends State<SubjectPage>
 
   String get _cacheName => 'subject_${widget.subjectId}';
   String get _charsCacheName => 'subject_chars_${widget.subjectId}';
+  String get _personsCacheName => 'subject_persons_${widget.subjectId}';
   String get _relatedCacheName => 'subject_related_${widget.subjectId}';
   String get _episodesCacheName => 'subject_episodes_${widget.subjectId}';
   String get _commentsCacheName => 'subject_comments_${widget.subjectId}';
@@ -231,6 +238,18 @@ class _SubjectPageState extends State<SubjectPage>
           _characters = charsCached
               .whereType<Map<String, dynamic>>()
               .map((e) => Character.fromJson(e))
+              .toList();
+        } catch (_) {}
+      }
+    }
+
+    if (_persons.isEmpty) {
+      final personsCached = storage.getCache(_personsCacheName);
+      if (personsCached is List) {
+        try {
+          _persons = personsCached
+              .whereType<Map<String, dynamic>>()
+              .map(RelatedPerson.fromJson)
               .toList();
         } catch (_) {}
       }
@@ -290,6 +309,7 @@ class _SubjectPageState extends State<SubjectPage>
     setState(() {
       _loading = _subject == null;
       _charactersLoading = _characters.isEmpty;
+      _personsLoading = _persons.isEmpty;
       _relatedLoading = _relatedSubjects.isEmpty;
       _commentsLoading = _comments.isEmpty;
       _error = null;
@@ -320,30 +340,44 @@ class _SubjectPageState extends State<SubjectPage>
       }
 
       final charsFuture = api.getSubjectCharacters(widget.subjectId);
+      final personsFuture = api.getSubjectPersons(widget.subjectId);
       final relatedFuture = api.getSubjectRelations(widget.subjectId);
       final commentsFuture = api.getSubjectComments(
         subjectId: widget.subjectId,
       );
 
-      final results = await Future.wait([
-        charsFuture,
-        relatedFuture,
-        commentsFuture,
-      ], eagerError: false);
+      Future<Object?> tolerateFailure(Future<Object?> request) async {
+        try {
+          return await request;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      final results = await Future.wait<Object?>([
+        tolerateFailure(charsFuture),
+        tolerateFailure(personsFuture),
+        tolerateFailure(relatedFuture),
+        tolerateFailure(commentsFuture),
+      ]);
       if (!mounted) return;
 
       setState(() {
         _characters = results[0] is List<Character>
             ? results[0] as List<Character>
             : _characters;
-        _relatedSubjects = results[1] is List<RelatedSubject>
-            ? results[1] as List<RelatedSubject>
+        _persons = results[1] is List<RelatedPerson>
+            ? results[1] as List<RelatedPerson>
+            : _persons;
+        _relatedSubjects = results[2] is List<RelatedSubject>
+            ? results[2] as List<RelatedSubject>
             : _relatedSubjects;
-        if (results[2] is PagedResult<Comment>) {
-          final commentsResult = results[2] as PagedResult<Comment>;
+        if (results[3] is PagedResult<Comment>) {
+          final commentsResult = results[3] as PagedResult<Comment>;
           _comments = commentsResult.data;
         }
         _charactersLoading = false;
+        _personsLoading = false;
         _relatedLoading = false;
         _commentsLoading = false;
         _error = null;
@@ -356,6 +390,10 @@ class _SubjectPageState extends State<SubjectPage>
       storage.setCache(
         _charsCacheName,
         _characters.map((c) => c.toJson()).toList(),
+      );
+      storage.setCache(
+        _personsCacheName,
+        _persons.map((person) => person.toJson()).toList(),
       );
       storage.setCache(
         _relatedCacheName,
@@ -379,6 +417,7 @@ class _SubjectPageState extends State<SubjectPage>
           _loading = false;
           _subjectDetailLoading = false;
           _charactersLoading = false;
+          _personsLoading = false;
           _relatedLoading = false;
           _commentsLoading = false;
         });
@@ -615,7 +654,7 @@ class _SubjectPageState extends State<SubjectPage>
         return [
           SliverAppBar(
             pinned: true,
-            expandedHeight: 200,
+            expandedHeight: MonoDetailScaffold.defaultExpandedHeight,
             flexibleSpace: FlexibleSpaceBar(
               background: SafeArea(
                 bottom: false,
@@ -722,131 +761,32 @@ class _SubjectPageState extends State<SubjectPage>
       );
     }
 
-    return Scaffold(
-      body: NestedScrollView(
-        controller: _nestedScrollController,
-        physics: _shouldLockTabSwipeForMindMap
-            ? const NeverScrollableScrollPhysics()
-            : null,
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          final colorScheme = Theme.of(context).colorScheme;
-          return [
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              expandedHeight: 200,
-              actions: [
-                IconButton(
-                  tooltip: '打开网页',
-                  onPressed: _openSubjectWebPage,
-                  icon: const Icon(Icons.open_in_new),
-                ),
-              ],
-              title: _showCollapsedTitle
-                  ? GestureDetector(
-                      onTap: _showFullTitleDialog,
-                      child: Text(
-                        _subject!.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  : null,
-              flexibleSpace: FlexibleSpaceBar(
-                collapseMode: CollapseMode.pin,
-                background: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      12,
-                      kToolbarHeight + 2,
-                      12,
-                      0,
-                    ),
-                    child: OrientationBuilder(
-                      builder: (context, orientation) {
-                        return Align(
-                          alignment: Alignment.bottomCenter,
-                          child: _buildHeaderCard(
-                            colorScheme,
-                            isLandscape: orientation == Orientation.landscape,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (!isLandscape)
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _TabBarHeaderDelegate(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                        ),
-                      ),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      tabs: _visibleTabItems
-                          .map((tab) => Tab(text: tab.label))
-                          .toList(),
-                    ),
-                  ),
-                ),
-              ),
-          ];
-        },
-        body: isLandscape ? _buildLandscapeTabs() : _buildTabView(),
-      ),
-    );
-  }
-
-  Widget _buildLandscapeTabs() {
     final colorScheme = Theme.of(context).colorScheme;
-    final topInset = _showCollapsedTitle ? (kToolbarHeight + 8) : 0.0;
-
-    return Row(
-      children: [
-        AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(top: topInset),
-          child: NavigationRail(
-            selectedIndex: _selectedTabIndex,
-            onDestinationSelected: _tabController.animateTo,
-            backgroundColor: colorScheme.surface,
-            indicatorColor: colorScheme.primaryContainer,
-            labelType: NavigationRailLabelType.all,
-            destinations: _visibleTabItems
-                .map(
-                  (tab) => NavigationRailDestination(
-                    icon: Icon(tab.icon),
-                    label: Text(tab.label),
-                  ),
-                )
-                .toList(),
-          ),
+    return MonoDetailScaffold(
+      scrollController: _nestedScrollController,
+      tabController: _tabController,
+      tabs: _visibleTabItems
+          .map((tab) => MonoDetailTab(label: tab.label, icon: tab.icon))
+          .toList(),
+      tabChildren: _visibleTabIds.map(_buildTabById).toList(),
+      selectedTabIndex: _selectedTabIndex,
+      showCollapsedTitle: _showCollapsedTitle,
+      title: _subject!.displayName,
+      onTitleTap: _showFullTitleDialog,
+      header: _buildHeaderCard(colorScheme, isLandscape: isLandscape),
+      actions: [
+        IconButton(
+          tooltip: '打开网页',
+          onPressed: _openSubjectWebPage,
+          icon: const Icon(Icons.open_in_new),
         ),
-        const VerticalDivider(thickness: 1, width: 1),
-        Expanded(child: _buildTabView()),
       ],
-    );
-  }
-
-  Widget _buildTabView() {
-    return TabBarView(
-      controller: _tabController,
-      physics: _shouldLockTabSwipeForMindMap
+      nestedScrollPhysics: _shouldLockTabSwipeForMindMap
           ? const NeverScrollableScrollPhysics()
           : null,
-      children: _visibleTabIds.map(_buildTabById).toList(),
+      tabViewPhysics: _shouldLockTabSwipeForMindMap
+          ? const NeverScrollableScrollPhysics()
+          : null,
     );
   }
 
@@ -856,6 +796,8 @@ class _SubjectPageState extends State<SubjectPage>
         return _buildOverviewTab();
       case SubjectTabConfig.charactersId:
         return _buildCharactersTab();
+      case SubjectTabConfig.personsId:
+        return _buildPersonsTab();
       case SubjectTabConfig.relatedId:
         return _buildRelatedTab();
       case SubjectTabConfig.commentsId:
@@ -1028,26 +970,17 @@ class _SubjectPageState extends State<SubjectPage>
                           if (summaryText.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 24),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '简介',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.bold),
+                              child: MonoEntityOverviewSection(
+                                title: '简介',
+                                padding: EdgeInsets.zero,
+                                child: CopyableText(
+                                  summaryText,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
                                   ),
-                                  const SizedBox(height: 8),
-                                  CopyableText(
-                                    summaryText,
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
-                                    enableLongPressCopy: false,
-                                  ),
-                                ],
+                                  enableLongPressCopy: false,
+                                ),
                               ),
                             ),
                           shouldShowMetaSkeleton
@@ -1131,27 +1064,12 @@ class _SubjectPageState extends State<SubjectPage>
                 ),
               ),
             if (summaryText.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '简介',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    CopyableText(
-                      summaryText,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      enableLongPressCopy: false,
-                    ),
-                  ],
+              MonoEntityOverviewSection(
+                title: '简介',
+                child: CopyableText(
+                  summaryText,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  enableLongPressCopy: false,
                 ),
               ),
             if (shouldShowMetaSkeleton)
@@ -1225,88 +1143,17 @@ class _SubjectPageState extends State<SubjectPage>
                 ),
               )
             else ...[
-              Padding(
+              _buildOverviewTagsSection(
+                colorScheme,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '标签',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_subject!.tags.isEmpty)
-                      Text('暂无标签', style: TextStyle(color: Colors.grey[600]))
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _subject!.tags.map((tag) {
-                          return CopyableChip(
-                            label: tag,
-                            labelStyle: const TextStyle(fontSize: 12),
-                            backgroundColor: colorScheme.surfaceContainerHigh,
-                            onTap: () => _openAnimeTagPage(tag),
-                          );
-                        }).toList(),
-                      ),
-                  ],
                 ),
               ),
-              Padding(
+              _buildOverviewInfoboxSection(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '详情',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_subject!.infobox.isEmpty)
-                      Text('暂无详情', style: TextStyle(color: Colors.grey[600]))
-                    else
-                      ...List.generate(_subject!.infobox.length, (index) {
-                        final entries = _subject!.infobox.entries.toList();
-                        final key = entries[index].key;
-                        final value = entries[index].value;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 80,
-                                child: ShortCopyableText(
-                                  key,
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: CopyableText(
-                                  value,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                  ],
                 ),
               ),
             ],
@@ -1321,22 +1168,12 @@ class _SubjectPageState extends State<SubjectPage>
     ColorScheme colorScheme, {
     required EdgeInsets padding,
   }) {
-    return Padding(
+    return MonoEntityOverviewSection(
+      title: '标签',
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '标签',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          if (_subject!.tags.isEmpty)
-            Text('暂无标签', style: TextStyle(color: Colors.grey[600]))
-          else
-            Wrap(
+      child: _subject!.tags.isEmpty
+          ? Text('暂无标签', style: TextStyle(color: Colors.grey[600]))
+          : Wrap(
               spacing: 8,
               runSpacing: 8,
               children: _subject!.tags.map((tag) {
@@ -1348,8 +1185,6 @@ class _SubjectPageState extends State<SubjectPage>
                 );
               }).toList(),
             ),
-        ],
-      ),
     );
   }
 
@@ -1389,51 +1224,12 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   Widget _buildOverviewInfoboxSection({required EdgeInsets padding}) {
-    final entries = _subject!.infobox.entries.toList();
-
-    return Padding(
+    return MonoEntityOverviewSection(
+      title: '详情',
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '详情',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          if (entries.isEmpty)
-            Text('暂无详情', style: TextStyle(color: Colors.grey[600]))
-          else
-            ...List.generate(entries.length, (index) {
-              final key = entries[index].key;
-              final value = entries[index].value;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 80,
-                      child: ShortCopyableText(
-                        key,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CopyableText(
-                        value,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
+      child: _subject!.infobox.isEmpty
+          ? Text('暂无详情', style: TextStyle(color: Colors.grey[600]))
+          : MonoEntityInfoTable(info: _subject!.infobox),
     );
   }
 
@@ -1489,13 +1285,14 @@ class _SubjectPageState extends State<SubjectPage>
 
   Widget _buildCharactersTab() {
     if (_charactersLoading && _characters.isEmpty) {
-      return _buildCharactersSkeletonList();
+      return const MonoEntitySkeletonList();
     }
 
     if (_characters.isEmpty) {
-      return RefreshIndicator(
+      return MonoEntityEmptyState(
+        message: '暂无角色信息',
+        icon: Icons.person_outline_rounded,
         onRefresh: _loadAllData,
-        child: const Center(child: Text('暂无角色信息')),
       );
     }
 
@@ -1510,91 +1307,23 @@ class _SubjectPageState extends State<SubjectPage>
               ? character.images.first.medium
               : '';
 
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => CharacterPage(character: character),
-                  ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
+          return MonoEntityListCard(
+            key: ValueKey('subject_character_${character.id}'),
+            imageUrl: imageUrl,
+            placeholderIcon: Icons.person_outline_rounded,
+            title: character.name,
+            description: character.comment,
+            chips: [
+              if (character.relation.isNotEmpty)
+                MonoEntityChip(
+                  character.relation,
+                  tone: MonoEntityChipTone.accent,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: imageUrl.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              width: 80,
-                              height: 104,
-                              fit: BoxFit.cover,
-                              alignment: Alignment.topCenter,
-                              placeholder: (context, url) => Container(
-                                width: 80,
-                                height: 104,
-                                color: Colors.grey[300],
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                width: 80,
-                                height: 104,
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.person),
-                              ),
-                            )
-                          : Container(
-                              width: 80,
-                              height: 104,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.person),
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            character.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          if (character.type.isNotEmpty)
-                            Text(
-                              character.type,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                          const SizedBox(height: 2),
-                          if (character.comment.isNotEmpty)
-                            Text(
-                              character.comment,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              if (character.type.isNotEmpty) MonoEntityChip(character.type),
+            ],
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CharacterPage(character: character),
               ),
             ),
           );
@@ -1603,70 +1332,47 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  Widget _buildCharactersSkeletonList() {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildPersonsTab() {
+    if (_personsLoading && _persons.isEmpty) {
+      return const MonoEntitySkeletonList();
+    }
 
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      itemCount: 4,
-      itemBuilder: (context, index) {
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          elevation: 0,
-          color: colorScheme.surfaceContainerLow,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 80,
-                  height: 104,
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+    if (_persons.isEmpty) {
+      return MonoEntityEmptyState(
+        message: '暂无制作人员信息',
+        icon: Icons.badge_outlined,
+        onRefresh: _loadAllData,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadAllData,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: _persons.length,
+        itemBuilder: (context, index) {
+          final person = _persons[index];
+          final imageUrl = person.images?.bestSmall ?? '';
+          return MonoEntityListCard(
+            key: ValueKey('subject_person_${person.id}'),
+            imageUrl: imageUrl,
+            placeholderIcon: Icons.badge_outlined,
+            title: person.name,
+            description: person.eps.isEmpty ? '' : '参与章节：${person.eps}',
+            chips: [
+              if (person.relation.isNotEmpty)
+                MonoEntityChip(
+                  person.relation,
+                  tone: MonoEntityChipTone.accent,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 140,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 90,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 180,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ...person.careerLabels.take(3).map(MonoEntityChip.new),
+            ],
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => PersonPage(person: person)),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

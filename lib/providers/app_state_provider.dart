@@ -577,6 +577,16 @@ class AppStateProvider extends ChangeNotifier {
       }
     }
 
+    // “制作”是新增标签。迁移旧配置时紧跟在“角色”之后，避免被通用的
+    // 缺失项补全逻辑追加到标签栏末尾；用户后续手动排序仍会被保留。
+    if (seen.add(SubjectTabConfig.personsId)) {
+      final charactersIndex = normalized.indexOf(SubjectTabConfig.charactersId);
+      normalized.insert(
+        charactersIndex < 0 ? normalized.length : charactersIndex + 1,
+        SubjectTabConfig.personsId,
+      );
+    }
+
     for (final id in SubjectTabConfig.allTabIds) {
       if (seen.add(id)) {
         normalized.add(id);

@@ -15,6 +15,7 @@ class SubjectTabConfigItem {
 class SubjectTabConfig {
   static const String overviewId = 'overview';
   static const String charactersId = 'characters';
+  static const String personsId = 'persons';
   static const String relatedId = 'related';
   static const String commentsId = 'comments';
   static const String moegirlId = 'moegirl';
@@ -29,6 +30,11 @@ class SubjectTabConfig {
       id: charactersId,
       label: '\u89d2\u8272',
       icon: Icons.groups_outlined,
+    ),
+    SubjectTabConfigItem(
+      id: personsId,
+      label: '\u5236\u4f5c',
+      icon: Icons.badge_outlined,
     ),
     SubjectTabConfigItem(
       id: relatedId,
@@ -50,6 +56,7 @@ class SubjectTabConfig {
   static const List<String> allTabIds = [
     overviewId,
     charactersId,
+    personsId,
     relatedId,
     commentsId,
     moegirlId,

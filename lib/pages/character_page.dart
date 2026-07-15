@@ -12,6 +12,8 @@ import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_content_view.dart';
 import '../widgets/copyable_text.dart';
+import '../widgets/mono_detail_scaffold.dart';
+import '../widgets/mono_entity_widgets.dart';
 import 'subject_page.dart';
 
 /// 角色详情页
@@ -27,8 +29,6 @@ class CharacterPage extends StatefulWidget {
 
 class _CharacterPageState extends State<CharacterPage>
     with TickerProviderStateMixin {
-  static const double _headerExpandedHeight = 188;
-
   static const _tabItems = [
     _CharacterTabItem(label: '概述', icon: Icons.article_outlined),
     _CharacterTabItem(label: '出演', icon: Icons.movie_outlined),
@@ -358,132 +358,44 @@ class _CharacterPageState extends State<CharacterPage>
       );
     }
 
-    return Scaffold(
-      body: NestedScrollView(
-        controller: _nestedScrollController,
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              pinned: true,
-              expandedHeight: _headerExpandedHeight,
-              actions: [
-                IconButton(
-                  tooltip: _isCollected ? '取消收藏角色' : '收藏角色',
-                  onPressed: _collectionLoading || _collectionUpdating
-                      ? null
-                      : _toggleCharacterCollection,
-                  icon: _collectionUpdating
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          _isCollected
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                        ),
-                ),
-                IconButton(
-                  tooltip: '打开网页',
-                  onPressed: _openCharacterWebPage,
-                  icon: const Icon(Icons.open_in_new),
-                ),
-              ],
-              title: _showCollapsedTitle
-                  ? Text(
-                      _character!.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  : null,
-              flexibleSpace: FlexibleSpaceBar(
-                collapseMode: CollapseMode.pin,
-                background: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      12,
-                      kToolbarHeight + 2,
-                      12,
-                      0,
-                    ),
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: _buildHeaderCard(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (!isLandscape)
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _TabBarHeaderDelegate(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                        ),
-                      ),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      tabs: _tabItems
-                          .map((tab) => Tab(text: tab.label))
-                          .toList(),
-                    ),
-                  ),
-                ),
-              ),
-          ];
-        },
-        body: isLandscape ? _buildLandscapeTabs() : _buildTabView(),
-      ),
-    );
-  }
-
-  Widget _buildLandscapeTabs() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final topInset = _showCollapsedTitle ? (kToolbarHeight + 8) : 0.0;
-
-    return Row(
-      children: [
-        AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(top: topInset),
-          child: NavigationRail(
-            selectedIndex: _selectedTabIndex,
-            onDestinationSelected: _tabController.animateTo,
-            backgroundColor: colorScheme.surface,
-            indicatorColor: colorScheme.primaryContainer,
-            labelType: NavigationRailLabelType.all,
-            destinations: _tabItems
-                .map(
-                  (tab) => NavigationRailDestination(
-                    icon: Icon(tab.icon),
-                    label: Text(tab.label),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-        const VerticalDivider(thickness: 1, width: 1),
-        Expanded(child: _buildTabView()),
-      ],
-    );
-  }
-
-  Widget _buildTabView() {
-    return TabBarView(
-      controller: _tabController,
-      children: [
+    return MonoDetailScaffold(
+      scrollController: _nestedScrollController,
+      tabController: _tabController,
+      tabs: _tabItems
+          .map((tab) => MonoDetailTab(label: tab.label, icon: tab.icon))
+          .toList(),
+      tabChildren: [
         _buildOverviewTab(),
         _buildAppearancesTab(),
         _buildCommentsTab(),
+      ],
+      selectedTabIndex: _selectedTabIndex,
+      showCollapsedTitle: _showCollapsedTitle,
+      title: _character!.name,
+      header: _buildHeaderCard(),
+      actions: [
+        IconButton(
+          tooltip: _isCollected ? '取消收藏角色' : '收藏角色',
+          onPressed: _collectionLoading || _collectionUpdating
+              ? null
+              : _toggleCharacterCollection,
+          icon: _collectionUpdating
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  _isCollected
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                ),
+        ),
+        IconButton(
+          tooltip: '打开网页',
+          onPressed: _openCharacterWebPage,
+          icon: const Icon(Icons.open_in_new),
+        ),
       ],
     );
   }
@@ -497,123 +409,27 @@ class _CharacterPageState extends State<CharacterPage>
               : character.images.first.medium)
         : '';
 
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: imageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      width: 86,
-                      height: 112,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                      placeholder: (context, url) => Container(
-                        width: 86,
-                        height: 112,
-                        color: colorScheme.surfaceContainerHighest,
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        width: 86,
-                        height: 112,
-                        color: colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.person),
-                      ),
-                    )
-                  : Container(
-                      width: 86,
-                      height: 112,
-                      color: colorScheme.surfaceContainerHighest,
-                      child: const Icon(Icons.person),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ShortCopyableText(
-                    character.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (character.type.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            character.type,
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      if (character.relation.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            character.relation,
-                            style: TextStyle(
-                              color: colorScheme.onPrimaryContainer,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        '${character.collects} 次收藏',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
-                      if (_isCollected)
-                        Icon(
-                          Icons.favorite_rounded,
-                          size: 14,
-                          color: colorScheme.primary,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return MonoEntityHeaderCard(
+      imageUrl: imageUrl,
+      placeholderIcon: Icons.person_outline_rounded,
+      title: character.name,
+      chips: [
+        if (character.type.isNotEmpty) MonoEntityChip(character.type),
+        if (character.relation.isNotEmpty)
+          MonoEntityChip(character.relation, tone: MonoEntityChipTone.accent),
+      ],
+      footer: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            '${character.collects} 次收藏',
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+          ),
+          if (_isCollected)
+            Icon(Icons.favorite_rounded, size: 14, color: colorScheme.primary),
+        ],
       ),
     );
   }
@@ -809,35 +625,7 @@ class _CharacterPageState extends State<CharacterPage>
             if (character.infobox.isNotEmpty)
               _buildSection(
                 title: '详情',
-                child: Column(
-                  children: character.infobox.entries.map((entry) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 80,
-                            child: CopyableText(
-                              entry.key,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                              maxLines: 1,
-                            ),
-                          ),
-                          Expanded(
-                            child: CopyableText(
-                              entry.value,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
+                child: MonoEntityInfoTable(info: character.infobox),
               ),
             if (character.collects > 0)
               _buildSection(
@@ -892,38 +680,19 @@ class _CharacterPageState extends State<CharacterPage>
 
   Widget _buildAppearancesTab() {
     if (_subjectsLoading && _characterSubjects.isEmpty) {
-      return _buildAppearancesSkeletonList();
+      return const MonoEntitySkeletonList(imageWidth: 74, imageHeight: 98);
     }
 
     if (_characterSubjects.isEmpty) {
-      return RefreshIndicator(
+      return MonoEntityEmptyState(
+        message: '暂无出演条目',
+        icon: Icons.movie_outlined,
         onRefresh: () async {
           final id = _activeCharacterId;
           if (id != null) {
             await _loadAllData(id);
           }
         },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 120, horizontal: 16),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.movie_outlined, size: 60, color: Colors.grey[400]),
-                  const SizedBox(height: 18),
-                  Text(
-                    '暂无出演条目',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       );
     }
 
@@ -939,133 +708,24 @@ class _CharacterPageState extends State<CharacterPage>
         itemCount: _characterSubjects.length,
         itemBuilder: (context, index) {
           final subject = _characterSubjects[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => SubjectPage(subjectId: subject.id),
-                  ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: subject.image.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: subject.image,
-                              width: 74,
-                              height: 98,
-                              fit: BoxFit.cover,
-                              alignment: Alignment.topCenter,
-                              placeholder: (context, url) => Container(
-                                width: 74,
-                                height: 98,
-                                color: Colors.grey[300],
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                width: 74,
-                                height: 98,
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.movie_outlined),
-                              ),
-                            )
-                          : Container(
-                              width: 74,
-                              height: 98,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.movie_outlined),
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            subject.displayName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          if (subject.nameCn.isNotEmpty &&
-                              subject.nameCn != subject.name) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              subject.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              if (subject.staff.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primaryContainer,
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    subject.staff,
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onPrimaryContainer,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                              if (subject.eps.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    '章节: ${subject.eps}',
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+          return MonoEntityListCard(
+            imageUrl: subject.image,
+            placeholderIcon: Icons.movie_outlined,
+            imageWidth: 74,
+            imageHeight: 98,
+            title: subject.displayName,
+            subtitle:
+                subject.nameCn.isNotEmpty && subject.nameCn != subject.name
+                ? subject.name
+                : '',
+            chips: [
+              if (subject.staff.isNotEmpty)
+                MonoEntityChip(subject.staff, tone: MonoEntityChipTone.accent),
+              if (subject.eps.isNotEmpty) MonoEntityChip('章节 ${subject.eps}'),
+            ],
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => SubjectPage(subjectId: subject.id),
               ),
             ),
           );
@@ -1284,32 +944,7 @@ class _CharacterPageState extends State<CharacterPage>
   }
 
   Widget _buildInfoboxContent(Character character) {
-    return Column(
-      children: character.infobox.entries.map((entry) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 80,
-                child: CopyableText(
-                  entry.key,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  maxLines: 1,
-                ),
-              ),
-              Expanded(
-                child: CopyableText(
-                  entry.value,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
+    return MonoEntityInfoTable(info: character.infobox);
   }
 
   Widget _buildInfoboxSkeletonContent() {
@@ -1355,21 +990,10 @@ class _CharacterPageState extends State<CharacterPage>
       vertical: 12,
     ),
   }) {
-    return Padding(
+    return MonoEntityOverviewSection(
+      title: title,
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          child,
-        ],
-      ),
+      child: child,
     );
   }
 
@@ -1412,7 +1036,7 @@ class _CharacterPageState extends State<CharacterPage>
         return [
           SliverAppBar(
             pinned: true,
-            expandedHeight: _headerExpandedHeight,
+            expandedHeight: MonoDetailScaffold.defaultExpandedHeight,
             flexibleSpace: FlexibleSpaceBar(
               background: SafeArea(
                 bottom: false,
@@ -1667,86 +1291,6 @@ class _CharacterPageState extends State<CharacterPage>
           }),
         ],
       ),
-    );
-  }
-
-  Widget _buildAppearancesSkeletonList() {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      itemCount: 4,
-      itemBuilder: (context, index) {
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          elevation: 0,
-          color: colorScheme.surfaceContainerLow,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 74,
-                  height: 98,
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 160,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 120,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Container(
-                            width: 70,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            width: 80,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
