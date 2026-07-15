@@ -13,6 +13,7 @@ import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../models/rakuen_topic_favorite.dart';
 import '../models/subject.dart';
+import '../models/subject_search.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
 import 'app_log_service.dart';
@@ -230,105 +231,48 @@ class ApiClient {
 
   // ========== 条目 ==========
 
-  /// 搜索条目
-  /// [keyword] 搜索关键词
-  /// [type] 条目类型，不指定则返回所有类型
-  /// [limit] 返回数量限制
-  Future<List<SlimSubject>> searchSubjects({
+  /// 使用官方 v0 API 搜索条目。
+  Future<PagedResult<SlimSubject>> searchSubjects({
     required String keyword,
-    int? type,
-    int limit = 25,
-    bool enrichDetails = false,
+    SubjectSearchSort sort = SubjectSearchSort.match,
+    SubjectSearchFilter filter = const SubjectSearchFilter(),
+    int limit = 30,
+    int offset = 0,
   }) async {
-    try {
-      // 使用 /search/subject/{keyword} 端点
-      final params = <String, dynamic>{'max_results': limit};
-      if (type != null) params['type'] = type;
-
-      final resp = await _dio.get(
-        '/search/subject/${Uri.encodeComponent(keyword)}',
-        queryParameters: params,
-      );
-
-      final results = <SlimSubject>[];
-
-      // 响应格式：{ results: n, list: [...] }
-      if (resp.data is Map) {
-        final data = resp.data as Map<String, dynamic>;
-        if (data['list'] is List) {
-          for (final item in data['list'] as List<dynamic>) {
-            if (item is Map<String, dynamic>) {
-              try {
-                results.add(SlimSubject.fromJson(item));
-              } catch (e) {
-                if (kDebugMode) {
-                  print('解析搜索结果失败: $e, 数据: $item');
-                }
-                continue;
-              }
-            }
-          }
-        }
-      } else if (resp.data is List) {
-        // 兼容直接返回列表的情况
-        for (final item in resp.data as List<dynamic>) {
-          if (item is Map<String, dynamic>) {
-            try {
-              results.add(SlimSubject.fromJson(item));
-            } catch (e) {
-              if (kDebugMode) {
-                print('解析搜索结果失败: $e, 数据: $item');
-              }
-              continue;
-            }
-          }
-        }
-      }
-
-      if (kDebugMode) {
-        print('搜索结果数量: ${results.length}');
-      }
-
-      if (!enrichDetails || results.isEmpty) {
-        return results;
-      }
-
-      return _enrichSearchSubjectsWithDetails(results);
-    } catch (e) {
-      if (kDebugMode) {
-        print('搜索条目失败: $e');
-      }
-      // 如果搜索失败，返回空列表而不是抛出异常
-      return [];
+    final normalizedKeyword = keyword.trim();
+    if (normalizedKeyword.isEmpty) {
+      throw ArgumentError.value(keyword, 'keyword', '搜索关键词不能为空');
     }
-  }
-
-  Future<List<SlimSubject>> _enrichSearchSubjectsWithDetails(
-    List<SlimSubject> results,
-  ) async {
-    const batchSize = 8;
-    final enriched = <SlimSubject>[];
-
-    for (var start = 0; start < results.length; start += batchSize) {
-      final end = (start + batchSize).clamp(0, results.length);
-      final batch = results.sublist(start, end);
-      final details = await Future.wait(
-        batch.map((subject) async {
-          try {
-            final detail = await getSubject(subject.id);
-            return SlimSubject.fromSubject(detail);
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('补全搜索结果详情失败: ${subject.id}, $e');
-            }
-            return subject;
-          }
-        }),
-      );
-      enriched.addAll(details);
+    if (limit <= 0) {
+      throw ArgumentError.value(limit, 'limit', '必须大于 0');
+    }
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', '不能小于 0');
     }
 
-    return enriched;
+    final request = SubjectSearchRequest(
+      keyword: normalizedKeyword,
+      sort: sort,
+      filter: filter,
+    );
+    final resp = await _dio.post(
+      '/v0/search/subjects',
+      queryParameters: {'limit': limit, 'offset': offset},
+      data: request.toJson(),
+    );
+    final payload = Map<String, dynamic>.from(resp.data as Map);
+    final subjects = (payload['data'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Subject.fromJson(Map<String, dynamic>.from(item)))
+        .map(SlimSubject.fromSubject)
+        .toList(growable: false);
+
+    return PagedResult<SlimSubject>(
+      total: (payload['total'] as num?)?.toInt() ?? subjects.length,
+      limit: (payload['limit'] as num?)?.toInt() ?? limit,
+      offset: (payload['offset'] as num?)?.toInt() ?? offset,
+      data: subjects,
+    );
   }
 
   Future<BangumiTagPageResult> getAnimeTags({int page = 1}) async {

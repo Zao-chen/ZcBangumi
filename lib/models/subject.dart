@@ -101,7 +101,10 @@ class SlimSubject {
       type: json['type'] as int,
       name: (json['name'] as String?) ?? '',
       nameCn: (json['name_cn'] as String?) ?? '',
-      shortSummary: (json['short_summary'] as String?) ?? '',
+      shortSummary:
+          (json['short_summary'] as String?) ??
+          (json['summary'] as String?) ??
+          '',
       images: json['images'] != null
           ? SubjectImages.fromJson(json['images'] as Map<String, dynamic>)
           : null,
