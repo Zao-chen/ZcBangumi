@@ -9,6 +9,7 @@ import '../models/collection.dart';
 import '../models/comment.dart';
 import '../models/episode.dart';
 import '../models/bangumi_web_session.dart';
+import '../models/person.dart';
 import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../models/rakuen_topic_favorite.dart';
@@ -445,6 +446,15 @@ class ApiClient {
         .toList();
   }
 
+  /// 获取条目制作人员
+  Future<List<RelatedPerson>> getSubjectPersons(int subjectId) async {
+    final resp = await _dio.get('/v0/subjects/$subjectId/persons');
+    final list = resp.data as List<dynamic>;
+    return list
+        .map((e) => RelatedPerson.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// 获取条目关联条目
   Future<List<RelatedSubject>> getSubjectRelations(int subjectId) async {
     final resp = await _dio.get('/v0/subjects/$subjectId/subjects');
@@ -458,6 +468,47 @@ class ApiClient {
   Future<Character> getCharacter(int characterId) async {
     final resp = await _dio.get('/v0/characters/$characterId');
     return Character.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  /// 获取人物详情
+  Future<PersonDetail> getPerson(int personId) async {
+    final resp = await _dio.get('/v0/persons/$personId');
+    return PersonDetail.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  /// 获取人物参与作品
+  Future<List<PersonSubject>> getPersonSubjects(int personId) async {
+    final resp = await _dio.get('/v0/persons/$personId/subjects');
+    final list = resp.data as List<dynamic>;
+    return list
+        .map((e) => PersonSubject.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 获取人物关联角色
+  Future<List<PersonCharacter>> getPersonCharacters(int personId) async {
+    final resp = await _dio.get('/v0/persons/$personId/characters');
+    final list = resp.data as List<dynamic>;
+    return list
+        .map((e) => PersonCharacter.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 查询人物收藏状态
+  Future<bool> isPersonCollected({
+    required String username,
+    required int personId,
+  }) async {
+    try {
+      final encodedUsername = Uri.encodeComponent(username);
+      await _dio.get(
+        '/v0/users/$encodedUsername/collections/-/persons/$personId',
+      );
+      return true;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return false;
+      rethrow;
+    }
   }
 
   /// 获取用户单个角色收藏信息

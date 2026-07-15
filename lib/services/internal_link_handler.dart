@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:zc_bangumi/models/rakuen_topic.dart';
 import 'package:zc_bangumi/pages/character_page.dart';
+import 'package:zc_bangumi/pages/person_page.dart';
 import 'package:zc_bangumi/pages/profile_page.dart';
 import 'package:zc_bangumi/pages/rakuen_topic_page.dart';
 import 'package:zc_bangumi/pages/subject_page.dart';
@@ -46,6 +47,14 @@ class InternalLinkHandler {
         final id = segments[1];
         if (_isValidId(id)) {
           return _handleCharacterLink(id, context);
+        }
+      }
+
+      // 人物链接: /person/{id}
+      if (type == 'person') {
+        final id = segments[1];
+        if (_isValidId(id)) {
+          return _handlePersonLink(id, context);
         }
       }
 
@@ -124,6 +133,25 @@ class InternalLinkHandler {
         MaterialPageRoute(
           builder: (_) => CharacterPage(characterId: int.parse(id)),
         ),
+      );
+      return InternalLinkResult.handled;
+    } catch (e) {
+      return InternalLinkResult.failed;
+    }
+  }
+
+  /// 处理人物链接
+  static InternalLinkResult _handlePersonLink(
+    String id,
+    BuildContext? context,
+  ) {
+    if (context == null) {
+      return InternalLinkResult.failed;
+    }
+
+    try {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PersonPage(personId: int.parse(id))),
       );
       return InternalLinkResult.handled;
     } catch (e) {
