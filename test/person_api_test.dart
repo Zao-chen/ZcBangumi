@@ -53,7 +53,7 @@ void main() {
   });
 
   group('ApiClient person flow', () {
-    test('loads subject persons, detail, subjects, and characters', () async {
+    test('loads person and character relation endpoints', () async {
       final adapter = _RecordingAdapter((request) {
         switch (request.uri.path) {
           case '/v0/subjects/253/persons':
@@ -116,6 +116,23 @@ void main() {
                 'eps': '1-26',
               },
             ]);
+          case '/v0/characters/10/persons':
+            return _jsonResponse([
+              {
+                'id': 1,
+                'name': '人物一',
+                'type': 1,
+                'images': {
+                  'medium': 'person-medium.jpg',
+                  'small': 'person-small.jpg',
+                },
+                'subject_id': 253,
+                'subject_type': 2,
+                'subject_name': 'COWBOY BEBOP',
+                'subject_name_cn': '星际牛仔',
+                'staff': '主角',
+              },
+            ]);
           default:
             return _jsonResponse({'title': 'not found'}, statusCode: 404);
         }
@@ -128,6 +145,7 @@ void main() {
       final subjects = await client.getPersonSubjects(1);
       final characters = await client.getPersonCharacters(1);
       final appearances = await client.getCharacterSubjects(10);
+      final characterPersons = await client.getCharacterPersons(10);
 
       expect(staff.single.relation, '声优');
       expect(staff.single.eps, '1-26');
@@ -137,12 +155,17 @@ void main() {
       expect(characters.single.displaySubjectName, '星际牛仔');
       expect(appearances.single.displayName, '星际牛仔');
       expect(appearances.single.staff, '主角');
+      expect(characterPersons.single.name, '人物一');
+      expect(characterPersons.single.displaySubjectName, '星际牛仔');
+      expect(characterPersons.single.images?.bestSmall, 'person-medium.jpg');
+      expect(characterPersons.single.staff, '主角');
       expect(adapter.requests.map((request) => request.uri.path), [
         '/v0/subjects/253/persons',
         '/v0/persons/1',
         '/v0/persons/1/subjects',
         '/v0/persons/1/characters',
         '/v0/characters/10/subjects',
+        '/v0/characters/10/persons',
       ]);
     });
 

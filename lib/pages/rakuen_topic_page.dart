@@ -1,4 +1,4 @@
-﻿import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,7 +11,7 @@ import '../providers/auth_provider.dart';
 import '../providers/rakuen_favorite_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
-import '../widgets/bangumi_content_view.dart';
+import '../widgets/bangumi_post_widgets.dart';
 import '../widgets/rakuen_favorite_button.dart';
 
 class RakuenTopicPage extends StatefulWidget {
@@ -723,24 +723,14 @@ class _RakuenPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      color: emphasize
-          ? colorScheme.primaryContainer.withValues(alpha: 0.35)
-          : colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: _RakuenPostBlock(
-          post: post,
-          avatarSize: 44,
-          titleFontSize: 14,
-          metaFontSize: 11,
-          contentFontSize: 14,
-          contentHeight: 1.42,
-        ),
-      ),
+    return BangumiPostCard(
+      post: _rakuenPostData(post),
+      replies: post.subReplies.map(_rakuenPostData).toList(growable: false),
+      emphasize: emphasize,
+      nestedReplyKeyPrefix: 'rakuen_nested_reply',
+      onUserTap: (post) {
+        _openRakuenUserPage(context, post.authorKey, post.authorName);
+      },
     );
   }
 }
@@ -863,207 +853,51 @@ class _RakuenPostBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    void onMainUserTap() {
-      _openUserPage(context, post.username, post.nickname);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: onMainUserTap,
-              child: _Avatar(url: post.avatarUrl, size: avatarSize),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _PostBody(
-                username: post.username,
-                nickname: post.nickname,
-                sign: post.sign,
-                floorText: post.floor,
-                timeText: post.timeText,
-                content: post.content,
-                contentHtml: post.contentHtml,
-                titleFontSize: titleFontSize,
-                metaFontSize: metaFontSize,
-                contentFontSize: contentFontSize,
-                contentHeight: contentHeight,
-                colorScheme: colorScheme,
-                onUserTap: onMainUserTap,
-              ),
-            ),
-          ],
-        ),
-        if (post.subReplies.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Padding(
-            padding: EdgeInsets.only(left: avatarSize + 12),
-            child: Column(
-              children: post.subReplies.map((reply) {
-                void onReplyUserTap() {
-                  _openUserPage(context, reply.username, reply.nickname);
-                }
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colorScheme.outlineVariant),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: onReplyUserTap,
-                        child: _Avatar(url: reply.avatarUrl, size: 32),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _PostBody(
-                          username: reply.username,
-                          nickname: reply.nickname,
-                          sign: reply.sign,
-                          floorText: reply.floor,
-                          timeText: reply.timeText,
-                          content: reply.content,
-                          contentHtml: reply.contentHtml,
-                          titleFontSize: 13,
-                          metaFontSize: 10,
-                          contentFontSize: 13,
-                          contentHeight: 1.4,
-                          colorScheme: colorScheme,
-                          onUserTap: onReplyUserTap,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  void _openUserPage(BuildContext context, String username, String nickname) {
-    final safeUsername = username.trim();
-    if (safeUsername.isEmpty || safeUsername == '未知用户') return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            OtherUserProfilePage(username: safeUsername, displayName: nickname),
-      ),
+    return BangumiPostBlock(
+      post: _rakuenPostData(post),
+      replies: post.subReplies.map(_rakuenPostData).toList(growable: false),
+      avatarSize: avatarSize,
+      titleFontSize: titleFontSize,
+      metaFontSize: metaFontSize,
+      contentFontSize: contentFontSize,
+      contentHeight: contentHeight,
+      nestedReplyKeyPrefix: 'rakuen_nested_reply',
+      onUserTap: (post) {
+        _openRakuenUserPage(context, post.authorKey, post.authorName);
+      },
     );
   }
 }
 
-class _PostBody extends StatelessWidget {
-  final String username;
-  final String nickname;
-  final String? sign;
-  final String floorText;
-  final String timeText;
-  final String content;
-  final String? contentHtml;
-  final double titleFontSize;
-  final double metaFontSize;
-  final double contentFontSize;
-  final double contentHeight;
-  final ColorScheme colorScheme;
-  final VoidCallback onUserTap;
+BangumiPostData _rakuenPostData(RakuenPost source) {
+  return BangumiPostData(
+    id: source.id,
+    authorKey: source.username,
+    authorName: source.nickname,
+    avatarUrl: source.avatarUrl,
+    sign: source.sign,
+    metaText: formatBangumiPostMeta(
+      floorText: source.floor,
+      rawTime: source.timeText,
+    ),
+    content: source.content,
+    contentHtml: source.contentHtml,
+  );
+}
 
-  const _PostBody({
-    required this.username,
-    required this.nickname,
-    required this.sign,
-    required this.floorText,
-    required this.timeText,
-    required this.content,
-    this.contentHtml,
-    required this.titleFontSize,
-    required this.metaFontSize,
-    required this.contentFontSize,
-    required this.contentHeight,
-    required this.colorScheme,
-    required this.onUserTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final baseContentStyle = TextStyle(
-      fontSize: contentFontSize,
-      height: contentHeight,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: username.trim().isEmpty ? null : onUserTap,
-                child: RichText(
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  text: TextSpan(
-                    style: DefaultTextStyle.of(context).style,
-                    children: [
-                      TextSpan(
-                        text: nickname,
-                        style: TextStyle(
-                          fontSize: titleFontSize,
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      if (sign?.isNotEmpty == true)
-                        TextSpan(
-                          text: ' ($sign)',
-                          style: TextStyle(
-                            fontSize: metaFontSize,
-                            fontWeight: FontWeight.w400,
-                            color: colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.72,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '$floorText  $timeText',
-                  style: TextStyle(
-                    fontSize: metaFontSize,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        BangumiContentView(
-          text: content,
-          html: contentHtml,
-          style: baseContentStyle,
-        ),
-      ],
-    );
-  }
+void _openRakuenUserPage(
+  BuildContext context,
+  String username,
+  String nickname,
+) {
+  final safeUsername = username.trim();
+  if (safeUsername.isEmpty || safeUsername == '未知用户') return;
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) =>
+          OtherUserProfilePage(username: safeUsername, displayName: nickname),
+    ),
+  );
 }
 
 class _CoverImage extends StatelessWidget {
@@ -1099,40 +933,6 @@ class _CoverImage extends StatelessWidget {
             : Container(
                 color: colorScheme.surfaceContainerHighest,
                 child: Icon(icon),
-              ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  final String url;
-  final double size;
-
-  const _Avatar({required this.url, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.24),
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    Container(color: colorScheme.surfaceContainerHighest),
-                errorWidget: (context, url, error) => Container(
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Icon(Icons.person_outline, size: size * 0.45),
-                ),
-              )
-            : Container(
-                color: colorScheme.surfaceContainerHighest,
-                child: Icon(Icons.person_outline, size: size * 0.45),
               ),
       ),
     );
