@@ -1,19 +1,20 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants.dart';
 import '../models/character.dart';
 import '../models/comment.dart';
+import '../models/person.dart';
 import '../pages/profile_page.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
-import '../widgets/bangumi_content_view.dart';
+import '../widgets/bangumi_post_widgets.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/mono_detail_scaffold.dart';
 import '../widgets/mono_entity_widgets.dart';
+import 'person_page.dart';
 import 'subject_page.dart';
 
 /// 角色详情页
@@ -39,10 +40,12 @@ class _CharacterPageState extends State<CharacterPage>
   final ScrollController _nestedScrollController = ScrollController();
   Character? _character;
   List<CharacterSubject> _characterSubjects = [];
+  List<CharacterPerson> _characterPersons = [];
   List<Comment> _comments = [];
   bool _loading = true;
   bool _overviewLoading = false;
   bool _subjectsLoading = false;
+  bool _personsLoading = false;
   bool _commentsLoading = false;
   bool _collectionLoading = false;
   bool _collectionUpdating = false;
@@ -50,11 +53,13 @@ class _CharacterPageState extends State<CharacterPage>
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
   String? _error;
+  String? _personsError;
 
   int? get _activeCharacterId => widget.characterId ?? _character?.id;
   String get _cacheKey => 'character_${_activeCharacterId ?? 0}';
   String get _subjectCacheKey =>
       'character_subjects_${_activeCharacterId ?? 0}';
+  String get _personCacheKey => 'character_persons_${_activeCharacterId ?? 0}';
   String get _commentCacheKey =>
       'character_comments_${_activeCharacterId ?? 0}';
 
@@ -134,6 +139,18 @@ class _CharacterPageState extends State<CharacterPage>
       }
     }
 
+    if (_characterPersons.isEmpty) {
+      final personCached = storage.getCache(_personCacheKey);
+      if (personCached is List) {
+        try {
+          _characterPersons = personCached
+              .whereType<Map<String, dynamic>>()
+              .map(CharacterPerson.fromJson)
+              .toList();
+        } catch (_) {}
+      }
+    }
+
     if (_comments.isEmpty) {
       final commentsCached = storage.getCache(_commentCacheKey);
       if (commentsCached is List) {
@@ -150,14 +167,18 @@ class _CharacterPageState extends State<CharacterPage>
       _loading = _character == null;
       _overviewLoading = _character == null || _character!.infobox.isEmpty;
       _subjectsLoading = _characterSubjects.isEmpty;
+      _personsLoading = _characterPersons.isEmpty;
       _commentsLoading = _comments.isEmpty;
       _error = null;
+      _personsError = null;
     });
 
     try {
       Character? latestCharacter;
       List<CharacterSubject>? latestSubjects;
+      List<CharacterPerson>? latestPersons;
       List<Comment>? latestComments;
+      String? personsError;
 
       try {
         latestCharacter = await api.getCharacter(characterId);
@@ -166,6 +187,14 @@ class _CharacterPageState extends State<CharacterPage>
       try {
         latestSubjects = await api.getCharacterSubjects(characterId);
       } catch (_) {}
+
+      try {
+        latestPersons = await api.getCharacterPersons(characterId);
+      } catch (_) {
+        if (_characterPersons.isEmpty) {
+          personsError = '加载关联人物失败';
+        }
+      }
 
       try {
         final commentsResult = await api.getCharacterComments(
@@ -188,6 +217,11 @@ class _CharacterPageState extends State<CharacterPage>
           _characterSubjects = latestSubjects;
           _subjectsLoading = false;
         }
+        if (latestPersons != null) {
+          _characterPersons = latestPersons;
+          _personsLoading = false;
+        }
+        _personsError = personsError;
         if (latestComments != null) {
           _comments = latestComments;
           _commentsLoading = false;
@@ -202,6 +236,12 @@ class _CharacterPageState extends State<CharacterPage>
         _subjectCacheKey,
         _characterSubjects.map((e) => e.toJson()).toList(),
       );
+      if (latestPersons != null) {
+        storage.setCache(
+          _personCacheKey,
+          _characterPersons.map((e) => e.toJson()).toList(),
+        );
+      }
       storage.setCache(
         _commentCacheKey,
         _comments.map((e) => e.toJson()).toList(),
@@ -216,6 +256,7 @@ class _CharacterPageState extends State<CharacterPage>
           _loading = false;
           _overviewLoading = false;
           _subjectsLoading = false;
+          _personsLoading = false;
           _commentsLoading = false;
         });
       }
@@ -438,12 +479,17 @@ class _CharacterPageState extends State<CharacterPage>
     final character = _character!;
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
+    final hasCharacterOverview =
+        character.comment.isNotEmpty ||
+        character.summary.isNotEmpty ||
+        character.infobox.isNotEmpty ||
+        character.collects > 0;
+    final showPersonsSection =
+        _personsLoading ||
+        _personsError != null ||
+        _characterPersons.isNotEmpty;
 
-    if (_overviewLoading &&
-        character.comment.isEmpty &&
-        character.summary.isEmpty &&
-        character.infobox.isEmpty &&
-        character.collects <= 0) {
+    if (_overviewLoading && !hasCharacterOverview) {
       return _buildOverviewSkeleton(isLandscape: isLandscape);
     }
 
@@ -460,11 +506,7 @@ class _CharacterPageState extends State<CharacterPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_overviewLoading ||
-                  character.comment.isNotEmpty ||
-                  character.summary.isNotEmpty ||
-                  character.infobox.isNotEmpty ||
-                  character.collects > 0)
+              if (_overviewLoading || hasCharacterOverview)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   child: Row(
@@ -551,9 +593,12 @@ class _CharacterPageState extends State<CharacterPage>
                     ],
                   ),
                 ),
-              if (character.comment.isEmpty &&
-                  character.summary.isEmpty &&
-                  character.infobox.isEmpty)
+              if (showPersonsSection)
+                _buildSection(
+                  title: '声优',
+                  child: _buildPersonsOverviewContent(),
+                ),
+              if (!hasCharacterOverview && !showPersonsSection)
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     vertical: 120,
@@ -627,6 +672,8 @@ class _CharacterPageState extends State<CharacterPage>
                 title: '详情',
                 child: MonoEntityInfoTable(info: character.infobox),
               ),
+            if (showPersonsSection)
+              _buildSection(title: '声优', child: _buildPersonsOverviewContent()),
             if (character.collects > 0)
               _buildSection(
                 title: '人气',
@@ -645,9 +692,7 @@ class _CharacterPageState extends State<CharacterPage>
                   ],
                 ),
               ),
-            if (character.comment.isEmpty &&
-                character.summary.isEmpty &&
-                character.infobox.isEmpty)
+            if (!hasCharacterOverview && !showPersonsSection)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 120,
@@ -734,6 +779,269 @@ class _CharacterPageState extends State<CharacterPage>
     );
   }
 
+  Widget _buildPersonsOverviewContent() {
+    if (_personsLoading && _characterPersons.isEmpty) {
+      return Column(
+        children: List.generate(
+          2,
+          (index) => Padding(
+            padding: EdgeInsets.only(bottom: index == 0 ? 8 : 0),
+            child: _buildPersonOverviewSkeleton(),
+          ),
+        ),
+      );
+    }
+
+    if (_personsError != null && _characterPersons.isEmpty) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Card(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: colorScheme.errorContainer.withValues(alpha: 0.45),
+        child: ListTile(
+          leading: Icon(Icons.cloud_off_outlined, color: colorScheme.error),
+          title: Text(_personsError!),
+          subtitle: const Text('点击重试'),
+          trailing: const Icon(Icons.refresh_rounded),
+          onTap: () {
+            final id = _activeCharacterId;
+            if (id != null) _loadAllData(id);
+          },
+        ),
+      );
+    }
+
+    final groups = _groupCharacterPersons(_characterPersons);
+    if (groups.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        for (final group in groups.take(3))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildPersonOverviewCard(group),
+          ),
+        if (groups.length > 3)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _showAllCharacterPersons(groups),
+              icon: const Icon(Icons.people_outline_rounded, size: 18),
+              label: Text('查看全部（${groups.length}）'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPersonOverviewCard(
+    _CharacterPersonGroup group, {
+    String keyPrefix = 'character_person',
+    VoidCallback? onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final person = group.person;
+    return Card(
+      key: ValueKey('${keyPrefix}_${group.key}'),
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      child: InkWell(
+        onTap: onTap ?? () => _openPersonPage(person),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              MonoEntityImage(
+                imageUrl: person.images?.bestSmall ?? '',
+                placeholderIcon: Icons.badge_outlined,
+                width: 52,
+                height: 64,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      person.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (group.subjectSummary.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        group.subjectSummary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        ...group.staffLabels
+                            .take(2)
+                            .map(
+                              (staff) => MonoEntityChipView(
+                                MonoEntityChip(
+                                  staff,
+                                  tone: MonoEntityChipTone.accent,
+                                ),
+                              ),
+                            ),
+                        ...group.subjectTypes
+                            .take(2)
+                            .map(
+                              (type) => MonoEntityChipView(
+                                MonoEntityChip(BgmConst.subjectTypeName(type)),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 20),
+                child: Icon(Icons.chevron_right_rounded, size: 20),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPersonOverviewSkeleton() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 64,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 120,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 200,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAllCharacterPersons(
+    List<_CharacterPersonGroup> groups,
+  ) async {
+    final selected = await showModalBottomSheet<CharacterPerson>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  '全部声优（${groups.length}）',
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                  itemCount: groups.length,
+                  itemBuilder: (context, index) {
+                    final group = groups[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _buildPersonOverviewCard(
+                        group,
+                        keyPrefix: 'all_character_person',
+                        onTap: () =>
+                            Navigator.of(sheetContext).pop(group.person),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) _openPersonPage(selected);
+  }
+
+  void _openPersonPage(CharacterPerson person) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => PersonPage(person: person)));
+  }
+
+  List<_CharacterPersonGroup> _groupCharacterPersons(
+    List<CharacterPerson> persons,
+  ) {
+    final groups = <String, _CharacterPersonGroup>{};
+    for (var index = 0; index < persons.length; index++) {
+      final person = persons[index];
+      final key = person.id > 0 ? '${person.id}' : 'row_$index';
+      groups
+          .putIfAbsent(key, () => _CharacterPersonGroup(key, person))
+          .relations
+          .add(person);
+    }
+    return groups.values.toList(growable: false);
+  }
+
   Widget _buildCommentsTab() {
     if (_commentsLoading && _comments.isEmpty) {
       return _buildCommentsSkeletonList();
@@ -780,8 +1088,6 @@ class _CharacterPageState extends State<CharacterPage>
       );
     }
 
-    final colorScheme = Theme.of(context).colorScheme;
-
     return RefreshIndicator(
       onRefresh: () async {
         final id = _activeCharacterId;
@@ -790,157 +1096,80 @@ class _CharacterPageState extends State<CharacterPage>
         }
       },
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         itemCount: _comments.length,
         itemBuilder: (context, index) {
           final comment = _comments[index];
-          return _buildCommentItem(comment, colorScheme);
+          return _buildCommentItem(comment, index);
         },
       ),
     );
   }
 
-  Widget _buildCommentItem(Comment comment, ColorScheme colorScheme) {
-    final userId = comment.user['id'] as int? ?? 0;
-    final isValidUser = userId > 0;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: !isValidUser
-                      ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => OtherUserProfilePage(
-                              userId: userId,
-                              displayName: comment.userName,
-                            ),
-                          ),
-                        ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: comment.userAvatar.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: comment.userAvatar,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) =>
-                                  Container(color: Colors.grey[300]),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.person, size: 20),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.person, size: 20),
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: !isValidUser
-                            ? null
-                            : () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => OtherUserProfilePage(
-                                    userId: userId,
-                                    displayName: comment.userName,
-                                  ),
-                                ),
-                              ),
-                        child: Text(
-                          comment.userName,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.primary,
-                              ),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          if (comment.rating > 0)
-                            Row(
-                              children: [
-                                ...List.generate(5, (i) {
-                                  return Icon(
-                                    i < comment.rating ~/ 2
-                                        ? Icons.star
-                                        : Icons.star_border,
-                                    color: Colors.amber,
-                                    size: 12,
-                                  );
-                                }),
-                                const SizedBox(width: 4),
-                              ],
-                            ),
-                          if (comment.spoiler == 1)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red[100],
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: Text(
-                                '剧透',
-                                style: TextStyle(
-                                  color: Colors.red[700],
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            BangumiContentView(
-              text: comment.content,
-              html: comment.contentHtml,
-              style: TextStyle(color: Colors.grey[700], fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _formatTime(comment.updatedAt),
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-                if (comment.replies > 0)
-                  Text(
-                    '${comment.replies} 条回复',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                  ),
-              ],
-            ),
-          ],
-        ),
+  Widget _buildCommentItem(Comment comment, int index) {
+    final floorNumber = index + 1;
+    final replies = comment.replyItems
+        .asMap()
+        .entries
+        .map(
+          (entry) => _commentToPostData(
+            entry.value,
+            '#$floorNumber-${entry.key + 1}',
+            emptyContentLabel: '该回复已删除',
+          ),
+        )
+        .toList(growable: false);
+
+    return BangumiPostCard(
+      post: _commentToPostData(
+        comment,
+        '#$floorNumber',
+        emptyContentLabel: comment.state == 6 ? '该评论已删除' : null,
       ),
+      replies: replies,
+      nestedReplyKeyPrefix: 'comment_reply',
+      nestedRepliesKey: ValueKey('comment_replies_${comment.id}'),
+      onUserTap: (post) {
+        final userId = int.tryParse(post.authorKey) ?? 0;
+        if (userId <= 0) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => OtherUserProfilePage(
+              userId: userId,
+              displayName: post.authorName,
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  BangumiPostData _commentToPostData(
+    Comment comment,
+    String floorText, {
+    String? emptyContentLabel,
+  }) {
+    final userId = _commentUserId(comment);
+    return BangumiPostData(
+      id: comment.id.toString(),
+      authorKey: userId > 0 ? userId.toString() : '',
+      authorName: comment.userName,
+      avatarUrl: comment.userAvatar,
+      metaText: formatBangumiPostMeta(
+        floorText: floorText,
+        dateTime: comment.createdAt,
+      ),
+      content: comment.content,
+      contentHtml: comment.contentHtml,
+      emptyContentLabel: emptyContentLabel,
+    );
+  }
+
+  int _commentUserId(Comment comment) {
+    final rawId = comment.user['id'];
+    if (rawId is int) return rawId;
+    if (rawId is num) return rawId.toInt();
+    return int.tryParse(rawId?.toString() ?? '') ?? 0;
   }
 
   Widget _buildInfoboxContent(Character character) {
@@ -995,23 +1224,6 @@ class _CharacterPageState extends State<CharacterPage>
       padding: padding,
       child: child,
     );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return '刚刚';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}分钟前';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}小时前';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}天前';
-    } else {
-      return '${dateTime.month}月${dateTime.day}日';
-    }
   }
 
   Widget _buildSkeleton(bool isLandscape) {
@@ -1372,6 +1584,36 @@ class _CharacterPageState extends State<CharacterPage>
         );
       },
     );
+  }
+}
+
+class _CharacterPersonGroup {
+  final String key;
+  final CharacterPerson person;
+  final List<CharacterPerson> relations = [];
+
+  _CharacterPersonGroup(this.key, this.person);
+
+  List<String> get staffLabels =>
+      _distinct(relations.map((relation) => relation.staff.trim()));
+
+  List<int> get subjectTypes => _distinct(
+    relations.map((relation) => relation.subjectType).where((type) => type > 0),
+  );
+
+  String get subjectSummary {
+    final names = _distinct(
+      relations.map((relation) => relation.displaySubjectName.trim()),
+    );
+    if (names.length <= 2) return names.join('、');
+    return '${names.take(2).join('、')} 等 ${names.length} 部作品';
+  }
+
+  static List<T> _distinct<T>(Iterable<T> values) {
+    return values
+        .where((value) => value.toString().isNotEmpty)
+        .toSet()
+        .toList(growable: false);
   }
 }
 

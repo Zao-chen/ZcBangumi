@@ -301,6 +301,56 @@ class PersonCharacter {
   };
 }
 
+/// 与角色关联的人物，以及该关联所在的条目上下文。
+class CharacterPerson extends PersonSummary {
+  final int subjectId;
+  final int subjectType;
+  final String subjectName;
+  final String subjectNameCn;
+  final String staff;
+
+  const CharacterPerson({
+    required super.id,
+    required super.name,
+    required super.type,
+    super.career,
+    super.images,
+    required this.subjectId,
+    required this.subjectType,
+    required this.subjectName,
+    required this.subjectNameCn,
+    required this.staff,
+  });
+
+  factory CharacterPerson.fromJson(Map<String, dynamic> json) {
+    return CharacterPerson(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: (json['name'] as String?) ?? '',
+      type: (json['type'] as num?)?.toInt() ?? 0,
+      career: _stringList(json['career']),
+      images: _parseImages(json['images']),
+      subjectId: (json['subject_id'] as num?)?.toInt() ?? 0,
+      subjectType: (json['subject_type'] as num?)?.toInt() ?? 0,
+      subjectName: (json['subject_name'] as String?) ?? '',
+      subjectNameCn: (json['subject_name_cn'] as String?) ?? '',
+      staff: (json['staff'] as String?) ?? '',
+    );
+  }
+
+  String get displaySubjectName =>
+      subjectNameCn.isNotEmpty ? subjectNameCn : subjectName;
+
+  @override
+  Map<String, dynamic> toJson() => {
+    ...super.toJson(),
+    'subject_id': subjectId,
+    'subject_type': subjectType,
+    'subject_name': subjectName,
+    'subject_name_cn': subjectNameCn,
+    'staff': staff,
+  };
+}
+
 String personCareerLabel(String career) => switch (career) {
   'producer' => '制作人',
   'mangaka' => '漫画家',

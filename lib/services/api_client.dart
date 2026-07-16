@@ -560,6 +560,16 @@ class ApiClient {
         .toList();
   }
 
+  /// 获取角色关联人物，以及人物与角色共同出现的条目上下文。
+  Future<List<CharacterPerson>> getCharacterPersons(int characterId) async {
+    final resp = await _dio.get('/v0/characters/$characterId/persons');
+    final list = resp.data as List<dynamic>;
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(CharacterPerson.fromJson)
+        .toList();
+  }
+
   /// 获取角色吐槽列表
   Future<PagedResult<Comment>> getCharacterComments({
     required int characterId,
@@ -643,29 +653,35 @@ class ApiClient {
     Map<String, dynamic> json,
   ) {
     final normalized = Map<String, dynamic>.from(json);
-    final createdAt = normalized['created_at'] ?? normalized['createdAt'];
-    final updatedAt = normalized['updated_at'] ?? normalized['updatedAt'];
+    final createdAt =
+        normalized['created_at'] ??
+        normalized['createdAt'] ??
+        normalized['created'];
+    final updatedAt =
+        normalized['updated_at'] ??
+        normalized['updatedAt'] ??
+        normalized['updated'] ??
+        createdAt;
 
     String normalizeTimestamp(dynamic value) {
       if (value == null) return '';
-      if (value is int) {
-        return DateTime.fromMillisecondsSinceEpoch(
-          value * 1000,
-        ).toIso8601String();
-      }
       if (value is num) {
-        return DateTime.fromMillisecondsSinceEpoch(
-          value.toInt() * 1000,
-        ).toIso8601String();
+        final timestamp = value.toInt();
+        final absoluteValue = timestamp.abs();
+        final dateTime = absoluteValue >= 100000000000000
+            ? DateTime.fromMicrosecondsSinceEpoch(timestamp)
+            : absoluteValue >= 100000000000
+            ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+            : DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return dateTime.toIso8601String();
       }
       if (value is String) {
-        final asInt = int.tryParse(value);
-        if (asInt != null) {
-          return DateTime.fromMillisecondsSinceEpoch(
-            asInt * 1000,
-          ).toIso8601String();
+        final normalizedValue = value.trim();
+        final asNumber = num.tryParse(normalizedValue);
+        if (asNumber != null) {
+          return normalizeTimestamp(asNumber);
         }
-        return value;
+        return normalizedValue;
       }
       return value.toString();
     }
@@ -673,6 +689,16 @@ class ApiClient {
     normalized['created_at'] = normalizeTimestamp(createdAt);
     normalized['updated_at'] = normalizeTimestamp(updatedAt);
     normalized['user'] = _normalizeCommentUser(normalized['user']);
+    final rawReplies = normalized['replies'];
+    if (rawReplies is List) {
+      normalized['replies'] = rawReplies
+          .whereType<Map>()
+          .map(
+            (reply) =>
+                _normalizeCommentPayload(Map<String, dynamic>.from(reply)),
+          )
+          .toList(growable: false);
+    }
     return normalized;
   }
 

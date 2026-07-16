@@ -11,6 +11,7 @@ class Comment {
   final Map<String, dynamic> user;
   final int usable;
   final int replies;
+  final List<Comment> replyItems;
 
   Comment({
     required this.id,
@@ -24,6 +25,7 @@ class Comment {
     required this.user,
     required this.usable,
     required this.replies,
+    this.replyItems = const [],
   });
 
   /// 获取用户昵称
@@ -38,7 +40,17 @@ class Comment {
   }
 
   /// 获取用户头像
-  String get userAvatar => user['avatar'] ?? '';
+  String get userAvatar {
+    final avatar = user['avatar'];
+    if (avatar is String) return avatar;
+    if (avatar is Map) {
+      return (avatar['medium'] as String?) ??
+          (avatar['small'] as String?) ??
+          (avatar['large'] as String?) ??
+          '';
+    }
+    return '';
+  }
 
   factory Comment.fromJson(Map<String, dynamic> json) {
     int toInt(dynamic value, {int fallback = 0}) {
@@ -48,29 +60,55 @@ class Comment {
       return fallback;
     }
 
-    DateTime parseDateTime(dynamic value) {
-      if (value is int) {
+    DateTime? parseDateTime(dynamic value) {
+      DateTime fromEpoch(num timestamp) {
+        final value = timestamp.toInt();
+        final absoluteValue = value.abs();
+        if (absoluteValue >= 100000000000000) {
+          return DateTime.fromMicrosecondsSinceEpoch(value);
+        }
+        if (absoluteValue >= 100000000000) {
+          return DateTime.fromMillisecondsSinceEpoch(value);
+        }
         return DateTime.fromMillisecondsSinceEpoch(value * 1000);
       }
+
       if (value is num) {
-        return DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000);
+        return fromEpoch(value);
       }
       if (value is String) {
-        final asInt = int.tryParse(value);
-        if (asInt != null) {
-          return DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
+        final normalized = value.trim();
+        if (normalized.isEmpty) return null;
+        final asNumber = num.tryParse(normalized);
+        if (asNumber != null) {
+          return fromEpoch(asNumber);
         }
-        return DateTime.tryParse(value) ?? DateTime.now();
+        return DateTime.tryParse(normalized);
       }
-      return DateTime.now();
+      return null;
     }
 
     final rawReplies = json['replies'];
+    final replyItems = rawReplies is List
+        ? rawReplies
+              .whereType<Map>()
+              .map(
+                (reply) => Comment.fromJson(Map<String, dynamic>.from(reply)),
+              )
+              .toList(growable: false)
+        : const <Comment>[];
     final replyCount = rawReplies is List
-        ? rawReplies.length
+        ? replyItems.length
         : toInt(rawReplies);
 
     final rawUser = json['user'];
+    final parsedCreatedAt = parseDateTime(
+      json['created_at'] ?? json['createdAt'] ?? json['created'],
+    );
+    final parsedUpdatedAt = parseDateTime(
+      json['updated_at'] ?? json['updatedAt'] ?? json['updated'],
+    );
+    final fallbackDate = DateTime.fromMillisecondsSinceEpoch(0);
     return Comment(
       id: toInt(json['id']),
       content: (json['content'] as String?) ?? '',
@@ -79,8 +117,8 @@ class Comment {
       rating: toInt(json['rating']),
       spoiler: toInt(json['spoiler']),
       state: toInt(json['state']),
-      createdAt: parseDateTime(json['created_at'] ?? json['createdAt']),
-      updatedAt: parseDateTime(json['updated_at'] ?? json['updatedAt']),
+      createdAt: parsedCreatedAt ?? parsedUpdatedAt ?? fallbackDate,
+      updatedAt: parsedUpdatedAt ?? parsedCreatedAt ?? fallbackDate,
       user: rawUser is Map<String, dynamic>
           ? rawUser
           : rawUser is Map
@@ -88,6 +126,7 @@ class Comment {
           : {},
       usable: toInt(json['usable']),
       replies: replyCount,
+      replyItems: replyItems,
     );
   }
 
@@ -102,6 +141,8 @@ class Comment {
     'updated_at': updatedAt.toIso8601String(),
     'user': user,
     'usable': usable,
-    'replies': replies,
+    'replies': replyItems.isNotEmpty
+        ? replyItems.map((reply) => reply.toJson()).toList(growable: false)
+        : replies,
   };
 }
