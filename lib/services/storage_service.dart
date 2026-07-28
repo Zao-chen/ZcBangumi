@@ -393,6 +393,7 @@ class StorageService {
       RegExp(r'^subject_chars_(\d+)$'),
       RegExp(r'^subject_related_(\d+)$'),
       RegExp(r'^subject_episodes_(\d+)$'),
+      RegExp(r'^subject_public_episodes_(\d+)$'),
       RegExp(r'^subject_comments_(\d+)$'),
       RegExp(r'^subject_user_collection_(\d+)$'),
       RegExp(r'^episodes_(\d+)$'),

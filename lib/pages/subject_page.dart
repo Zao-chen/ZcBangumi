@@ -205,6 +205,8 @@ class _SubjectPageState extends State<SubjectPage>
   String get _personsCacheName => 'subject_persons_${widget.subjectId}';
   String get _relatedCacheName => 'subject_related_${widget.subjectId}';
   String get _episodesCacheName => 'subject_episodes_${widget.subjectId}';
+  String get _publicEpisodesCacheName =>
+      'subject_public_episodes_${widget.subjectId}';
   String get _commentsCacheName => 'subject_comments_${widget.subjectId}';
   String get _userCollectionCacheName =>
       'subject_user_collection_${widget.subjectId}';
@@ -232,6 +234,7 @@ class _SubjectPageState extends State<SubjectPage>
   Future<void> _loadAllData() async {
     final storage = context.read<StorageService>();
     final api = context.read<ApiClient>();
+    final authProvider = context.read<AuthProvider>();
     final connectivity = context.read<ConnectivityProvider>();
 
     _subject ??= _readSubjectFromCache(storage);
@@ -273,13 +276,27 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     if (_episodes.isEmpty) {
-      final episodesCached = storage.getCache(_episodesCacheName);
+      final useAuthenticatedCache = authProvider.canUseAuthenticatedCache;
+      final episodesCached = storage.getCache(
+        useAuthenticatedCache ? _episodesCacheName : _publicEpisodesCacheName,
+      );
       if (episodesCached is List) {
         try {
-          _episodes = episodesCached
-              .whereType<Map<String, dynamic>>()
-              .map((e) => UserEpisodeCollection.fromJson(e))
-              .toList();
+          _episodes = useAuthenticatedCache
+              ? episodesCached
+                    .whereType<Map<String, dynamic>>()
+                    .map(UserEpisodeCollection.fromJson)
+                    .toList()
+              : episodesCached
+                    .whereType<Map<String, dynamic>>()
+                    .map(Episode.fromJson)
+                    .map(
+                      (episode) => UserEpisodeCollection(
+                        episode: episode,
+                        type: BgmConst.episodeNotCollected,
+                      ),
+                    )
+                    .toList();
         } catch (_) {}
       }
     }
@@ -435,10 +452,7 @@ class _SubjectPageState extends State<SubjectPage>
     final api = context.read<ApiClient>();
     final authProvider = context.read<AuthProvider>();
     final connectivity = context.read<ConnectivityProvider>();
-
-    if (!authProvider.canUseAuthenticatedCache) {
-      return;
-    }
+    final loadCollectionStatus = authProvider.canUseAuthenticatedCache;
 
     final shouldShowLoading = _episodes.isEmpty;
     if (_episodesLoading != shouldShowLoading) {
@@ -446,20 +460,41 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     try {
-      final result = await api.getUserEpisodeCollections(
-        subjectId: widget.subjectId,
-      );
+      final List<UserEpisodeCollection> episodes;
+      if (loadCollectionStatus) {
+        final result = await api.getUserEpisodeCollections(
+          subjectId: widget.subjectId,
+        );
+        episodes = result.data;
+      } else {
+        final result = await api.getEpisodes(subjectId: widget.subjectId);
+        episodes = result.data
+            .map(
+              (episode) => UserEpisodeCollection(
+                episode: episode,
+                type: BgmConst.episodeNotCollected,
+              ),
+            )
+            .toList(growable: false);
+      }
       if (!mounted) return;
 
       setState(() {
-        _episodes = result.data;
+        _episodes = episodes;
       });
       connectivity.reportNetworkSuccess();
 
-      storage.setCache(
-        _episodesCacheName,
-        _episodes.map((e) => e.toJson()).toList(),
-      );
+      if (loadCollectionStatus) {
+        storage.setCache(
+          _episodesCacheName,
+          episodes.map((episode) => episode.toJson()).toList(),
+        );
+      } else {
+        storage.setCache(
+          _publicEpisodesCacheName,
+          episodes.map((episode) => episode.episode.toJson()).toList(),
+        );
+      }
     } catch (e) {
       connectivity.reportNetworkFailure(e);
     } finally {
@@ -913,6 +948,9 @@ class _SubjectPageState extends State<SubjectPage>
 
   Widget _buildOverviewTab() {
     final colorScheme = Theme.of(context).colorScheme;
+    final canManageProgress = context
+        .watch<AuthProvider>()
+        .canUseAuthenticatedCache;
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     final summaryText = _normalizeSummary(_subject!.summary);
@@ -941,8 +979,8 @@ class _SubjectPageState extends State<SubjectPage>
                   child: ProgressGrid(
                     episodes: _episodes,
                     loading: _episodesLoading && _episodes.isEmpty,
-                    onSetStatus: _setEpisodeStatus,
-                    onWatchUpTo: _watchUpTo,
+                    onSetStatus: canManageProgress ? _setEpisodeStatus : null,
+                    onWatchUpTo: canManageProgress ? _watchUpTo : null,
                     useNumberPicker: _subject!.type == BgmConst.subjectBook,
                     useCollectionTypePicker:
                         _subject!.type == BgmConst.subjectGame,
@@ -950,22 +988,24 @@ class _SubjectPageState extends State<SubjectPage>
                     bookMaxProgress: _subject!.eps > 0 ? _subject!.eps : null,
                     collectionSubjectType: _subject!.type,
                     collectionType: _userCollection?.type,
-                    onSetCollectionType: (newType) async {
-                      final api = context.read<ApiClient>();
-                      try {
-                        await api.patchCollection(
-                          subjectId: widget.subjectId,
-                          type: newType,
-                        );
-                        await _loadUserCollection();
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('更新收藏状态失败: $e')),
-                          );
-                        }
-                      }
-                    },
+                    onSetCollectionType: canManageProgress
+                        ? (newType) async {
+                            final api = context.read<ApiClient>();
+                            try {
+                              await api.patchCollection(
+                                subjectId: widget.subjectId,
+                                type: newType,
+                              );
+                              await _loadUserCollection();
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('更新收藏状态失败: $e')),
+                                );
+                              }
+                            }
+                          }
+                        : null,
                   ),
                 ),
               Padding(
@@ -1047,8 +1087,8 @@ class _SubjectPageState extends State<SubjectPage>
                 child: ProgressGrid(
                   episodes: _episodes,
                   loading: _episodesLoading && _episodes.isEmpty,
-                  onSetStatus: _setEpisodeStatus,
-                  onWatchUpTo: _watchUpTo,
+                  onSetStatus: canManageProgress ? _setEpisodeStatus : null,
+                  onWatchUpTo: canManageProgress ? _watchUpTo : null,
                   useNumberPicker: _subject!.type == BgmConst.subjectBook,
                   useCollectionTypePicker:
                       _subject!.type == BgmConst.subjectGame,
@@ -1056,22 +1096,24 @@ class _SubjectPageState extends State<SubjectPage>
                   bookMaxProgress: _subject!.eps > 0 ? _subject!.eps : null,
                   collectionSubjectType: _subject!.type,
                   collectionType: _userCollection?.type,
-                  onSetCollectionType: (newType) async {
-                    final api = context.read<ApiClient>();
-                    try {
-                      await api.patchCollection(
-                        subjectId: widget.subjectId,
-                        type: newType,
-                      );
-                      await _loadUserCollection();
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('更新收藏状态失败: $e')));
-                      }
-                    }
-                  },
+                  onSetCollectionType: canManageProgress
+                      ? (newType) async {
+                          final api = context.read<ApiClient>();
+                          try {
+                            await api.patchCollection(
+                              subjectId: widget.subjectId,
+                              type: newType,
+                            );
+                            await _loadUserCollection();
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('更新收藏状态失败: $e')),
+                              );
+                            }
+                          }
+                        }
+                      : null,
                 ),
               ),
             if (summaryText.isNotEmpty)

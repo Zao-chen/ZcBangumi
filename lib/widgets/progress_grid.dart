@@ -99,6 +99,7 @@ class ProgressGrid extends StatelessWidget {
         children: mainEps
             .map(
               (ep) => _EpisodeCell(
+                key: ValueKey('episode_${ep.episode.id}'),
                 episode: ep,
                 onSetStatus: onSetStatus,
                 onWatchUpTo: onWatchUpTo,
@@ -124,6 +125,7 @@ class _CollectionTypeCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final enabled = onSetCollectionType != null;
     final (accentColor, textColor) = switch (collectionType) {
       BgmConst.collectionDoing => (
         colorScheme.primary,
@@ -156,11 +158,15 @@ class _CollectionTypeCell extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Tooltip(
-        message: '\u70b9\u51fb\u4fee\u6536\u85cf\u72b6\u6001',
+        message: enabled
+            ? '\u70b9\u51fb\u4fee\u6536\u85cf\u72b6\u6001'
+            : '\u767b\u5f55\u540e\u53ef\u4fee\u6536\u85cf\u72b6\u6001',
         child: SizedBox(
           width: double.infinity,
           child: GestureDetector(
-            onTapUp: (details) => _showMenu(context, details.globalPosition),
+            onTapUp: enabled
+                ? (details) => _showMenu(context, details.globalPosition)
+                : null,
             child: Container(
               height: 28,
               decoration: BoxDecoration(
@@ -588,6 +594,7 @@ class _EpisodeCell extends StatelessWidget {
   final void Function(int episodeSort)? onWatchUpTo;
 
   const _EpisodeCell({
+    super.key,
     required this.episode,
     this.onSetStatus,
     this.onWatchUpTo,
@@ -661,6 +668,8 @@ class _EpisodeCell extends StatelessWidget {
   void _showMenu(BuildContext context, Offset position) {
     final ep = episode;
     final currentType = ep.type;
+    final canSetStatus = onSetStatus != null;
+    final canWatchUpTo = onWatchUpTo != null;
     final title = ep.episode.displayName.isNotEmpty
         ? ep.episode.displayName
         : 'EP.${ep.episode.sortLabel}';
@@ -692,7 +701,7 @@ class _EpisodeCell extends StatelessWidget {
 
     items.add(const PopupMenuDivider(height: 8));
 
-    if (currentType != BgmConst.episodeDone) {
+    if (canSetStatus && currentType != BgmConst.episodeDone) {
       items.add(
         const PopupMenuItem(
           value: BgmConst.episodeDone,
@@ -706,19 +715,21 @@ class _EpisodeCell extends StatelessWidget {
       );
     }
 
-    items.add(
-      PopupMenuItem(
-        value: _menuWatchUpTo,
-        height: 40,
-        child: _MenuRow(
-          icon: Icons.fast_forward,
-          label: '\u770b\u5230',
-          color: Colors.teal,
+    if (canWatchUpTo) {
+      items.add(
+        PopupMenuItem(
+          value: _menuWatchUpTo,
+          height: 40,
+          child: _MenuRow(
+            icon: Icons.fast_forward,
+            label: '\u770b\u5230',
+            color: Colors.teal,
+          ),
         ),
-      ),
-    );
+      );
+    }
 
-    if (currentType != BgmConst.episodeWish) {
+    if (canSetStatus && currentType != BgmConst.episodeWish) {
       items.add(
         const PopupMenuItem(
           value: BgmConst.episodeWish,
@@ -732,7 +743,7 @@ class _EpisodeCell extends StatelessWidget {
       );
     }
 
-    if (currentType != BgmConst.episodeDropped) {
+    if (canSetStatus && currentType != BgmConst.episodeDropped) {
       items.add(
         const PopupMenuItem(
           value: BgmConst.episodeDropped,
@@ -746,7 +757,7 @@ class _EpisodeCell extends StatelessWidget {
       );
     }
 
-    if (currentType != BgmConst.episodeNotCollected) {
+    if (canSetStatus && currentType != BgmConst.episodeNotCollected) {
       items.add(const PopupMenuDivider(height: 8));
       items.add(
         const PopupMenuItem(
@@ -761,7 +772,9 @@ class _EpisodeCell extends StatelessWidget {
       );
     }
 
-    items.add(const PopupMenuDivider(height: 8));
+    if (canSetStatus || canWatchUpTo) {
+      items.add(const PopupMenuDivider(height: 8));
+    }
     items.add(
       PopupMenuItem(
         value: _menuOpenDiscussion,
@@ -800,12 +813,14 @@ class _EpisodeCell extends StatelessWidget {
 
   double _menuWidth(BuildContext context, int currentType, int commentCount) {
     const style = TextStyle(fontSize: 14);
+    final canSetStatus = onSetStatus != null;
+    final canWatchUpTo = onWatchUpTo != null;
     final labels = <String>[
-      if (currentType != BgmConst.episodeDone) '看过',
-      '看到',
-      if (currentType != BgmConst.episodeWish) '想看',
-      if (currentType != BgmConst.episodeDropped) '抛弃',
-      if (currentType != BgmConst.episodeNotCollected) '撤销',
+      if (canSetStatus && currentType != BgmConst.episodeDone) '看过',
+      if (canWatchUpTo) '看到',
+      if (canSetStatus && currentType != BgmConst.episodeWish) '想看',
+      if (canSetStatus && currentType != BgmConst.episodeDropped) '抛弃',
+      if (canSetStatus && currentType != BgmConst.episodeNotCollected) '撤销',
       '讨论($commentCount)',
     ];
 
