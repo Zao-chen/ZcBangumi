@@ -15,6 +15,9 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SearchPage()));
 
+    await tester.tap(find.text('条目'));
+    await tester.pumpAndSettle();
+
     final searchRect = tester.getRect(
       find.byKey(const Key('search_query_field')),
     );
@@ -91,6 +94,9 @@ void main() {
         child: const MaterialApp(home: SearchPage()),
       ),
     );
+
+    await tester.tap(find.text('条目'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('search_advanced_filter_button')));
     await tester.pumpAndSettle();

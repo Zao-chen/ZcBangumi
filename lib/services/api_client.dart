@@ -8,6 +8,7 @@ import '../models/character.dart';
 import '../models/collection.dart';
 import '../models/comment.dart';
 import '../models/episode.dart';
+import '../models/entity_search.dart';
 import '../models/bangumi_web_session.dart';
 import '../models/person.dart';
 import '../models/rakuen_topic.dart';
@@ -274,6 +275,92 @@ class ApiClient {
       offset: (payload['offset'] as num?)?.toInt() ?? offset,
       data: subjects,
     );
+  }
+
+  /// 使用官方 v0 API 搜索角色。
+  Future<PagedResult<Character>> searchCharacters({
+    required String keyword,
+    CharacterSearchFilter filter = const CharacterSearchFilter(),
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final normalizedKeyword = _validateSearchArguments(
+      keyword: keyword,
+      limit: limit,
+      offset: offset,
+    );
+    final request = CharacterSearchRequest(
+      keyword: normalizedKeyword,
+      filter: filter,
+    );
+    final resp = await _dio.post(
+      '/v0/search/characters',
+      queryParameters: {'limit': limit, 'offset': offset},
+      data: request.toJson(),
+    );
+    final payload = Map<String, dynamic>.from(resp.data as Map);
+    final characters = (payload['data'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Character.fromJson(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+    return PagedResult<Character>(
+      total: (payload['total'] as num?)?.toInt() ?? characters.length,
+      limit: (payload['limit'] as num?)?.toInt() ?? limit,
+      offset: (payload['offset'] as num?)?.toInt() ?? offset,
+      data: characters,
+    );
+  }
+
+  /// 使用官方 v0 API 搜索人物。
+  Future<PagedResult<PersonSummary>> searchPersons({
+    required String keyword,
+    PersonSearchFilter filter = const PersonSearchFilter(),
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final normalizedKeyword = _validateSearchArguments(
+      keyword: keyword,
+      limit: limit,
+      offset: offset,
+    );
+    final request = PersonSearchRequest(
+      keyword: normalizedKeyword,
+      filter: filter,
+    );
+    final resp = await _dio.post(
+      '/v0/search/persons',
+      queryParameters: {'limit': limit, 'offset': offset},
+      data: request.toJson(),
+    );
+    final payload = Map<String, dynamic>.from(resp.data as Map);
+    final persons = (payload['data'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => PersonSummary.fromJson(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+    return PagedResult<PersonSummary>(
+      total: (payload['total'] as num?)?.toInt() ?? persons.length,
+      limit: (payload['limit'] as num?)?.toInt() ?? limit,
+      offset: (payload['offset'] as num?)?.toInt() ?? offset,
+      data: persons,
+    );
+  }
+
+  String _validateSearchArguments({
+    required String keyword,
+    required int limit,
+    required int offset,
+  }) {
+    final normalizedKeyword = keyword.trim();
+    if (normalizedKeyword.isEmpty) {
+      throw ArgumentError.value(keyword, 'keyword', '搜索关键词不能为空');
+    }
+    if (limit <= 0) {
+      throw ArgumentError.value(limit, 'limit', '必须大于 0');
+    }
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', '不能小于 0');
+    }
+    return normalizedKeyword;
   }
 
   Future<BangumiTagPageResult> getAnimeTags({int page = 1}) async {

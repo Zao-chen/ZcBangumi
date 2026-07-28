@@ -163,7 +163,7 @@ class _ProgressPageState extends State<ProgressPage>
             ),
           IconButton(
             icon: const Icon(Icons.search),
-            tooltip: '搜索条目',
+            tooltip: '统一搜索',
             onPressed: () => _showSearchPage(context),
           ),
         ],
