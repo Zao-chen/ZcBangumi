@@ -6,6 +6,7 @@ class Character {
   final List<CharacterImage> images;
   final String comment;
   final int collects;
+  final int comments;
   final String relation; // 主角/配角
   final String summary; // 详细描述
   final Map<String, String> infobox; // 详细信息
@@ -17,6 +18,7 @@ class Character {
     required this.images,
     required this.comment,
     required this.collects,
+    this.comments = 0,
     required this.relation,
     this.summary = '',
     Map<String, String>? infobox,
@@ -54,13 +56,21 @@ class Character {
       }
     }
 
+    final stat = json['stat'] is Map
+        ? Map<String, dynamic>.from(json['stat'] as Map)
+        : const <String, dynamic>{};
+
     return Character(
       id: json['id'] as int,
       name: (json['name'] as String?) ?? '',
       type: typeStr,
       images: imagesList,
       comment: (json['comment'] as String?) ?? '',
-      collects: (json['collects'] as int?) ?? 0,
+      collects:
+          (stat['collects'] as num?)?.toInt() ??
+          (json['collects'] as num?)?.toInt() ??
+          0,
+      comments: (stat['comments'] as num?)?.toInt() ?? 0,
       relation: (json['relation'] as String?) ?? '',
       summary: (json['summary'] as String?) ?? '',
       infobox: infoboxMap,
@@ -71,9 +81,10 @@ class Character {
     'id': id,
     'name': name,
     'type': type,
-    'images': images.map((e) => e.toJson()).toList(),
+    if (images.isNotEmpty) 'images': images.first.toJson(),
     'comment': comment,
     'collects': collects,
+    'stat': {'comments': comments, 'collects': collects},
     'relation': relation,
     'summary': summary,
     'infobox': infobox.entries

@@ -1,110 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+
 import '../constants.dart';
+import '../models/character.dart';
+import '../models/person.dart';
 import '../models/subject.dart';
 import '../models/subject_search.dart';
-import '../pages/subject_page.dart';
-import '../providers/app_state_provider.dart';
+import '../models/unified_search.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_client.dart';
+import '../widgets/search_filter_drawer.dart';
+import '../widgets/search_result_cards.dart';
 
-enum _NsfwMode { any, safeOnly, adultOnly }
-
-class _SearchAdvancedOptions {
-  final List<String> metaTags;
-  final List<String> tags;
-  final DateTime? airDateFrom;
-  final DateTime? airDateTo;
-  final double? ratingMin;
-  final double? ratingMax;
-  final int? ratingCountMin;
-  final int? ratingCountMax;
-  final int? rankMin;
-  final int? rankMax;
-  final _NsfwMode nsfwMode;
-
-  const _SearchAdvancedOptions({
-    this.metaTags = const [],
-    this.tags = const [],
-    this.airDateFrom,
-    this.airDateTo,
-    this.ratingMin,
-    this.ratingMax,
-    this.ratingCountMin,
-    this.ratingCountMax,
-    this.rankMin,
-    this.rankMax,
-    this.nsfwMode = _NsfwMode.any,
-  });
-
-  bool get isEmpty => activeLabels.isEmpty;
-
-  List<String> get activeLabels => [
-    if (metaTags.isNotEmpty) '公共标签',
-    if (tags.isNotEmpty) '用户标签',
-    if (airDateFrom != null || airDateTo != null) '日期',
-    if (ratingMin != null || ratingMax != null) '评分',
-    if (ratingCountMin != null || ratingCountMax != null) '评分人数',
-    if (rankMin != null || rankMax != null) '排名',
-    if (nsfwMode != _NsfwMode.any) 'NSFW',
-  ];
-
-  SubjectSearchFilter toApiFilter({required int? subjectType}) {
-    return SubjectSearchFilter(
-      types: subjectType == null ? const [] : [subjectType],
-      metaTags: metaTags,
-      tags: tags,
-      airDates: [
-        if (airDateFrom != null) '>=${_formatApiDate(airDateFrom!)}',
-        if (airDateTo != null) '<=${_formatApiDate(airDateTo!)}',
-      ],
-      ratings: [
-        if (ratingMin != null) '>=${_formatNumber(ratingMin!)}',
-        if (ratingMax != null) '<=${_formatNumber(ratingMax!)}',
-      ],
-      ratingCounts: [
-        if (ratingCountMin != null) '>=$ratingCountMin',
-        if (ratingCountMax != null) '<=$ratingCountMax',
-      ],
-      ranks: [
-        if (rankMin != null) '>=$rankMin',
-        if (rankMax != null) '<=$rankMax',
-      ],
-      nsfw: switch (nsfwMode) {
-        _NsfwMode.any => null,
-        _NsfwMode.safeOnly => false,
-        _NsfwMode.adultOnly => true,
-      },
-    );
-  }
-}
-
-class _SearchFilterSelection {
-  final SubjectSearchSort sort;
-  final _SearchAdvancedOptions options;
-
-  const _SearchFilterSelection({required this.sort, required this.options});
-}
-
-String _formatApiDate(DateTime date) =>
-    '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
-
-String _formatNumber(double value) => value == value.roundToDouble()
-    ? value.toInt().toString()
-    : value.toString();
-
-String _subjectSearchSortLabel(SubjectSearchSort sort) => switch (sort) {
-  SubjectSearchSort.match => '匹配程度',
-  SubjectSearchSort.heat => '收藏热度',
-  SubjectSearchSort.rank => '排名',
-  SubjectSearchSort.score => '评分',
-};
-
-/// 条目搜索页面
+/// 同时支持条目、角色和人物的统一搜索页面。
 class SearchPage extends StatefulWidget {
   final int? initialSubjectType;
+
   const SearchPage({super.key, this.initialSubjectType});
 
   @override
@@ -112,27 +23,12 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  late TextEditingController _searchController;
-  final ScrollController _resultsController = ScrollController();
-  List<SlimSubject> _searchResults = [];
-  bool _isSearching = false;
-  bool _isLoadingMore = false;
-  String? _searchError;
-  String? _loadMoreError;
-  late int _selectedSubjectType;
-  String _submittedQuery = '';
-  int _searchGeneration = 0;
-  int _resultTotal = 0;
-  int _nextOffset = 0;
-  SubjectSearchSort _searchSort = SubjectSearchSort.match;
-  _SearchAdvancedOptions _advancedOptions = const _SearchAdvancedOptions();
-
-  // 0 表示全部类型
-  static const int _allTypes = 0;
+  static const int _allSubjectTypes = 0;
   static const int _pageSize = 30;
+  static const int _previewSize = 6;
 
   static const _subjectTypes = [
-    (type: _allTypes, label: '全部', icon: Icons.apps_outlined),
+    (type: _allSubjectTypes, label: '全部', icon: Icons.apps_outlined),
     (type: BgmConst.subjectAnime, label: '动画', icon: Icons.movie_outlined),
     (
       type: BgmConst.subjectGame,
@@ -144,11 +40,41 @@ class _SearchPageState extends State<SearchPage> {
     (type: BgmConst.subjectReal, label: '三次元', icon: Icons.tv_outlined),
   ];
 
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _resultsController = ScrollController();
+
+  late SearchScope _scope;
+  late int _selectedSubjectType;
+  SubjectSearchSort _subjectSort = SubjectSearchSort.match;
+  UnifiedSearchOptions _options = const UnifiedSearchOptions();
+
+  List<SlimSubject> _subjects = const [];
+  List<Character> _characters = const [];
+  List<PersonSummary> _persons = const [];
+  int _subjectTotal = 0;
+  int _characterTotal = 0;
+  int _personTotal = 0;
+  int _subjectOffset = 0;
+  int _characterOffset = 0;
+  int _personOffset = 0;
+
+  bool _isSearching = false;
+  bool _isLoadingMore = false;
+  String _submittedQuery = '';
+  String? _searchError;
+  String? _loadMoreError;
+  String? _subjectError;
+  String? _characterError;
+  String? _personError;
+  int _searchGeneration = 0;
+
   @override
   void initState() {
     super.initState();
-    _searchController = TextEditingController();
-    _selectedSubjectType = widget.initialSubjectType ?? _allTypes;
+    _scope = widget.initialSubjectType == null
+        ? SearchScope.all
+        : SearchScope.subjects;
+    _selectedSubjectType = widget.initialSubjectType ?? _allSubjectTypes;
     _resultsController.addListener(_handleResultsScroll);
   }
 
@@ -159,13 +85,17 @@ class _SearchPageState extends State<SearchPage> {
     super.dispose();
   }
 
-  SubjectSearchFilter get _searchFilter => _advancedOptions.toApiFilter(
-    subjectType: _selectedSubjectType == _allTypes
-        ? null
-        : _selectedSubjectType,
-  );
+  int? get _subjectTypeFilter =>
+      _scope != SearchScope.subjects || _selectedSubjectType == _allSubjectTypes
+      ? null
+      : _selectedSubjectType;
 
-  bool get _hasMoreResults => _nextOffset < _resultTotal;
+  bool get _hasMoreResults => switch (_scope) {
+    SearchScope.subjects => _subjectOffset < _subjectTotal,
+    SearchScope.characters => _characterOffset < _characterTotal,
+    SearchScope.persons => _personOffset < _personTotal,
+    SearchScope.all => false,
+  };
 
   void _handleResultsScroll() {
     if (!_resultsController.hasClients ||
@@ -178,66 +108,161 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _search(String keyword) async {
     final query = keyword.trim();
     final generation = ++_searchGeneration;
-
     if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _searchError = null;
-        _loadMoreError = null;
-        _submittedQuery = '';
-        _isSearching = false;
-        _isLoadingMore = false;
-        _resultTotal = 0;
-        _nextOffset = 0;
-      });
+      _clearSearchState(clearInput: false);
       return;
     }
 
     setState(() {
+      _submittedQuery = query;
       _isSearching = true;
       _isLoadingMore = false;
       _searchError = null;
       _loadMoreError = null;
-      _submittedQuery = query;
-      _searchResults = [];
-      _resultTotal = 0;
-      _nextOffset = 0;
+      _subjectError = null;
+      _characterError = null;
+      _personError = null;
+      _subjects = const [];
+      _characters = const [];
+      _persons = const [];
+      _subjectTotal = 0;
+      _characterTotal = 0;
+      _personTotal = 0;
+      _subjectOffset = 0;
+      _characterOffset = 0;
+      _personOffset = 0;
     });
 
+    if (_scope == SearchScope.all) {
+      await _searchAll(query, generation);
+    } else {
+      await _searchSingleScope(query, generation);
+    }
+  }
+
+  Future<void> _searchAll(String query, int generation) async {
+    final api = context.read<AuthProvider>().api;
+    const unfilteredOptions = UnifiedSearchOptions();
+    PagedResult<SlimSubject>? subjectPage;
+    PagedResult<Character>? characterPage;
+    PagedResult<PersonSummary>? personPage;
+    String? subjectError;
+    String? characterError;
+    String? personError;
+
+    Future<void> loadSubjects() async {
+      try {
+        subjectPage = await api.searchSubjects(
+          keyword: query,
+          sort: SubjectSearchSort.match,
+          filter: unfilteredOptions.toSubjectFilter(subjectType: null),
+          limit: _previewSize,
+        );
+      } catch (_) {
+        subjectError = '条目搜索暂时不可用';
+      }
+    }
+
+    Future<void> loadCharacters() async {
+      try {
+        characterPage = await api.searchCharacters(
+          keyword: query,
+          filter: unfilteredOptions.toCharacterFilter(),
+          limit: _previewSize,
+        );
+      } catch (_) {
+        characterError = '角色搜索暂时不可用';
+      }
+    }
+
+    Future<void> loadPersons() async {
+      try {
+        personPage = await api.searchPersons(
+          keyword: query,
+          filter: unfilteredOptions.toPersonFilter(),
+          limit: _previewSize,
+        );
+      } catch (_) {
+        personError = '人物搜索暂时不可用';
+      }
+    }
+
+    await Future.wait([loadSubjects(), loadCharacters(), loadPersons()]);
+    if (!mounted || generation != _searchGeneration) return;
+
+    final allFailed =
+        subjectPage == null && characterPage == null && personPage == null;
+    setState(() {
+      _subjects = subjectPage?.data ?? const [];
+      _characters = characterPage?.data ?? const [];
+      _persons = personPage?.data ?? const [];
+      _subjectTotal = subjectPage?.total ?? 0;
+      _characterTotal = characterPage?.total ?? 0;
+      _personTotal = personPage?.total ?? 0;
+      _subjectOffset = _nextOffset(subjectPage);
+      _characterOffset = _nextOffset(characterPage);
+      _personOffset = _nextOffset(personPage);
+      _subjectError = subjectError;
+      _characterError = characterError;
+      _personError = personError;
+      _searchError = allFailed ? '搜索服务暂时不可用，请稍后重试' : null;
+      _isSearching = false;
+    });
+    _scrollToTop(generation);
+  }
+
+  Future<void> _searchSingleScope(String query, int generation) async {
+    final api = context.read<AuthProvider>().api;
     try {
-      final auth = context.read<AuthProvider>();
-      final page = await auth.api.searchSubjects(
-        keyword: query,
-        sort: _searchSort,
-        filter: _searchFilter,
-        limit: _pageSize,
-      );
-
-      if (!mounted || generation != _searchGeneration) return;
-
-      setState(() {
-        _searchResults = page.data;
-        _resultTotal = page.total;
-        _nextOffset = page.data.isEmpty
-            ? page.total
-            : page.offset + page.data.length;
-        _isSearching = false;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted ||
-            generation != _searchGeneration ||
-            !_resultsController.hasClients) {
+      switch (_scope) {
+        case SearchScope.subjects:
+          final page = await api.searchSubjects(
+            keyword: query,
+            sort: _subjectSort,
+            filter: _options.toSubjectFilter(subjectType: _subjectTypeFilter),
+            limit: _pageSize,
+          );
+          if (!mounted || generation != _searchGeneration) return;
+          setState(() {
+            _subjects = page.data;
+            _subjectTotal = page.total;
+            _subjectOffset = _nextOffset(page);
+          });
+        case SearchScope.characters:
+          final page = await api.searchCharacters(
+            keyword: query,
+            filter: _options.toCharacterFilter(),
+            limit: _pageSize,
+          );
+          if (!mounted || generation != _searchGeneration) return;
+          setState(() {
+            _characters = page.data;
+            _characterTotal = page.total;
+            _characterOffset = _nextOffset(page);
+          });
+        case SearchScope.persons:
+          final page = await api.searchPersons(
+            keyword: query,
+            filter: _options.toPersonFilter(),
+            limit: _pageSize,
+          );
+          if (!mounted || generation != _searchGeneration) return;
+          setState(() {
+            _persons = page.data;
+            _personTotal = page.total;
+            _personOffset = _nextOffset(page);
+          });
+        case SearchScope.all:
           return;
-        }
-        _resultsController.jumpTo(0);
-      });
-    } catch (e) {
+      }
       if (!mounted || generation != _searchGeneration) return;
-
+      setState(() => _isSearching = false);
+      _scrollToTop(generation);
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _isSearching = false;
         _searchError = '网络错误，请稍后重试';
-        _searchResults = [];
       });
     }
   }
@@ -246,42 +271,70 @@ class _SearchPageState extends State<SearchPage> {
     if (_isSearching ||
         _isLoadingMore ||
         !_hasMoreResults ||
-        _submittedQuery.isEmpty) {
+        _submittedQuery.isEmpty ||
+        _scope == SearchScope.all) {
       return;
     }
 
     final generation = _searchGeneration;
-    final query = _submittedQuery;
-    final offset = _nextOffset;
+    final api = context.read<AuthProvider>().api;
     setState(() {
       _isLoadingMore = true;
       _loadMoreError = null;
     });
 
     try {
-      final auth = context.read<AuthProvider>();
-      final page = await auth.api.searchSubjects(
-        keyword: query,
-        sort: _searchSort,
-        filter: _searchFilter,
-        limit: _pageSize,
-        offset: offset,
-      );
+      switch (_scope) {
+        case SearchScope.subjects:
+          final page = await api.searchSubjects(
+            keyword: _submittedQuery,
+            sort: _subjectSort,
+            filter: _options.toSubjectFilter(subjectType: _subjectTypeFilter),
+            limit: _pageSize,
+            offset: _subjectOffset,
+          );
+          if (!mounted || generation != _searchGeneration) return;
+          setState(() {
+            _subjects = _mergeUnique(_subjects, page.data, (item) => item.id);
+            _subjectTotal = page.total;
+            _subjectOffset = _nextOffset(page);
+          });
+        case SearchScope.characters:
+          final page = await api.searchCharacters(
+            keyword: _submittedQuery,
+            filter: _options.toCharacterFilter(),
+            limit: _pageSize,
+            offset: _characterOffset,
+          );
+          if (!mounted || generation != _searchGeneration) return;
+          setState(() {
+            _characters = _mergeUnique(
+              _characters,
+              page.data,
+              (item) => item.id,
+            );
+            _characterTotal = page.total;
+            _characterOffset = _nextOffset(page);
+          });
+        case SearchScope.persons:
+          final page = await api.searchPersons(
+            keyword: _submittedQuery,
+            filter: _options.toPersonFilter(),
+            limit: _pageSize,
+            offset: _personOffset,
+          );
+          if (!mounted || generation != _searchGeneration) return;
+          setState(() {
+            _persons = _mergeUnique(_persons, page.data, (item) => item.id);
+            _personTotal = page.total;
+            _personOffset = _nextOffset(page);
+          });
+        case SearchScope.all:
+          return;
+      }
       if (!mounted || generation != _searchGeneration) return;
-
-      final knownIds = _searchResults.map((item) => item.id).toSet();
-      final newItems = page.data
-          .where((item) => knownIds.add(item.id))
-          .toList(growable: false);
-      setState(() {
-        _searchResults = [..._searchResults, ...newItems];
-        _resultTotal = page.total;
-        _nextOffset = page.data.isEmpty
-            ? page.total
-            : page.offset + page.data.length;
-        _isLoadingMore = false;
-      });
-    } catch (e) {
+      setState(() => _isLoadingMore = false);
+    } catch (_) {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _isLoadingMore = false;
@@ -293,7 +346,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('搜索条目'), centerTitle: false),
+      appBar: AppBar(title: const Text('搜索'), centerTitle: false),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 900;
@@ -301,7 +354,7 @@ class _SearchPageState extends State<SearchPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildTypeRail(),
+                _buildScopeRail(),
                 const VerticalDivider(width: 1),
                 Expanded(
                   child: Column(
@@ -310,6 +363,10 @@ class _SearchPageState extends State<SearchPage> {
                         padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
                         child: _buildSearchField(),
                       ),
+                      if (_scope == SearchScope.subjects)
+                        _buildSubjectTypeChips(),
+                      if (_scope == SearchScope.subjects)
+                        const SizedBox(height: 8),
                       Expanded(child: _buildResultContent(24, true)),
                     ],
                   ),
@@ -320,18 +377,16 @@ class _SearchPageState extends State<SearchPage> {
 
           return Column(
             children: [
-              // 搜索框
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: _buildSearchField(),
               ),
-
-              // 类型筛选
-              _buildTypeChips(),
-
-              const SizedBox(height: 16),
-
-              // 搜索结果
+              _buildScopeChips(),
+              if (_scope == SearchScope.subjects) ...[
+                const SizedBox(height: 6),
+                _buildSubjectTypeChips(),
+              ],
+              const SizedBox(height: 10),
               Expanded(child: _buildResultContent(12, false)),
             ],
           );
@@ -341,9 +396,14 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSearchField() {
-    final activeFilterCount = _advancedOptions.activeLabels.length;
-    final hasCustomSearch =
-        activeFilterCount > 0 || _searchSort != SubjectSearchSort.match;
+    final supportsFilters = _scope != SearchScope.all;
+    final activeFilterCount = supportsFilters
+        ? _options.activeLabelsFor(_scope).length
+        : 0;
+    final sortIsCustom =
+        _scope == SearchScope.subjects &&
+        _subjectSort != SubjectSearchSort.match;
+    final hasCustomSearch = activeFilterCount > 0 || sortIsCustom;
     return Row(
       children: [
         Expanded(
@@ -353,7 +413,12 @@ class _SearchPageState extends State<SearchPage> {
             autofocus: true,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: '搜索条目...',
+              hintText: switch (_scope) {
+                SearchScope.all => '搜索条目、角色或人物...',
+                SearchScope.subjects => '搜索条目...',
+                SearchScope.characters => '搜索角色...',
+                SearchScope.persons => '搜索人物...',
+              },
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
@@ -364,37 +429,105 @@ class _SearchPageState extends State<SearchPage> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
             ),
-            onChanged: (value) {
-              setState(() {});
-            },
+            onChanged: (_) => setState(() {}),
             onSubmitted: _search,
           ),
         ),
-        const SizedBox(width: 10),
-        Badge(
-          isLabelVisible: activeFilterCount > 0,
-          label: Text('$activeFilterCount'),
-          child: IconButton(
-            key: const Key('search_advanced_filter_button'),
-            onPressed: _showFilterDrawer,
-            tooltip: hasCustomSearch ? '筛选与排序（已自定义）' : '筛选与排序',
-            icon: const Icon(Icons.tune_rounded),
-            style: IconButton.styleFrom(
-              fixedSize: const Size(48, 48),
-              backgroundColor: hasCustomSearch
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              foregroundColor: hasCustomSearch
-                  ? Theme.of(context).colorScheme.onPrimaryContainer
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+        if (supportsFilters) ...[
+          const SizedBox(width: 10),
+          Badge(
+            isLabelVisible: activeFilterCount > 0,
+            label: Text('$activeFilterCount'),
+            child: IconButton(
+              key: const Key('search_advanced_filter_button'),
+              onPressed: _showFilterDrawer,
+              tooltip: hasCustomSearch ? '筛选与排序（已自定义）' : '筛选与排序',
+              icon: const Icon(Icons.tune_rounded),
+              style: IconButton.styleFrom(
+                fixedSize: const Size(48, 48),
+                backgroundColor: hasCustomSearch
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                foregroundColor: hasCustomSearch
+                    ? Theme.of(context).colorScheme.onPrimaryContainer
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildScopeChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SegmentedButton<SearchScope>(
+        key: const Key('search_scope_selector'),
+        showSelectedIcon: false,
+        segments: SearchScope.values
+            .map(
+              (scope) => ButtonSegment(
+                value: scope,
+                icon: Icon(scope.icon, size: 18),
+                label: Text(scope.label),
+              ),
+            )
+            .toList(),
+        selected: {_scope},
+        onSelectionChanged: (selection) => _selectScope(selection.single),
+      ),
+    );
+  }
+
+  Widget _buildScopeRail() {
+    return NavigationRail(
+      minWidth: 104,
+      labelType: NavigationRailLabelType.all,
+      selectedIndex: SearchScope.values.indexOf(_scope),
+      onDestinationSelected: (index) => _selectScope(SearchScope.values[index]),
+      destinations: SearchScope.values
+          .map(
+            (scope) => NavigationRailDestination(
+              icon: Icon(scope.icon),
+              label: Text(scope.label),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildSubjectTypeChips() {
+    return Row(
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 16, right: 4),
+          child: Text('条目类型'),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: _subjectTypes
+                  .map(
+                    (config) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FilterChip(
+                        key: Key('search_subject_type_${config.type}'),
+                        selected: _selectedSubjectType == config.type,
+                        avatar: Icon(config.icon, size: 16),
+                        label: Text(config.label),
+                        onSelected: (_) => _selectSubjectType(config.type),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
         ),
@@ -403,7 +536,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _showFilterDrawer() async {
-    final result = await showGeneralDialog<_SearchFilterSelection>(
+    final result = await showGeneralDialog<SearchFilterSelection>(
       context: context,
       barrierDismissible: true,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
@@ -422,9 +555,10 @@ class _SearchPageState extends State<SearchPage> {
               borderRadius: BorderRadius.circular(18),
               child: SizedBox(
                 width: screenWidth < 404 ? screenWidth - 24 : 380,
-                child: _SearchFilterDrawer(
-                  initialSort: _searchSort,
-                  initialOptions: _advancedOptions,
+                child: SearchFilterDrawer(
+                  scope: _scope,
+                  initialSort: _subjectSort,
+                  initialOptions: _options,
                 ),
               ),
             ),
@@ -447,94 +581,56 @@ class _SearchPageState extends State<SearchPage> {
       },
     );
     if (result == null || !mounted) return;
-
     setState(() {
-      _searchSort = result.sort;
-      _advancedOptions = result.options;
+      _subjectSort = result.sort;
+      _options = result.options;
     });
-    if (_submittedQuery.isNotEmpty) {
-      _search(_submittedQuery);
-    }
+    if (_submittedQuery.isNotEmpty) _search(_submittedQuery);
   }
 
-  Widget _buildTypeChips() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _subjectTypes.map((config) {
-            final isSelected = _selectedSubjectType == config.type;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: FilterChip(
-                selected: isSelected,
-                label: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(config.icon, size: 16),
-                    const SizedBox(width: 4),
-                    Text(config.label),
-                  ],
-                ),
-                onSelected: (_) => _selectSubjectType(config.type),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeRail() {
-    return NavigationRail(
-      minWidth: 112,
-      labelType: NavigationRailLabelType.all,
-      selectedIndex: _selectedSubjectIndex,
-      onDestinationSelected: (index) {
-        _selectSubjectType(_subjectTypes[index].type);
-      },
-      destinations: _subjectTypes
-          .map(
-            (config) => NavigationRailDestination(
-              icon: Icon(config.icon),
-              selectedIcon: Icon(config.icon),
-              label: Text(config.label),
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  int get _selectedSubjectIndex {
-    final index = _subjectTypes.indexWhere(
-      (config) => config.type == _selectedSubjectType,
-    );
-    return index >= 0 ? index : 0;
+  void _selectScope(SearchScope scope) {
+    if (_scope == scope) return;
+    _searchGeneration++;
+    setState(() {
+      _scope = scope;
+      _searchError = null;
+      _loadMoreError = null;
+    });
+    if (_submittedQuery.isNotEmpty) _search(_submittedQuery);
   }
 
   void _selectSubjectType(int type) {
     if (_selectedSubjectType == type) return;
-    setState(() {
-      _selectedSubjectType = type;
-    });
-    if (_submittedQuery.isNotEmpty) {
-      _search(_submittedQuery);
-    }
+    setState(() => _selectedSubjectType = type);
+    if (_submittedQuery.isNotEmpty) _search(_submittedQuery);
   }
 
   void _clearSearch() {
-    _searchGeneration++;
     _searchController.clear();
+    _clearSearchState(clearInput: false);
+  }
+
+  void _clearSearchState({required bool clearInput}) {
+    _searchGeneration++;
+    if (clearInput) _searchController.clear();
     setState(() {
-      _searchResults = [];
-      _searchError = null;
-      _loadMoreError = null;
       _submittedQuery = '';
+      _subjects = const [];
+      _characters = const [];
+      _persons = const [];
+      _subjectTotal = 0;
+      _characterTotal = 0;
+      _personTotal = 0;
+      _subjectOffset = 0;
+      _characterOffset = 0;
+      _personOffset = 0;
       _isSearching = false;
       _isLoadingMore = false;
-      _resultTotal = 0;
-      _nextOffset = 0;
+      _searchError = null;
+      _loadMoreError = null;
+      _subjectError = null;
+      _characterError = null;
+      _personError = null;
     });
   }
 
@@ -542,60 +638,112 @@ class _SearchPageState extends State<SearchPage> {
     if (_isSearching) {
       return _buildSearchSkeletonList(horizontalPadding, isWide);
     }
-
-    if (_searchError != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text(
-              _searchError!,
-              style: TextStyle(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            FilledButton.tonal(
-              onPressed: () => _search(_submittedQuery),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
+    if (_searchError != null) return _buildErrorState(_searchError!);
+    if (_submittedQuery.isEmpty) {
+      return _buildMessageState(
+        icon: Icons.manage_search_outlined,
+        message: '输入关键词搜索条目、角色或人物',
       );
     }
-
-    if (_searchResults.isEmpty && _submittedQuery.isNotEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inbox_outlined, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text('没有找到相关条目', style: TextStyle(color: Colors.grey[600])),
-          ],
-        ),
-      );
+    if (_scope == SearchScope.all) {
+      return _buildAllResults(horizontalPadding);
     }
 
-    if (_searchResults.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_outlined, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Text('输入条目名称进行搜索', style: TextStyle(color: Colors.grey[600])),
-          ],
+    final (count, emptyMessage, builder) = switch (_scope) {
+      SearchScope.subjects => (
+        _subjects.length,
+        '没有找到相关条目',
+        (int index) => SubjectSearchResultCard(
+          key: ValueKey('subject_${_subjects[index].id}'),
+          subject: _subjects[index],
         ),
+      ),
+      SearchScope.characters => (
+        _characters.length,
+        '没有找到相关角色',
+        (int index) => CharacterSearchResultCard(
+          key: ValueKey('character_${_characters[index].id}'),
+          character: _characters[index],
+        ),
+      ),
+      SearchScope.persons => (
+        _persons.length,
+        '没有找到相关人物',
+        (int index) => PersonSearchResultCard(
+          key: ValueKey('person_${_persons[index].id}'),
+          person: _persons[index],
+        ),
+      ),
+      SearchScope.all => throw StateError('全部搜索使用分组结果'),
+    };
+    if (count == 0) {
+      return _buildMessageState(
+        icon: Icons.inbox_outlined,
+        message: emptyMessage,
       );
     }
+    return _buildPagedResultList(
+      horizontalPadding: horizontalPadding,
+      isWide: isWide,
+      count: count,
+      itemBuilder: builder,
+    );
+  }
 
+  Widget _buildAllResults(double horizontalPadding) {
+    return ListView(
+      controller: _resultsController,
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 24),
+      children: [
+        SearchPreviewSection(
+          key: const Key('search_section_subjects'),
+          title: '条目',
+          icon: SearchScope.subjects.icon,
+          total: _subjectTotal,
+          error: _subjectError,
+          onShowAll: () => _selectScope(SearchScope.subjects),
+          children: _subjects
+              .map((subject) => SubjectSearchResultCard(subject: subject))
+              .toList(),
+        ),
+        SearchPreviewSection(
+          key: const Key('search_section_characters'),
+          title: '角色',
+          icon: SearchScope.characters.icon,
+          total: _characterTotal,
+          error: _characterError,
+          onShowAll: () => _selectScope(SearchScope.characters),
+          children: _characters
+              .map(
+                (character) => CharacterSearchResultCard(character: character),
+              )
+              .toList(),
+        ),
+        SearchPreviewSection(
+          key: const Key('search_section_persons'),
+          title: '人物',
+          icon: SearchScope.persons.icon,
+          total: _personTotal,
+          error: _personError,
+          onShowAll: () => _selectScope(SearchScope.persons),
+          children: _persons
+              .map((person) => PersonSearchResultCard(person: person))
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPagedResultList({
+    required double horizontalPadding,
+    required bool isWide,
+    required int count,
+    required Widget Function(int index) itemBuilder,
+  }) {
     final listPadding = EdgeInsets.symmetric(
       horizontal: horizontalPadding,
       vertical: isWide ? 4 : 0,
     );
-
     return CustomScrollView(
       controller: _resultsController,
       slivers: [
@@ -610,22 +758,51 @@ class _SearchPageState extends State<SearchPage> {
                     mainAxisSpacing: 4,
                   ),
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) =>
-                        _SearchResultCard(subject: _searchResults[index]),
-                    childCount: _searchResults.length,
+                    (context, index) => itemBuilder(index),
+                    childCount: count,
                   ),
                 )
               : SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) =>
-                        _SearchResultCard(subject: _searchResults[index]),
-                    childCount: _searchResults.length,
+                    (context, index) => itemBuilder(index),
+                    childCount: count,
                   ),
                 ),
         ),
         if (_hasMoreResults || _isLoadingMore || _loadMoreError != null)
           SliverToBoxAdapter(child: _buildPaginationFooter()),
       ],
+    );
+  }
+
+  Widget _buildErrorState(String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: () => _search(_submittedQuery),
+            child: const Text('重试'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageState({required IconData icon, required String message}) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 12),
+          Text(message, style: TextStyle(color: Colors.grey[600])),
+        ],
+      ),
     );
   }
 
@@ -636,7 +813,6 @@ class _SearchPageState extends State<SearchPage> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
-
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Center(
@@ -653,11 +829,6 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildSearchSkeletonList(double horizontalPadding, bool isWide) {
     final colorScheme = Theme.of(context).colorScheme;
-    final listPadding = EdgeInsets.symmetric(
-      horizontal: horizontalPadding,
-      vertical: isWide ? 4 : 0,
-    );
-
     Widget skeletonCard(int index) {
       return Card(
         margin: const EdgeInsets.symmetric(vertical: 6),
@@ -666,11 +837,10 @@ class _SearchPageState extends State<SearchPage> {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 60,
-                height: 84,
+                height: 80,
                 decoration: BoxDecoration(
                   color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(6),
@@ -681,32 +851,11 @@ class _SearchPageState extends State<SearchPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 160,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      width: 190,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
+                    _skeletonLine(colorScheme, 160, 14),
+                    const SizedBox(height: 10),
+                    _skeletonLine(colorScheme, double.infinity, 10),
+                    const SizedBox(height: 7),
+                    _skeletonLine(colorScheme, 190, 10),
                   ],
                 ),
               ),
@@ -718,7 +867,7 @@ class _SearchPageState extends State<SearchPage> {
 
     if (isWide) {
       return GridView.builder(
-        padding: listPadding,
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           mainAxisExtent: 112,
@@ -729,627 +878,131 @@ class _SearchPageState extends State<SearchPage> {
         itemBuilder: (context, index) => skeletonCard(index),
       );
     }
-
     return ListView.builder(
-      padding: listPadding,
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       itemCount: 6,
       itemBuilder: (context, index) => skeletonCard(index),
     );
   }
-}
 
-class _SearchFilterDrawer extends StatefulWidget {
-  final SubjectSearchSort initialSort;
-  final _SearchAdvancedOptions initialOptions;
-
-  const _SearchFilterDrawer({
-    required this.initialSort,
-    required this.initialOptions,
-  });
-
-  @override
-  State<_SearchFilterDrawer> createState() => _SearchFilterDrawerState();
-}
-
-class _SearchFilterDrawerState extends State<_SearchFilterDrawer> {
-  late final TextEditingController _metaTagsController;
-  late final TextEditingController _tagsController;
-  late final TextEditingController _ratingMinController;
-  late final TextEditingController _ratingMaxController;
-  late final TextEditingController _ratingCountMinController;
-  late final TextEditingController _ratingCountMaxController;
-  late final TextEditingController _rankMinController;
-  late final TextEditingController _rankMaxController;
-  DateTime? _airDateFrom;
-  DateTime? _airDateTo;
-  late SubjectSearchSort _sort;
-  late _NsfwMode _nsfwMode;
-  String? _validationError;
-
-  @override
-  void initState() {
-    super.initState();
-    final options = widget.initialOptions;
-    _metaTagsController = TextEditingController(
-      text: options.metaTags.join(', '),
-    );
-    _tagsController = TextEditingController(text: options.tags.join(', '));
-    _ratingMinController = TextEditingController(
-      text: options.ratingMin == null ? '' : _formatNumber(options.ratingMin!),
-    );
-    _ratingMaxController = TextEditingController(
-      text: options.ratingMax == null ? '' : _formatNumber(options.ratingMax!),
-    );
-    _ratingCountMinController = TextEditingController(
-      text: options.ratingCountMin?.toString() ?? '',
-    );
-    _ratingCountMaxController = TextEditingController(
-      text: options.ratingCountMax?.toString() ?? '',
-    );
-    _rankMinController = TextEditingController(
-      text: options.rankMin?.toString() ?? '',
-    );
-    _rankMaxController = TextEditingController(
-      text: options.rankMax?.toString() ?? '',
-    );
-    _airDateFrom = options.airDateFrom;
-    _airDateTo = options.airDateTo;
-    _sort = widget.initialSort;
-    _nsfwMode = options.nsfwMode;
-  }
-
-  @override
-  void dispose() {
-    _metaTagsController.dispose();
-    _tagsController.dispose();
-    _ratingMinController.dispose();
-    _ratingMaxController.dispose();
-    _ratingCountMinController.dispose();
-    _ratingCountMaxController.dispose();
-    _rankMinController.dispose();
-    _rankMaxController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.viewInsetsOf(context);
-    return AnimatedPadding(
-      key: const Key('search_filter_drawer'),
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: viewInsets.bottom),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-            child: Row(
-              children: [
-                Text('筛选与排序', style: Theme.of(context).textTheme.titleLarge),
-                const Spacer(),
-                TextButton(onPressed: _reset, child: const Text('重置')),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                  tooltip: '关闭',
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  DropdownButtonFormField<SubjectSearchSort>(
-                    initialValue: _sort,
-                    decoration: const InputDecoration(
-                      labelText: '排序',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: SubjectSearchSort.values
-                        .map(
-                          (sort) => DropdownMenuItem(
-                            value: sort,
-                            child: Text(_subjectSearchSortLabel(sort)),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _sort = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (_validationError != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(_validationError!),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  TextField(
-                    key: const Key('search_meta_tags_field'),
-                    controller: _metaTagsController,
-                    decoration: const InputDecoration(
-                      labelText: '公共标签（维基标签）',
-                      hintText: '例如：原创, 童年；使用 -科幻 排除标签',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    key: const Key('search_tags_field'),
-                    controller: _tagsController,
-                    decoration: const InputDecoration(
-                      labelText: '用户标签',
-                      hintText: '多个标签用逗号分隔，标签之间为且关系',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    '播出／发售日期',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    children: [
-                      _buildDateButton(
-                        label: '起始日期',
-                        value: _airDateFrom,
-                        onPressed: () => _pickDate(isStart: true),
-                        onClear: _airDateFrom == null
-                            ? null
-                            : () => setState(() => _airDateFrom = null),
-                      ),
-                      _buildDateButton(
-                        label: '结束日期',
-                        value: _airDateTo,
-                        onPressed: () => _pickDate(isStart: false),
-                        onClear: _airDateTo == null
-                            ? null
-                            : () => setState(() => _airDateTo = null),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _buildRangeFields(
-                    label: '评分范围（0–10）',
-                    minController: _ratingMinController,
-                    maxController: _ratingMaxController,
-                    decimal: true,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildRangeFields(
-                    label: '评分人数',
-                    minController: _ratingCountMinController,
-                    maxController: _ratingCountMaxController,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildRangeFields(
-                    label: '排名范围',
-                    minController: _rankMinController,
-                    maxController: _rankMaxController,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<_NsfwMode>(
-                    initialValue: _nsfwMode,
-                    decoration: const InputDecoration(
-                      labelText: 'NSFW',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: _NsfwMode.any, child: Text('不限')),
-                      DropdownMenuItem(
-                        value: _NsfwMode.safeOnly,
-                        child: Text('仅非成人内容'),
-                      ),
-                      DropdownMenuItem(
-                        value: _NsfwMode.adultOnly,
-                        child: Text('仅成人内容'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _nsfwMode = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '不同筛选条件之间为“且”关系；同一类型中的多个条目按 Bangumi 官方规则组合。',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  key: const Key('search_apply_filters_button'),
-                  onPressed: _apply,
-                  child: const Text('应用筛选'),
-                ),
-              ],
-            ),
-          ),
-        ],
+  Widget _skeletonLine(ColorScheme scheme, double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }
 
-  Widget _buildDateButton({
-    required String label,
-    required DateTime? value,
-    required VoidCallback onPressed,
-    required VoidCallback? onClear,
-  }) {
-    return InputChip(
-      avatar: const Icon(Icons.calendar_today_outlined, size: 18),
-      label: Text(value == null ? label : '$label：${_formatApiDate(value)}'),
-      onPressed: onPressed,
-      onDeleted: onClear,
-    );
-  }
-
-  Widget _buildRangeFields({
-    required String label,
-    required TextEditingController minController,
-    required TextEditingController maxController,
-    bool decimal = false,
-  }) {
-    final keyboardType = TextInputType.numberWithOptions(decimal: decimal);
-    Widget field(TextEditingController controller, String fieldLabel) {
-      return TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          labelText: fieldLabel,
-          border: const OutlineInputBorder(),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth >= 420) {
-              return Row(
-                children: [
-                  Expanded(child: field(minController, '最小值')),
-                  const SizedBox(width: 12),
-                  Expanded(child: field(maxController, '最大值')),
-                ],
-              );
-            }
-            return Column(
-              children: [
-                field(minController, '最小值'),
-                const SizedBox(height: 12),
-                field(maxController, '最大值'),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Future<void> _pickDate({required bool isStart}) async {
-    final initialDate = isStart
-        ? (_airDateFrom ?? _airDateTo ?? DateTime.now())
-        : (_airDateTo ?? _airDateFrom ?? DateTime.now());
-    final date = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(DateTime.now().year + 10, 12, 31),
-    );
-    if (date == null || !mounted) return;
-    setState(() {
-      if (isStart) {
-        _airDateFrom = date;
-      } else {
-        _airDateTo = date;
+  void _scrollToTop(int generation) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          generation != _searchGeneration ||
+          !_resultsController.hasClients) {
+        return;
       }
+      _resultsController.jumpTo(0);
     });
-  }
-
-  void _reset() {
-    setState(() {
-      _metaTagsController.clear();
-      _tagsController.clear();
-      _ratingMinController.clear();
-      _ratingMaxController.clear();
-      _ratingCountMinController.clear();
-      _ratingCountMaxController.clear();
-      _rankMinController.clear();
-      _rankMaxController.clear();
-      _airDateFrom = null;
-      _airDateTo = null;
-      _sort = SubjectSearchSort.match;
-      _nsfwMode = _NsfwMode.any;
-      _validationError = null;
-    });
-  }
-
-  void _apply() {
-    try {
-      final ratingMin = _parseDouble(_ratingMinController, '最低评分');
-      final ratingMax = _parseDouble(_ratingMaxController, '最高评分');
-      final ratingCountMin = _parseInt(_ratingCountMinController, '最少评分人数');
-      final ratingCountMax = _parseInt(_ratingCountMaxController, '最多评分人数');
-      final rankMin = _parseInt(_rankMinController, '最小排名');
-      final rankMax = _parseInt(_rankMaxController, '最大排名');
-
-      if (ratingMin != null && (ratingMin < 0 || ratingMin > 10) ||
-          ratingMax != null && (ratingMax < 0 || ratingMax > 10)) {
-        throw const FormatException('评分必须在 0 到 10 之间');
-      }
-      _validateRange(ratingMin, ratingMax, '评分');
-      _validateRange(ratingCountMin, ratingCountMax, '评分人数');
-      _validateRange(rankMin, rankMax, '排名');
-      if (_airDateFrom != null &&
-          _airDateTo != null &&
-          _airDateFrom!.isAfter(_airDateTo!)) {
-        throw const FormatException('起始日期不能晚于结束日期');
-      }
-
-      Navigator.pop(
-        context,
-        _SearchFilterSelection(
-          sort: _sort,
-          options: _SearchAdvancedOptions(
-            metaTags: _parseTags(_metaTagsController.text),
-            tags: _parseTags(_tagsController.text),
-            airDateFrom: _airDateFrom,
-            airDateTo: _airDateTo,
-            ratingMin: ratingMin,
-            ratingMax: ratingMax,
-            ratingCountMin: ratingCountMin,
-            ratingCountMax: ratingCountMax,
-            rankMin: rankMin,
-            rankMax: rankMax,
-            nsfwMode: _nsfwMode,
-          ),
-        ),
-      );
-    } on FormatException catch (error) {
-      setState(() => _validationError = error.message);
-    }
-  }
-
-  double? _parseDouble(TextEditingController controller, String label) {
-    final value = controller.text.trim();
-    if (value.isEmpty) return null;
-    final parsed = double.tryParse(value);
-    if (parsed == null) throw FormatException('$label 必须是数字');
-    return parsed;
-  }
-
-  int? _parseInt(TextEditingController controller, String label) {
-    final value = controller.text.trim();
-    if (value.isEmpty) return null;
-    final parsed = int.tryParse(value);
-    if (parsed == null || parsed < 0) {
-      throw FormatException('$label 必须是非负整数');
-    }
-    return parsed;
-  }
-
-  void _validateRange(num? min, num? max, String label) {
-    if (min != null && max != null && min > max) {
-      throw FormatException('$label 的最小值不能大于最大值');
-    }
-  }
-
-  List<String> _parseTags(String value) {
-    final seen = <String>{};
-    return value
-        .split(RegExp(r'[,，\n]+'))
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty && seen.add(item))
-        .toList(growable: false);
   }
 }
 
-/// 搜索结果卡片
-class _SearchResultCard extends StatelessWidget {
-  final SlimSubject subject;
-  const _SearchResultCard({required this.subject});
+extension on SearchScope {
+  String get label => switch (this) {
+    SearchScope.all => '综合',
+    SearchScope.subjects => '条目',
+    SearchScope.characters => '角色',
+    SearchScope.persons => '人物',
+  };
+
+  IconData get icon => switch (this) {
+    SearchScope.all => Icons.manage_search_rounded,
+    SearchScope.subjects => Icons.movie_filter_outlined,
+    SearchScope.characters => Icons.face_outlined,
+    SearchScope.persons => Icons.badge_outlined,
+  };
+}
+
+int _nextOffset<T>(PagedResult<T>? page) {
+  if (page == null) return 0;
+  return page.data.isEmpty ? page.total : page.offset + page.data.length;
+}
+
+List<T> _mergeUnique<T>(
+  List<T> current,
+  List<T> incoming,
+  int Function(T item) idOf,
+) {
+  final ids = current.map(idOf).toSet();
+  return [...current, ...incoming.where((item) => ids.add(idOf(item)))];
+}
+
+class SearchPreviewSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final int total;
+  final String? error;
+  final VoidCallback onShowAll;
+  final List<Widget> children;
+
+  const SearchPreviewSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.total,
+    required this.error,
+    required this.onShowAll,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final appState = context.watch<AppStateProvider>();
-    final densityScale = switch (appState.listDensityMode) {
-      0 => 0.88,
-      2 => 1.12,
-      _ => 1.0,
-    };
-    final cardPadding = 10.0 * densityScale;
-    final coverWidth = 56.0 * densityScale;
-    final coverHeight = 80.0 * densityScale;
-    final coverRadius = appState.coverCornerRadius;
-    final showSecondary = _hasSecondaryInfo;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => SubjectPage(subjectId: subject.id),
-            ),
-          );
-        },
-        child: Padding(
-          padding: EdgeInsets.all(cardPadding),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              // 封面
-              ClipRRect(
-                borderRadius: BorderRadius.circular(coverRadius),
-                child: SizedBox(
-                  width: coverWidth,
-                  height: coverHeight,
-                  child: subject.images?.common.isNotEmpty == true
-                      ? CachedNetworkImage(
-                          imageUrl: subject.images!.common,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: colorScheme.surfaceContainerHighest,
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.image, size: 24),
-                          ),
-                        )
-                      : Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.image, size: 24),
-                        ),
+              Icon(icon, size: 20, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              if (total > 0) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '$total',
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
-              ),
-              const SizedBox(width: 12),
-              // 条目信息
-              Expanded(
-                child: SizedBox(
-                  height: coverHeight,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 标题
-                      Text(
-                        subject.displayName,
-                        style: TextStyle(
-                          fontSize: 14 * densityScale,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: 4 * densityScale),
-                      // 英文名
-                      if (subject.name.isNotEmpty &&
-                          subject.name != subject.nameCn)
-                        Text(
-                          subject.name,
-                          style: TextStyle(
-                            fontSize: 11 * densityScale,
-                            color: Colors.grey[500],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      if (subject.shortSummary.isNotEmpty) ...[
-                        SizedBox(height: 4 * densityScale),
-                        Text(
-                          subject.shortSummary,
-                          style: TextStyle(
-                            fontSize: 11 * densityScale,
-                            color: Colors.grey[500],
-                            height: 1.2,
-                          ),
-                          maxLines:
-                              subject.name.isNotEmpty &&
-                                  subject.name != subject.nameCn
-                              ? 1
-                              : 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (showSecondary) ...[
-                        const Spacer(),
-                        _buildBottomRow(context, colorScheme, densityScale),
-                      ],
-                    ],
-                  ),
+              ],
+              const Spacer(),
+              if (total > 0)
+                TextButton.icon(
+                  onPressed: onShowAll,
+                  iconAlignment: IconAlignment.end,
+                  icon: const Icon(Icons.chevron_right, size: 18),
+                  label: const Text('查看全部'),
                 ),
-              ),
             ],
           ),
-        ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(error!, style: TextStyle(color: colorScheme.error)),
+            )
+          else if (children.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                '没有匹配结果',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
+            )
+          else
+            ...children,
+        ],
       ),
     );
   }
-
-  Widget _buildBottomRow(
-    BuildContext context,
-    ColorScheme colorScheme,
-    double densityScale,
-  ) {
-    return Row(
-      children: [
-        if (subject.score > 0) ...[
-          Icon(Icons.star_rounded, size: 14, color: Colors.amber[700]),
-          const SizedBox(width: 2),
-          Text(
-            subject.score.toStringAsFixed(1),
-            style: TextStyle(
-              fontSize: 12 * densityScale,
-              fontWeight: FontWeight.w600,
-              color: Colors.amber[800],
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        if (subject.rank > 0) ...[
-          Text(
-            '#${subject.rank}',
-            style: TextStyle(
-              fontSize: 11 * densityScale,
-              color: colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        const Spacer(),
-        if (subject.collectionTotal > 0) ...[
-          Icon(Icons.people_outline, size: 13, color: Colors.grey[500]),
-          const SizedBox(width: 2),
-          Text(
-            '${subject.collectionTotal}',
-            style: TextStyle(
-              fontSize: 11 * densityScale,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  bool get _hasSecondaryInfo =>
-      subject.score > 0 || subject.rank > 0 || subject.collectionTotal > 0;
 }
