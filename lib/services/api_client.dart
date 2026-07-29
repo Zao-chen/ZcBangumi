@@ -1119,6 +1119,86 @@ class ApiClient {
     );
   }
 
+  /// 获取用户收藏的角色列表。
+  Future<PagedResult<UserCharacterCollection>> getUserCharacterCollections({
+    required String username,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    _validateEntityCollectionRequest(
+      username: username,
+      limit: limit,
+      offset: offset,
+    );
+    final encodedUsername = Uri.encodeComponent(username.trim());
+    final resp = await _dio.get(
+      '/v0/users/$encodedUsername/collections/-/characters',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    final result = Map<String, dynamic>.from(resp.data as Map);
+    final items = (result['data'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (item) =>
+              UserCharacterCollection.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList();
+    return PagedResult<UserCharacterCollection>(
+      total: (result['total'] as num?)?.toInt() ?? items.length,
+      limit: (result['limit'] as num?)?.toInt() ?? limit,
+      offset: (result['offset'] as num?)?.toInt() ?? offset,
+      data: items,
+    );
+  }
+
+  /// 获取用户收藏的人物列表。
+  Future<PagedResult<UserPersonCollection>> getUserPersonCollections({
+    required String username,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    _validateEntityCollectionRequest(
+      username: username,
+      limit: limit,
+      offset: offset,
+    );
+    final encodedUsername = Uri.encodeComponent(username.trim());
+    final resp = await _dio.get(
+      '/v0/users/$encodedUsername/collections/-/persons',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    final result = Map<String, dynamic>.from(resp.data as Map);
+    final items = (result['data'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (item) =>
+              UserPersonCollection.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList();
+    return PagedResult<UserPersonCollection>(
+      total: (result['total'] as num?)?.toInt() ?? items.length,
+      limit: (result['limit'] as num?)?.toInt() ?? limit,
+      offset: (result['offset'] as num?)?.toInt() ?? offset,
+      data: items,
+    );
+  }
+
+  void _validateEntityCollectionRequest({
+    required String username,
+    required int limit,
+    required int offset,
+  }) {
+    if (username.trim().isEmpty) {
+      throw ArgumentError.value(username, 'username', '用户名不能为空');
+    }
+    if (limit < 1 || limit > 50) {
+      throw ArgumentError.value(limit, 'limit', '必须在 1 到 50 之间');
+    }
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', '不能小于 0');
+    }
+  }
+
   // ========== 章节进度 ==========
 
   /// 获取用户某条目的章节收藏信息
