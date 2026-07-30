@@ -12,6 +12,7 @@ import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/copyable_text.dart';
+import '../widgets/entity_collection_list_view.dart';
 
 enum _SortMode {
   updatedAt('最近操作'),
@@ -21,6 +22,37 @@ enum _SortMode {
 
   final String label;
   const _SortMode(this.label);
+}
+
+class _NavigationRailSectionLabel extends StatelessWidget {
+  final String text;
+  final bool showDivider;
+
+  const _NavigationRailSectionLabel({
+    required this.text,
+    this.showDivider = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!showDivider) return Text(text);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(text),
+        const SizedBox(height: 8),
+        const SizedBox(
+          width: 48,
+          child: Divider(
+            key: ValueKey('profile_entity_collection_section_divider'),
+            height: 1,
+            thickness: 1,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _CollectionItemCard extends StatelessWidget {
@@ -217,8 +249,10 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final appState = context.watch<AppStateProvider>();
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    final mediaQuery = MediaQuery.of(context);
+    final useNavigationRail =
+        mediaQuery.orientation == Orientation.landscape &&
+        mediaQuery.size.height >= 560;
 
     // 初始化中显示骨架屏
     final isInitializing = !auth.initialized;
@@ -226,7 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ? _buildProfileInitializingContent(
             selectedSubjectType: appState.profileSubjectType,
             selectedCollectionType: appState.profileCollectionType,
-            isLandscape: isLandscape,
+            isLandscape: useNavigationRail,
           )
         : auth.isLoggedIn
         ? _ProfileContent(
@@ -342,14 +376,25 @@ class _ProfilePageState extends State<ProfilePage> {
                   labelType: NavigationRailLabelType.all,
                   backgroundColor: colorScheme.surface,
                   indicatorColor: colorScheme.primaryContainer,
-                  destinations: _initializingSubjectTypes
-                      .map(
-                        (t) => NavigationRailDestination(
-                          icon: Icon(t.icon),
-                          label: Text(t.label),
+                  destinations: [
+                    ..._initializingSubjectTypes.map(
+                      (t) => NavigationRailDestination(
+                        icon: Icon(t.icon),
+                        label: _NavigationRailSectionLabel(
+                          text: t.label,
+                          showDivider: t.type == BgmConst.subjectReal,
                         ),
-                      )
-                      .toList(),
+                      ),
+                    ),
+                    const NavigationRailDestination(
+                      icon: Icon(Icons.theater_comedy_outlined),
+                      label: Text('角色'),
+                    ),
+                    const NavigationRailDestination(
+                      icon: Icon(Icons.badge_outlined),
+                      label: Text('人物'),
+                    ),
+                  ],
                 ),
               ),
               const VerticalDivider(thickness: 1, width: 1),
@@ -450,22 +495,44 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildInitializingSubjectTypeBar(int selectedSubjectType) {
     return SizedBox(
       height: 44,
-      child: ListView.separated(
+      child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
-        itemCount: _initializingSubjectTypes.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 6),
-        itemBuilder: (context, index) {
-          final t = _initializingSubjectTypes[index];
-          return ChoiceChip(
-            label: Text(t.label),
-            avatar: Icon(t.icon, size: 16),
-            selected: t.type == selectedSubjectType,
+        children: [
+          for (final t in _initializingSubjectTypes) ...[
+            ChoiceChip(
+              label: Text(t.label),
+              avatar: Icon(t.icon, size: 16),
+              selected: t.type == selectedSubjectType,
+              onSelected: (_) {},
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: 6),
+          ],
+          const SizedBox(
+            height: 24,
+            child: VerticalDivider(width: 10, thickness: 1),
+          ),
+          const SizedBox(width: 2),
+          ChoiceChip(
+            label: const Text('角色'),
+            avatar: const Icon(Icons.theater_comedy_outlined, size: 16),
+            selected: false,
             onSelected: (_) {},
             showCheckmark: false,
             visualDensity: VisualDensity.compact,
-          );
-        },
+          ),
+          const SizedBox(width: 6),
+          ChoiceChip(
+            label: const Text('人物'),
+            avatar: const Icon(Icons.badge_outlined, size: 16),
+            selected: false,
+            onSelected: (_) {},
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
     );
   }
@@ -890,9 +957,12 @@ class _ProfileContentState extends State<_ProfileContent> {
     BgmConst.collectionDropped,
   ];
   int _subjectType = BgmConst.subjectAnime;
+  EntityCollectionKind? _entityCollectionKind;
   int _collectionType = BgmConst.collectionDoing;
   _SortMode _sortMode = _SortMode.updatedAt;
   final TextEditingController _searchController = TextEditingController();
+  final GlobalKey<EntityCollectionListViewState> _entityCollectionKey =
+      GlobalKey<EntityCollectionListViewState>();
   List<UserCollection> _items = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -990,16 +1060,25 @@ class _ProfileContentState extends State<_ProfileContent> {
   }
 
   void _switchSubjectType(int type) {
-    if (_subjectType == type) return;
+    final typeChanged = _subjectType != type;
+    if (!typeChanged && _entityCollectionKind == null) return;
     setState(() {
-      _subjectType = type;
-      _items = [];
-      _total = 0;
+      _entityCollectionKind = null;
+      if (typeChanged) {
+        _subjectType = type;
+        _items = [];
+        _total = 0;
+      }
     });
-    if (widget.persistViewState) {
+    if (typeChanged && widget.persistViewState) {
       context.read<AppStateProvider>().setProfileSubjectType(type);
     }
-    _loadData();
+    if (typeChanged) _loadData();
+  }
+
+  void _switchEntityCollection(EntityCollectionKind kind) {
+    if (_entityCollectionKind == kind) return;
+    setState(() => _entityCollectionKind = kind);
   }
 
   void _switchCollectionType(int type) {
@@ -1128,10 +1207,11 @@ class _ProfileContentState extends State<_ProfileContent> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    final mediaQuery = MediaQuery.of(context);
+    final isLandscape = mediaQuery.orientation == Orientation.landscape;
+    final useNavigationRail = isLandscape && mediaQuery.size.height >= 560;
 
-    if (!isLandscape) {
+    if (!useNavigationRail) {
       return _buildCollectionsContent(
         colorScheme,
         showSubjectTypeBar: true,
@@ -1145,21 +1225,46 @@ class _ProfileContentState extends State<_ProfileContent> {
           top: false,
           right: false,
           child: NavigationRail(
-            selectedIndex: _selectedSubjectIndex,
+            selectedIndex: _selectedDestinationIndex,
             onDestinationSelected: (index) {
-              _switchSubjectType(_subjectTypes[index].type);
+              if (index < _subjectTypes.length) {
+                _switchSubjectType(_subjectTypes[index].type);
+                return;
+              }
+              _switchEntityCollection(
+                index == _subjectTypes.length
+                    ? EntityCollectionKind.character
+                    : EntityCollectionKind.person,
+              );
             },
             labelType: NavigationRailLabelType.all,
             backgroundColor: colorScheme.surface,
             indicatorColor: colorScheme.primaryContainer,
-            destinations: _subjectTypes
-                .map(
-                  (t) => NavigationRailDestination(
-                    icon: Icon(t.icon),
-                    label: Text(t.label),
+            destinations: [
+              ..._subjectTypes.map(
+                (t) => NavigationRailDestination(
+                  icon: Icon(t.icon),
+                  label: _NavigationRailSectionLabel(
+                    text: t.label,
+                    showDivider: t.type == BgmConst.subjectReal,
                   ),
-                )
-                .toList(),
+                ),
+              ),
+              NavigationRailDestination(
+                icon: Icon(
+                  Icons.theater_comedy_outlined,
+                  key: const ValueKey('profile_character_collections'),
+                ),
+                label: const Text('角色'),
+              ),
+              const NavigationRailDestination(
+                icon: Icon(
+                  Icons.badge_outlined,
+                  key: ValueKey('profile_person_collections'),
+                ),
+                label: Text('人物'),
+              ),
+            ],
           ),
         ),
         const VerticalDivider(thickness: 1, width: 1),
@@ -1175,7 +1280,13 @@ class _ProfileContentState extends State<_ProfileContent> {
     );
   }
 
-  int get _selectedSubjectIndex {
+  int get _selectedDestinationIndex {
+    if (_entityCollectionKind == EntityCollectionKind.character) {
+      return _subjectTypes.length;
+    }
+    if (_entityCollectionKind == EntityCollectionKind.person) {
+      return _subjectTypes.length + 1;
+    }
     final index = _subjectTypes.indexWhere((t) => t.type == _subjectType);
     return index >= 0 ? index : 0;
   }
@@ -1187,8 +1298,9 @@ class _ProfileContentState extends State<_ProfileContent> {
     EdgeInsetsGeometry padding = const EdgeInsets.all(16),
   }) {
     return RefreshIndicator(
-      onRefresh: () => _loadData(),
+      onRefresh: _refreshActiveCollection,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: padding,
         children: [
           if (includeHeader) ...[
@@ -1209,13 +1321,25 @@ class _ProfileContentState extends State<_ProfileContent> {
             const SizedBox(height: 12),
           ],
           if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
-          _buildCollectionTypeBar(colorScheme),
-          _buildSearchField(colorScheme),
-          const SizedBox(height: 8),
-          _buildList(colorScheme),
+          if (_entityCollectionKind == null) ...[
+            _buildCollectionTypeBar(colorScheme),
+            _buildSearchField(colorScheme),
+            const SizedBox(height: 8),
+            _buildList(colorScheme),
+          ] else
+            EntityCollectionListView(
+              key: _entityCollectionKey,
+              username: widget.user.username,
+              kind: _entityCollectionKind!,
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _refreshActiveCollection() {
+    if (_entityCollectionKind == null) return _loadData();
+    return _entityCollectionKey.currentState?.refresh() ?? Future<void>.value();
   }
 
   Widget _buildOfflineNotice(ColorScheme colorScheme) {
@@ -1322,23 +1446,49 @@ class _ProfileContentState extends State<_ProfileContent> {
   Widget _buildSubjectTypeBar(ColorScheme colorScheme) {
     return SizedBox(
       height: 44,
-      child: ListView.separated(
+      child: ListView(
+        key: const ValueKey('profile_collection_destination_bar'),
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
-        itemCount: _subjectTypes.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 6),
-        itemBuilder: (ctx, i) {
-          final t = _subjectTypes[i];
-          final selected = _subjectType == t.type;
-          return ChoiceChip(
-            label: Text(t.label),
-            avatar: Icon(t.icon, size: 16),
-            selected: selected,
-            onSelected: (_) => _switchSubjectType(t.type),
+        children: [
+          for (final t in _subjectTypes) ...[
+            ChoiceChip(
+              label: Text(t.label),
+              avatar: Icon(t.icon, size: 16),
+              selected: _entityCollectionKind == null && _subjectType == t.type,
+              onSelected: (_) => _switchSubjectType(t.type),
+              visualDensity: VisualDensity.compact,
+              showCheckmark: false,
+            ),
+            const SizedBox(width: 6),
+          ],
+          const SizedBox(
+            height: 24,
+            child: VerticalDivider(width: 10, thickness: 1),
+          ),
+          const SizedBox(width: 2),
+          ChoiceChip(
+            key: const ValueKey('profile_character_collections'),
+            label: const Text('角色'),
+            avatar: const Icon(Icons.theater_comedy_outlined, size: 16),
+            selected: _entityCollectionKind == EntityCollectionKind.character,
+            onSelected: (_) =>
+                _switchEntityCollection(EntityCollectionKind.character),
             visualDensity: VisualDensity.compact,
             showCheckmark: false,
-          );
-        },
+          ),
+          const SizedBox(width: 6),
+          ChoiceChip(
+            key: const ValueKey('profile_person_collections'),
+            label: const Text('人物'),
+            avatar: const Icon(Icons.badge_outlined, size: 16),
+            selected: _entityCollectionKind == EntityCollectionKind.person,
+            onSelected: (_) =>
+                _switchEntityCollection(EntityCollectionKind.person),
+            visualDensity: VisualDensity.compact,
+            showCheckmark: false,
+          ),
+        ],
       ),
     );
   }
