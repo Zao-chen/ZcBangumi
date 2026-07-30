@@ -61,6 +61,7 @@ class SlimSubject {
   final int collectionTotal;
   final double score;
   final int rank;
+  final String date;
 
   SlimSubject({
     required this.id,
@@ -74,6 +75,7 @@ class SlimSubject {
     required this.collectionTotal,
     required this.score,
     required this.rank,
+    this.date = '',
   });
 
   /// 优先显示中文名
@@ -92,6 +94,7 @@ class SlimSubject {
       collectionTotal: subject.collectionTotal,
       score: subject.score,
       rank: subject.rank,
+      date: subject.date,
     );
   }
 
@@ -116,6 +119,7 @@ class SlimSubject {
           (json['score'] as num?)?.toDouble() ??
           0.0,
       rank: (json['rating']?['rank'] as int?) ?? (json['rank'] as int?) ?? 0,
+      date: (json['date'] as String?) ?? '',
     );
   }
 
@@ -131,6 +135,7 @@ class SlimSubject {
     'collection_total': collectionTotal,
     'score': score,
     'rank': rank,
+    'date': date,
   };
 }
 
@@ -192,18 +197,26 @@ class Subject {
   factory Subject.fromJson(Map<String, dynamic> json) {
     // 解析 tags
     final tagsList = <String>[];
-    if (json['tags'] != null) {
-      for (final tag in json['tags'] as List<dynamic>) {
+    final rawTags = json['tags'];
+    if (rawTags is List) {
+      for (final tag in rawTags) {
         if (tag is Map<String, dynamic> && tag['name'] != null) {
           tagsList.add(tag['name'] as String);
+        } else if (tag is String) {
+          tagsList.add(tag);
         }
       }
     }
 
     // 解析 infobox
     final infoboxMap = <String, String>{};
-    if (json['infobox'] != null) {
-      for (final item in json['infobox'] as List<dynamic>) {
+    final rawInfobox = json['infobox'];
+    if (rawInfobox is Map) {
+      for (final entry in rawInfobox.entries) {
+        infoboxMap[entry.key.toString()] = entry.value?.toString() ?? '';
+      }
+    } else if (rawInfobox is List) {
+      for (final item in rawInfobox) {
         if (item is Map<String, dynamic>) {
           final key = item['key'] as String? ?? '';
           final rawValue = item['value'];

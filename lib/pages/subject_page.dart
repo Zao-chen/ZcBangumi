@@ -324,7 +324,7 @@ class _SubjectPageState extends State<SubjectPage>
 
     if (_subject != null) {
       storage.setCache(_cacheName, _subject!.toJson());
-      storage.saveRecentSubjectDetail(_subject!);
+      await storage.saveRecentSubjectDetail(_subject!);
       storage.touchCache(_cacheName);
     }
 
@@ -407,7 +407,7 @@ class _SubjectPageState extends State<SubjectPage>
 
       if (_subject != null) {
         storage.setCache(_cacheName, _subject!.toJson());
-        storage.saveRecentSubjectDetail(_subject!);
+        await storage.saveRecentSubjectDetail(_subject!);
       }
       storage.setCache(
         _charsCacheName,

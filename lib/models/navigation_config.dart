@@ -4,12 +4,19 @@ import 'package:flutter/material.dart';
 class AppNavTabId {
   AppNavTabId._();
 
+  static const String discover = 'discover';
   static const String timeline = 'timeline';
   static const String rakuen = 'rakuen';
   static const String progress = 'progress';
   static const String profile = 'profile';
 
-  static const List<String> all = [timeline, rakuen, progress, profile];
+  static const List<String> all = [
+    discover,
+    timeline,
+    rakuen,
+    progress,
+    profile,
+  ];
 }
 
 /// 底栏单个 Tab 的展示配置
@@ -35,6 +42,12 @@ class AppNavigationConfig {
   static const List<String> allTabIds = AppNavTabId.all;
 
   static const List<AppNavTabSpec> tabs = [
+    AppNavTabSpec(
+      id: AppNavTabId.discover,
+      icon: Icons.explore_outlined,
+      selectedIcon: Icons.explore,
+      label: '发现',
+    ),
     AppNavTabSpec(
       id: AppNavTabId.timeline,
       icon: Icons.rss_feed_outlined,

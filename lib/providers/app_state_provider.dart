@@ -56,6 +56,12 @@ class AppStateProvider extends ChangeNotifier {
   // ==================== Getters ====================
 
   int get currentNavIndex => _currentNavIndex;
+  String? get currentNavTabId {
+    final enabled = enabledBottomNavTabIds;
+    if (enabled.isEmpty || _currentNavIndex >= enabled.length) return null;
+    return enabled[_currentNavIndex];
+  }
+
   List<String> get bottomNavOrder => List.unmodifiable(_bottomNavOrder);
   Set<String> get hiddenBottomNavTabIds =>
       Set.unmodifiable(_hiddenBottomNavTabIds);
@@ -113,6 +119,12 @@ class AppStateProvider extends ChangeNotifier {
     }
   }
 
+  void setCurrentNavTabId(String tabId) {
+    final index = enabledBottomNavTabIds.indexOf(tabId);
+    if (index < 0) return;
+    setCurrentNavIndex(index);
+  }
+
   bool isBottomNavTabVisible(String tabId) {
     return !_hiddenBottomNavTabIds.contains(tabId);
   }
@@ -122,6 +134,7 @@ class AppStateProvider extends ChangeNotifier {
   }
 
   void setBottomNavOrder(List<String> order) {
+    final activeTabId = currentNavTabId;
     final normalizedOrder = _normalizeBottomNavOrder(order);
     if (listEquals(_bottomNavOrder, normalizedOrder)) {
       return;
@@ -132,7 +145,7 @@ class AppStateProvider extends ChangeNotifier {
     if (enabledBottomNavTabIds.isEmpty) {
       _hiddenBottomNavTabIds.clear();
     }
-    _normalizeCurrentNavIndex();
+    _restoreCurrentNavTab(activeTabId);
     notifyListeners();
     _saveState();
   }
@@ -142,6 +155,7 @@ class AppStateProvider extends ChangeNotifier {
       return;
     }
 
+    final activeTabId = currentNavTabId;
     final nextHidden = Set<String>.from(_hiddenBottomNavTabIds);
     if (visible) {
       nextHidden.remove(tabId);
@@ -160,7 +174,7 @@ class AppStateProvider extends ChangeNotifier {
     }
 
     _hiddenBottomNavTabIds = nextHidden;
-    _normalizeCurrentNavIndex();
+    _restoreCurrentNavTab(activeTabId);
     notifyListeners();
     _saveState();
   }
@@ -172,9 +186,10 @@ class AppStateProvider extends ChangeNotifier {
       return;
     }
 
+    final activeTabId = currentNavTabId;
     _bottomNavOrder = defaultOrder;
     _hiddenBottomNavTabIds.clear();
-    _normalizeCurrentNavIndex();
+    _restoreCurrentNavTab(activeTabId);
     notifyListeners();
     _saveState();
   }
@@ -416,18 +431,44 @@ class AppStateProvider extends ChangeNotifier {
     try {
       final data = storage.getCache('app_state') as Map<String, dynamic>?;
       if (data != null) {
-        _bottomNavOrder = _normalizeBottomNavOrder(
-          ((data['bottomNavOrder'] as List?) ??
-                  AppNavigationConfig.defaultOrder)
-              .map((id) => '$id')
-              .toList(growable: false),
-        );
-
-        _hiddenBottomNavTabIds =
+        final rawBottomNavOrder =
+            ((data['bottomNavOrder'] as List?) ??
+                    const <dynamic>[
+                      AppNavTabId.timeline,
+                      AppNavTabId.rakuen,
+                      AppNavTabId.progress,
+                      AppNavTabId.profile,
+                    ])
+                .map((id) => '$id')
+                .where(AppNavigationConfig.allTabIds.contains)
+                .toList(growable: false);
+        final rawHiddenBottomNavTabIds =
             ((data['hiddenBottomNavTabIds'] as List?) ?? const <dynamic>[])
                 .map((id) => '$id')
-                .where((id) => _bottomNavOrder.contains(id))
+                .where(rawBottomNavOrder.contains)
                 .toSet();
+        final rawEnabledBottomNavTabIds = rawBottomNavOrder
+            .where((id) => !rawHiddenBottomNavTabIds.contains(id))
+            .toList(growable: false);
+        final cachedNavIndex = data['currentNavIndex'] as int? ?? 0;
+        final savedTabId = data['currentNavTabId']?.toString();
+        final legacyTabId = rawEnabledBottomNavTabIds.isEmpty
+            ? null
+            : rawEnabledBottomNavTabIds[cachedNavIndex.clamp(
+                0,
+                rawEnabledBottomNavTabIds.length - 1,
+              )];
+        final activeTabId =
+            savedTabId != null &&
+                AppNavigationConfig.allTabIds.contains(savedTabId)
+            ? savedTabId
+            : legacyTabId;
+
+        _bottomNavOrder = _normalizeBottomNavOrder(rawBottomNavOrder);
+
+        _hiddenBottomNavTabIds = rawHiddenBottomNavTabIds
+            .where((id) => _bottomNavOrder.contains(id))
+            .toSet();
         if (enabledBottomNavTabIds.isEmpty) {
           _hiddenBottomNavTabIds.clear();
         }
@@ -454,9 +495,7 @@ class AppStateProvider extends ChangeNotifier {
           _hiddenProgressSubjectTypes.clear();
         }
 
-        final cachedNavIndex = data['currentNavIndex'] as int? ?? 0;
-        _currentNavIndex = cachedNavIndex;
-        _normalizeCurrentNavIndex();
+        _restoreCurrentNavTab(activeTabId);
         _timelineTabIndex = data['timelineTabIndex'] ?? 0;
         _rakuenTabIndex = (data['rakuenTabIndex'] as int? ?? 0).clamp(0, 5);
         _profileSubjectType = data['profileSubjectType'] ?? 2;
@@ -492,6 +531,7 @@ class AppStateProvider extends ChangeNotifier {
     try {
       final data = {
         'currentNavIndex': _currentNavIndex,
+        'currentNavTabId': currentNavTabId,
         'bottomNavOrder': _bottomNavOrder,
         'hiddenBottomNavTabIds': _hiddenBottomNavTabIds.toList(),
         'subjectTabOrder': _subjectTabOrder,
@@ -558,6 +598,10 @@ class AppStateProvider extends ChangeNotifier {
       }
     }
 
+    if (seen.add(AppNavTabId.discover)) {
+      normalized.insert(0, AppNavTabId.discover);
+    }
+
     for (final id in AppNavigationConfig.allTabIds) {
       if (seen.add(id)) {
         normalized.add(id);
@@ -596,8 +640,17 @@ class AppStateProvider extends ChangeNotifier {
     return normalized;
   }
 
-  void _normalizeCurrentNavIndex() {
-    final maxIndex = enabledBottomNavTabIds.length - 1;
-    _currentNavIndex = maxIndex >= 0 ? _currentNavIndex.clamp(0, maxIndex) : 0;
+  void _restoreCurrentNavTab(String? tabId) {
+    final enabled = enabledBottomNavTabIds;
+    if (enabled.isEmpty) {
+      _currentNavIndex = 0;
+      return;
+    }
+    final index = tabId == null ? -1 : enabled.indexOf(tabId);
+    if (index >= 0) {
+      _currentNavIndex = index;
+    } else {
+      _currentNavIndex = _currentNavIndex.clamp(0, enabled.length - 1);
+    }
   }
 }

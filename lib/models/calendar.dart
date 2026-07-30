@@ -9,15 +9,21 @@ class CalendarDay {
 
   factory CalendarDay.fromJson(Map<String, dynamic> json) {
     return CalendarDay(
-      weekday:
-          CalendarWeekday.fromJson(json['weekday'] as Map<String, dynamic>),
-      items: (json['items'] as List<dynamic>?)
-              ?.map(
-                  (e) => CalendarSubject.fromJson(e as Map<String, dynamic>))
+      weekday: CalendarWeekday.fromJson(
+        json['weekday'] as Map<String, dynamic>,
+      ),
+      items:
+          (json['items'] as List<dynamic>?)
+              ?.map((e) => CalendarSubject.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'weekday': weekday.toJson(),
+    'items': items.map((item) => item.toJson()).toList(),
+  };
 }
 
 /// 星期几
@@ -42,6 +48,8 @@ class CalendarWeekday {
       id: (json['id'] as int?) ?? 0,
     );
   }
+
+  Map<String, dynamic> toJson() => {'en': en, 'cn': cn, 'ja': ja, 'id': id};
 }
 
 /// 每日放送中的条目
@@ -100,6 +108,22 @@ class CalendarSubject {
       rank: json['rank'] as int?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'url': url,
+    'type': type,
+    'name': name,
+    'name_cn': nameCn,
+    'summary': summary,
+    'air_date': airDate,
+    'air_weekday': airWeekday,
+    'images': images?.toJson(),
+    'eps': eps,
+    'eps_count': epsCount,
+    'rating': rating?.toJson(),
+    'rank': rank,
+  };
 }
 
 /// 评分
@@ -115,4 +139,6 @@ class CalendarRating {
       score: (json['score'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() => {'total': total, 'score': score};
 }

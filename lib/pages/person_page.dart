@@ -140,6 +140,10 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
         _error = null;
       });
     }
+    final cachedPerson = _displayPerson;
+    if (cachedPerson != null) {
+      await storage.saveRecentPerson(cachedPerson);
+    }
 
     PersonDetail? latestDetail;
     List<PersonSubject>? latestSubjects;
@@ -185,6 +189,10 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
     });
 
     if (_detail != null) storage.setCache(_detailCacheKey, _detail!.toJson());
+    final recentPerson = _displayPerson;
+    if (recentPerson != null) {
+      await storage.saveRecentPerson(recentPerson);
+    }
     storage.setCache(
       _subjectsCacheKey,
       _subjects.map((subject) => subject.toJson()).toList(),
