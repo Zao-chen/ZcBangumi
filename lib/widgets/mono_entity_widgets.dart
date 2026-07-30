@@ -23,6 +23,7 @@ class MonoEntityListCard extends StatelessWidget {
   final double imageWidth;
   final double imageHeight;
   final bool showChevron;
+  final EdgeInsetsGeometry margin;
 
   const MonoEntityListCard({
     super.key,
@@ -36,13 +37,14 @@ class MonoEntityListCard extends StatelessWidget {
     this.imageWidth = 80,
     this.imageHeight = 104,
     this.showChevron = true,
+    this.margin = const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      margin: margin,
       elevation: 0,
       color: colorScheme.surfaceContainerLow,
       child: InkWell(
@@ -399,18 +401,23 @@ class MonoEntityEmptyState extends StatelessWidget {
 class MonoEntitySkeletonList extends StatelessWidget {
   final double imageWidth;
   final double imageHeight;
+  final bool shrinkWrap;
+  final ScrollPhysics? physics;
 
   const MonoEntitySkeletonList({
     super.key,
     this.imageWidth = 80,
     this.imageHeight = 104,
+    this.shrinkWrap = false,
+    this.physics,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
+      shrinkWrap: shrinkWrap,
+      physics: physics ?? const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: 4,
       itemBuilder: (context, index) => Card(

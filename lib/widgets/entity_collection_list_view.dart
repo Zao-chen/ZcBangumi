@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/collection.dart';
+import '../pages/character_page.dart';
+import '../pages/person_page.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
-import '../widgets/centered_content.dart';
-import '../widgets/mono_entity_widgets.dart';
-import 'character_page.dart';
-import 'person_page.dart';
+import 'mono_entity_widgets.dart';
 
 enum EntityCollectionKind { character, person }
 
@@ -20,26 +19,25 @@ enum _EntityCollectionSort {
   const _EntityCollectionSort(this.label);
 }
 
-class EntityCollectionListPage extends StatefulWidget {
+class EntityCollectionListView extends StatefulWidget {
   final String username;
-  final EntityCollectionKind initialKind;
+  final EntityCollectionKind kind;
 
-  const EntityCollectionListPage({
+  const EntityCollectionListView({
     super.key,
     required this.username,
-    this.initialKind = EntityCollectionKind.character,
+    required this.kind,
   });
 
   @override
-  State<EntityCollectionListPage> createState() =>
-      _EntityCollectionListPageState();
+  State<EntityCollectionListView> createState() =>
+      EntityCollectionListViewState();
 }
 
-class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
+class EntityCollectionListViewState extends State<EntityCollectionListView> {
   static const _pageSize = 30;
 
   final TextEditingController _searchController = TextEditingController();
-  late EntityCollectionKind _kind;
   _EntityCollectionSort _sort = _EntityCollectionSort.newest;
   List<UserEntityCollection> _items = [];
   bool _loading = true;
@@ -51,7 +49,22 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
   @override
   void initState() {
     super.initState();
-    _kind = widget.initialKind;
+    _loadData();
+  }
+
+  @override
+  void didUpdateWidget(covariant EntityCollectionListView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.username == widget.username &&
+        oldWidget.kind == widget.kind) {
+      return;
+    }
+    _generation++;
+    _items = [];
+    _total = 0;
+    _loading = true;
+    _loadingMore = false;
+    _error = null;
     _loadData();
   }
 
@@ -61,8 +74,8 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
     super.dispose();
   }
 
-  String _cacheKey(EntityCollectionKind kind) =>
-      'entity_collections_${widget.username}_${kind.name}';
+  String get _cacheKey =>
+      'entity_collections_${widget.username}_${widget.kind.name}';
 
   String get _searchQuery => _searchController.text.trim().toLowerCase();
 
@@ -71,12 +84,11 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
   bool get _needsCompleteList =>
       _hasSearchQuery || _sort != _EntityCollectionSort.newest;
 
-  Future<PagedResult<UserEntityCollection>> _fetchPage({
-    required EntityCollectionKind kind,
-    required int offset,
-  }) async {
+  Future<void> refresh() => _loadData();
+
+  Future<PagedResult<UserEntityCollection>> _fetchPage(int offset) async {
     final api = context.read<ApiClient>();
-    switch (kind) {
+    switch (widget.kind) {
       case EntityCollectionKind.character:
         final result = await api.getUserCharacterCollections(
           username: widget.username,
@@ -104,14 +116,14 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
     }
   }
 
-  List<UserEntityCollection> _readCachedItems(EntityCollectionKind kind) {
-    final cached = context.read<StorageService>().getCache(_cacheKey(kind));
+  List<UserEntityCollection> _readCachedItems() {
+    final cached = context.read<StorageService>().getCache(_cacheKey);
     if (cached is! List) return const [];
 
     try {
       return cached.whereType<Map>().map((item) {
         final json = Map<String, dynamic>.from(item);
-        return switch (kind) {
+        return switch (widget.kind) {
           EntityCollectionKind.character => UserCharacterCollection.fromJson(
             json,
           ),
@@ -123,25 +135,23 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
     }
   }
 
-  Future<void> _writeCache(
-    EntityCollectionKind kind,
-    List<UserEntityCollection> items,
-  ) async {
+  Future<void> _writeCache(List<UserEntityCollection> items) async {
     await context.read<StorageService>().setCache(
-      _cacheKey(kind),
+      _cacheKey,
       items.map((item) => item.toJson()).toList(),
     );
   }
 
   Future<void> _loadData({bool refresh = true}) async {
-    final requestedKind = _kind;
+    final requestedKind = widget.kind;
+    final requestedUsername = widget.username;
     final generation = refresh ? ++_generation : _generation;
     final offset = refresh ? 0 : _items.length;
     var pageLoaded = false;
 
     if (refresh) {
       final cached = _items.isEmpty
-          ? _readCachedItems(requestedKind)
+          ? _readCachedItems()
           : const <UserEntityCollection>[];
       if (cached.isNotEmpty) {
         _items = cached;
@@ -154,8 +164,8 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
     }
 
     try {
-      final result = await _fetchPage(kind: requestedKind, offset: offset);
-      if (!mounted || generation != _generation || requestedKind != _kind) {
+      final result = await _fetchPage(offset);
+      if (!_isCurrentRequest(requestedKind, requestedUsername, generation)) {
         return;
       }
       final nextItems = refresh ? result.data : _mergeById(_items, result.data);
@@ -164,31 +174,39 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
         _total = result.total;
         _error = null;
       });
-      await _writeCache(requestedKind, nextItems);
+      await _writeCache(nextItems);
       pageLoaded = true;
     } catch (error) {
-      if (!mounted || generation != _generation || requestedKind != _kind) {
+      if (!_isCurrentRequest(requestedKind, requestedUsername, generation)) {
         return;
       }
-      if (_items.isEmpty) {
-        setState(() => _error = '加载失败: $error');
-      }
+      if (_items.isEmpty) setState(() => _error = '加载失败: $error');
     } finally {
-      if (mounted && generation == _generation && requestedKind == _kind) {
+      if (_isCurrentRequest(requestedKind, requestedUsername, generation)) {
         setState(() {
           _loading = false;
           _loadingMore = false;
         });
       }
     }
+
     if (pageLoaded &&
-        mounted &&
-        generation == _generation &&
-        requestedKind == _kind &&
+        _isCurrentRequest(requestedKind, requestedUsername, generation) &&
         _needsCompleteList &&
         _items.length < _total) {
       await _loadAllRemaining();
     }
+  }
+
+  bool _isCurrentRequest(
+    EntityCollectionKind kind,
+    String username,
+    int generation,
+  ) {
+    return mounted &&
+        generation == _generation &&
+        kind == widget.kind &&
+        username == widget.username;
   }
 
   List<UserEntityCollection> _mergeById(
@@ -211,20 +229,16 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
 
   Future<void> _loadAllRemaining() async {
     if (_loadingMore || _items.length >= _total) return;
-    final requestedKind = _kind;
+    final requestedKind = widget.kind;
+    final requestedUsername = widget.username;
     final generation = _generation;
     setState(() => _loadingMore = true);
 
     try {
-      while (mounted &&
-          generation == _generation &&
-          requestedKind == _kind &&
+      while (_isCurrentRequest(requestedKind, requestedUsername, generation) &&
           _items.length < _total) {
-        final result = await _fetchPage(
-          kind: requestedKind,
-          offset: _items.length,
-        );
-        if (!mounted || generation != _generation || requestedKind != _kind) {
+        final result = await _fetchPage(_items.length);
+        if (!_isCurrentRequest(requestedKind, requestedUsername, generation)) {
           return;
         }
         if (result.data.isEmpty) break;
@@ -235,34 +249,23 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
           _total = result.total;
         });
       }
-      if (mounted && generation == _generation && requestedKind == _kind) {
-        await _writeCache(requestedKind, _items);
+      if (_isCurrentRequest(requestedKind, requestedUsername, generation)) {
+        await _writeCache(_items);
       }
     } catch (error) {
-      if (mounted && generation == _generation && requestedKind == _kind) {
+      if (mounted &&
+          generation == _generation &&
+          requestedKind == widget.kind &&
+          requestedUsername == widget.username) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('加载更多失败: $error')));
       }
     } finally {
-      if (mounted && generation == _generation && requestedKind == _kind) {
+      if (_isCurrentRequest(requestedKind, requestedUsername, generation)) {
         setState(() => _loadingMore = false);
       }
     }
-  }
-
-  void _switchKind(EntityCollectionKind kind) {
-    if (_kind == kind) return;
-    _generation++;
-    setState(() {
-      _kind = kind;
-      _items = [];
-      _total = 0;
-      _loading = true;
-      _loadingMore = false;
-      _error = null;
-    });
-    _loadData();
   }
 
   void _switchSort(_EntityCollectionSort sort) {
@@ -312,87 +315,61 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('角色与人物收藏'),
-        centerTitle: false,
-        actions: [
-          PopupMenuButton<_EntityCollectionSort>(
-            icon: const Icon(Icons.sort),
-            tooltip: '排序',
-            onSelected: _switchSort,
-            itemBuilder: (context) => _EntityCollectionSort.values
-                .map(
-                  (sort) => PopupMenuItem(
-                    value: sort,
-                    child: Row(
-                      children: [
-                        if (_sort == sort)
-                          Icon(
-                            Icons.check,
-                            size: 18,
-                            color: colorScheme.primary,
-                          )
-                        else
-                          const SizedBox(width: 18),
-                        const SizedBox(width: 8),
-                        Text(sort.label),
-                      ],
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
-      body: ResponsiveContent(
-        maxWidth: 900,
-        child: Column(
-          children: [
-            _buildToolbar(colorScheme),
-            Expanded(child: _buildList()),
-          ],
-        ),
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildToolbar(colorScheme),
+        const SizedBox(height: 8),
+        _buildList(colorScheme),
+      ],
     );
   }
 
   Widget _buildToolbar(ColorScheme colorScheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<EntityCollectionKind>(
-              key: const ValueKey('entity_collection_kind_selector'),
-              segments: const [
-                ButtonSegment(
-                  value: EntityCollectionKind.character,
-                  icon: Icon(Icons.theater_comedy_outlined),
-                  label: Text('角色'),
-                ),
-                ButtonSegment(
-                  value: EntityCollectionKind.person,
-                  icon: Icon(Icons.badge_outlined),
-                  label: Text('人物'),
-                ),
-              ],
-              selected: {_kind},
-              onSelectionChanged: (selection) {
-                _switchKind(selection.first);
-              },
-              showSelectedIcon: false,
-            ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              const Spacer(),
+              PopupMenuButton<_EntityCollectionSort>(
+                icon: const Icon(Icons.sort, size: 20),
+                tooltip: '排序',
+                onSelected: _switchSort,
+                itemBuilder: (context) => _EntityCollectionSort.values
+                    .map(
+                      (sort) => PopupMenuItem(
+                        value: sort,
+                        child: Row(
+                          children: [
+                            if (_sort == sort)
+                              Icon(
+                                Icons.check,
+                                size: 18,
+                                color: colorScheme.primary,
+                              )
+                            else
+                              const SizedBox(width: 18),
+                            const SizedBox(width: 8),
+                            Text(sort.label),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          TextField(
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 4),
+          child: TextField(
             key: const ValueKey('entity_collection_search'),
             controller: _searchController,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: _kind == EntityCollectionKind.character
+              hintText: widget.kind == EntityCollectionKind.character
                   ? '搜索角色收藏'
                   : '搜索人物收藏',
               prefixIcon: const Icon(Icons.search, size: 20),
@@ -410,48 +387,42 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
               ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
             onChanged: _onSearchChanged,
           ),
-          const SizedBox(height: 8),
-          Text(
-            '${_kind == EntityCollectionKind.character ? '角色' : '人物'}收藏 · $_total',
-            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildList() {
+  Widget _buildList(ColorScheme colorScheme) {
     if (_loading && _items.isEmpty) {
-      return const MonoEntitySkeletonList(imageWidth: 72, imageHeight: 96);
+      return const MonoEntitySkeletonList(
+        imageWidth: 56,
+        imageHeight: 80,
+        shrinkWrap: true,
+        physics: NeverScrollableScrollPhysics(),
+      );
     }
 
     if (_error != null && _items.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _loadData,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 72),
+        child: Column(
           children: [
-            const SizedBox(height: 120),
-            Icon(Icons.error_outline, size: 52, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
+            Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            Center(
-              child: FilledButton.tonal(
-                onPressed: _loadData,
-                child: const Text('重试'),
-              ),
-            ),
+            FilledButton.tonal(onPressed: refresh, child: const Text('重试')),
           ],
         ),
       );
@@ -461,42 +432,50 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
     final isCompletingSearch =
         _hasSearchQuery && _loadingMore && _items.length < _total;
     if (_items.isEmpty || (visible.isEmpty && !isCompletingSearch)) {
-      return MonoEntityEmptyState(
-        message: _hasSearchQuery ? '没有找到相关收藏' : '暂无收藏',
-        icon: _kind == EntityCollectionKind.character
-            ? Icons.theater_comedy_outlined
-            : Icons.badge_outlined,
-        onRefresh: _loadData,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 72),
+        child: Column(
+          children: [
+            Icon(
+              _hasSearchQuery ? Icons.search_off_rounded : Icons.inbox_outlined,
+              size: 56,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _hasSearchQuery ? '没有找到相关收藏' : '暂无收藏',
+              style: TextStyle(fontSize: 15, color: Colors.grey[500]),
+            ),
+          ],
+        ),
       );
     }
 
     final hasMore = !_hasSearchQuery && _items.length < _total;
     final itemCount = visible.length + (hasMore || isCompletingSearch ? 1 : 0);
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        itemCount: itemCount,
-        itemBuilder: (context, index) {
-          if (index == visible.length) {
-            if (!_loadingMore) {
-              WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
-            }
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            );
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index == visible.length) {
+          if (!_loadingMore) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
           }
-          return _buildCollectionCard(visible[index]);
-        },
-      ),
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        return _buildCollectionCard(visible[index]);
+      },
     );
   }
 
@@ -508,12 +487,13 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
       key: ValueKey(
         'entity_collection_${item is UserCharacterCollection ? 'character' : 'person'}_${item.id}',
       ),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       imageUrl: item.images?.bestSmall ?? '',
       placeholderIcon: item is UserCharacterCollection
           ? Icons.theater_comedy_outlined
           : Icons.badge_outlined,
-      imageWidth: 72,
-      imageHeight: 96,
+      imageWidth: 56,
+      imageHeight: 80,
       title: item.name,
       subtitle: _formatCollectionDate(item.createdAt),
       chips: [
@@ -526,9 +506,10 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
 
   String _formatCollectionDate(DateTime date) {
     if (date.millisecondsSinceEpoch == 0) return '';
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '收藏于 ${date.year}-$month-$day';
+    final localDate = date.toLocal();
+    final month = localDate.month.toString().padLeft(2, '0');
+    final day = localDate.day.toString().padLeft(2, '0');
+    return '收藏于 ${localDate.year}-$month-$day';
   }
 
   Future<void> _openDetail(UserEntityCollection item) async {
@@ -541,6 +522,6 @@ class _EntityCollectionListPageState extends State<EntityCollectionListPage> {
         context,
       ).push(MaterialPageRoute(builder: (_) => PersonPage(personId: item.id)));
     }
-    if (mounted) await _loadData();
+    if (mounted) await refresh();
   }
 }
