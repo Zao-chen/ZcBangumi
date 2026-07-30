@@ -2,8 +2,12 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bangumi_web_session.dart';
+import '../models/character.dart';
 import '../models/mikan.dart';
 import '../models/network_proxy_settings.dart';
+import '../models/person.dart';
+import '../models/rakuen_topic.dart';
+import '../models/recent_view_item.dart';
 import '../models/subject.dart';
 
 /// 本地存储服务
@@ -22,6 +26,7 @@ class StorageService {
   static const String _keyLastUpdateCheck = 'last_update_check';
   static const String _keyIgnoredVersion = 'ignored_version';
   static const String _keyRecentSubjectDetails = 'recent_subject_details';
+  static const String _keyRecentViewItems = 'recent_view_items_v1';
   static const String _keyMikanSession = 'mikan_session';
   static const String _keyMikanBaseUrl = 'mikan_base_url';
   static const String _keyMikanEnabled = 'mikan_enabled';
@@ -34,6 +39,7 @@ class StorageService {
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     await _migrateLegacyWebSession();
+    await _migrateRecentViewItems();
   }
 
   /// 读取 Access Token
@@ -227,6 +233,20 @@ class StorageService {
         await _prefs.setBool(_keyLegacyWebSessionInvalidated, true);
       }
     }
+  }
+
+  Future<void> _migrateRecentViewItems() async {
+    final legacyCacheKey = 'cache_$_keyRecentViewItems';
+    if ((_prefs.getString(_keyRecentViewItems) ?? '').isNotEmpty) {
+      await _prefs.remove(legacyCacheKey);
+      return;
+    }
+
+    final legacyItems = _readCacheEntry(_keyRecentViewItems)?.data;
+    if (legacyItems is! List) return;
+
+    await _prefs.setString(_keyRecentViewItems, jsonEncode(legacyItems));
+    await _prefs.remove(legacyCacheKey);
   }
 
   // ==================== 数据缓存 ====================
@@ -449,6 +469,7 @@ class StorageService {
     }
 
     await setCache(_keyRecentSubjectDetails, items);
+    await saveRecentViewItem(RecentViewItem.fromSubject(subject));
   }
 
   /// 获取最近浏览的条目详情列表
@@ -475,6 +496,114 @@ class StorageService {
     }
 
     return result;
+  }
+
+  Future<void> clearRecentSubjectDetails() {
+    return removeCache(_keyRecentSubjectDetails);
+  }
+
+  Future<void> saveRecentViewItem(
+    RecentViewItem item, {
+    int maxItems = 50,
+  }) async {
+    if (maxItems <= 0) return;
+    final items = getRecentViewItems(limit: maxItems).toList();
+    items.removeWhere((existing) => existing.key == item.key);
+    items.insert(0, item.copyWith(viewedAt: DateTime.now()));
+    if (items.length > maxItems) {
+      items.removeRange(maxItems, items.length);
+    }
+    await _prefs.setString(
+      _keyRecentViewItems,
+      jsonEncode(items.map((entry) => entry.toJson()).toList()),
+    );
+  }
+
+  Future<void> saveRecentTopic(RakuenTopic topic, {String? displayTitle}) {
+    return saveRecentViewItem(
+      RecentViewItem.fromTopic(topic, displayTitle: displayTitle),
+    );
+  }
+
+  Future<void> saveRecentCharacter(Character character) {
+    return saveRecentViewItem(RecentViewItem.fromCharacter(character));
+  }
+
+  Future<void> saveRecentPerson(PersonSummary person) {
+    return saveRecentViewItem(RecentViewItem.fromPerson(person));
+  }
+
+  List<RecentViewItem> getRecentViewItems({int limit = 20}) {
+    if (limit <= 0) return const [];
+    final merged = <String, RecentViewItem>{};
+
+    void addItem(RecentViewItem item) {
+      final existing = merged[item.key];
+      if (existing == null || item.viewedAt.isAfter(existing.viewedAt)) {
+        merged[item.key] = item;
+      }
+    }
+
+    dynamic rawItems;
+    final rawHistory = _prefs.getString(_keyRecentViewItems);
+    if (rawHistory != null && rawHistory.isNotEmpty) {
+      try {
+        rawItems = jsonDecode(rawHistory);
+      } catch (_) {
+        // 忽略损坏的统一历史
+      }
+    }
+    if (rawItems is List) {
+      for (final raw in rawItems) {
+        if (raw is! Map) continue;
+        try {
+          addItem(
+            RecentViewItem.fromJson(
+              raw.map((key, value) => MapEntry('$key', value)),
+            ),
+          );
+        } catch (_) {
+          // 忽略损坏的统一历史项
+        }
+      }
+    }
+
+    final legacyItems = getCache(_keyRecentSubjectDetails);
+    if (legacyItems is List) {
+      for (final raw in legacyItems) {
+        if (raw is! Map) continue;
+        final entry = raw.map((key, value) => MapEntry('$key', value));
+        final subjectRaw = entry['subject'];
+        if (subjectRaw is! Map) continue;
+        try {
+          final subject = Subject.fromJson(
+            subjectRaw.map((key, value) => MapEntry('$key', value)),
+          );
+          addItem(
+            RecentViewItem.fromSubject(
+              subject,
+              viewedAt:
+                  DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
+            ),
+          );
+        } catch (_) {
+          // 忽略损坏的旧版条目历史
+        }
+      }
+    }
+
+    final result = merged.values.toList()
+      ..sort((a, b) => b.viewedAt.compareTo(a.viewedAt));
+    return result.take(limit).toList(growable: false);
+  }
+
+  Future<void> clearRecentViewItems() async {
+    await Future.wait([
+      _prefs.remove(_keyRecentViewItems),
+      removeCache(_keyRecentViewItems),
+      removeCache(_keyRecentSubjectDetails),
+    ]);
   }
 
   // ==================== 更新管理 ====================

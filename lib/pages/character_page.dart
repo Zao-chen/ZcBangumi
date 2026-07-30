@@ -172,6 +172,9 @@ class _CharacterPageState extends State<CharacterPage>
       _error = null;
       _personsError = null;
     });
+    if (_character != null) {
+      await storage.saveRecentCharacter(_character!);
+    }
 
     try {
       Character? latestCharacter;
@@ -231,6 +234,7 @@ class _CharacterPageState extends State<CharacterPage>
 
       if (_character != null) {
         storage.setCache(_cacheKey, _character!.toJson());
+        await storage.saveRecentCharacter(_character!);
       }
       storage.setCache(
         _subjectCacheKey,

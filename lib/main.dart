@@ -12,6 +12,7 @@ import 'models/navigation_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/collection_provider.dart';
 import 'providers/connectivity_provider.dart';
+import 'providers/discovery_provider.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/rakuen_favorite_provider.dart';
 import 'providers/update_provider.dart';
@@ -22,6 +23,7 @@ import 'pages/timeline_page.dart';
 import 'pages/rakuen_page.dart';
 import 'pages/progress_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/discovery_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -101,6 +103,13 @@ class ZCBangumiApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (context) => CollectionProvider(
+            api: apiClient,
+            storage: storage,
+            connectivity: context.read<ConnectivityProvider>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => DiscoveryProvider(
             api: apiClient,
             storage: storage,
             connectivity: context.read<ConnectivityProvider>(),
@@ -236,6 +245,8 @@ class _AppShellState extends State<_AppShell> {
 
   Widget _pageForTab(String tabId) {
     switch (tabId) {
+      case AppNavTabId.discover:
+        return const DiscoveryPage();
       case AppNavTabId.timeline:
         return const TimelinePage();
       case AppNavTabId.rakuen:
@@ -245,7 +256,7 @@ class _AppShellState extends State<_AppShell> {
       case AppNavTabId.profile:
         return const ProfilePage();
       default:
-        return const TimelinePage();
+        return const DiscoveryPage();
     }
   }
 
@@ -367,13 +378,18 @@ class _AppShellState extends State<_AppShell> {
           ]
         : shellTabs;
 
-    final safeIndex = appState.currentNavIndex
-        .clamp(0, safeTabs.length - 1)
-        .toInt();
-    if (safeIndex != appState.currentNavIndex) {
+    final selectedTabId = appState.currentNavTabId;
+    final selectedVisibleIndex = safeTabs.indexWhere(
+      (tab) => tab.id == selectedTabId,
+    );
+    final safeIndex = selectedVisibleIndex >= 0
+        ? selectedVisibleIndex
+        : appState.currentNavIndex.clamp(0, safeTabs.length - 1).toInt();
+    final safeTabId = safeTabs[safeIndex].id;
+    if (safeTabId != selectedTabId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          context.read<AppStateProvider>().setCurrentNavIndex(safeIndex);
+          context.read<AppStateProvider>().setCurrentNavTabId(safeTabId);
         }
       });
     }
@@ -385,7 +401,7 @@ class _AppShellState extends State<_AppShell> {
           _scrollTabToTop(safeTabs[i].id);
           return;
         }
-        appState.setCurrentNavIndex(i);
+        appState.setCurrentNavTabId(safeTabs[i].id);
       },
       items: safeTabs.map((tab) => tab.item).toList(growable: false),
       pages: safeTabs.map((tab) => tab.page).toList(growable: false),

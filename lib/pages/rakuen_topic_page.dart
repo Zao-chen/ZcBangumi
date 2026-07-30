@@ -11,6 +11,7 @@ import '../providers/auth_provider.dart';
 import '../providers/rakuen_favorite_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
+import '../services/storage_service.dart';
 import '../widgets/bangumi_post_widgets.dart';
 import '../widgets/rakuen_favorite_button.dart';
 
@@ -94,6 +95,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
       setState(() => _error = '加载失败: $e');
     } finally {
       if (mounted) {
+        await context.read<StorageService>().saveRecentTopic(
+          widget.topic,
+          displayTitle: _displayTitle(_detail),
+        );
         setState(() => _loading = false);
       }
     }

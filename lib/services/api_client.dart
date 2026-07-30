@@ -15,6 +15,7 @@ import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../models/rakuen_topic_favorite.dart';
 import '../models/subject.dart';
+import '../models/subject_browse.dart';
 import '../models/subject_search.dart';
 import '../models/timeline.dart';
 import '../models/user.dart';
@@ -232,6 +233,54 @@ class ApiClient {
   }
 
   // ========== 条目 ==========
+
+  /// 使用官方 v0 API 浏览条目。
+  Future<PagedResult<SlimSubject>> browseSubjects({
+    required SubjectBrowseFilter filter,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    if (!subjectBrowseTypes.contains(filter.type)) {
+      throw ArgumentError.value(filter.type, 'filter.type', '不支持的条目类型');
+    }
+    if (limit < 1 || limit > 50) {
+      throw ArgumentError.value(limit, 'limit', '必须在 1 到 50 之间');
+    }
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', '不能小于 0');
+    }
+    if (filter.month != null && (filter.month! < 1 || filter.month! > 12)) {
+      throw ArgumentError.value(filter.month, 'filter.month', '必须在 1 到 12 之间');
+    }
+
+    final platform = filter.platform?.trim();
+    final resp = await _dio.get(
+      '/v0/subjects',
+      queryParameters: {
+        'type': filter.type,
+        if (filter.category != null) 'cat': filter.category,
+        if (filter.series != null) 'series': filter.series,
+        if (platform != null && platform.isNotEmpty) 'platform': platform,
+        'sort': filter.sort.apiValue,
+        if (filter.year != null) 'year': filter.year,
+        if (filter.month != null) 'month': filter.month,
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    final payload = Map<String, dynamic>.from(resp.data as Map);
+    final subjects = (payload['data'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Subject.fromJson(Map<String, dynamic>.from(item)))
+        .map(SlimSubject.fromSubject)
+        .toList(growable: false);
+    return PagedResult<SlimSubject>(
+      total: (payload['total'] as num?)?.toInt() ?? subjects.length,
+      limit: (payload['limit'] as num?)?.toInt() ?? limit,
+      offset: (payload['offset'] as num?)?.toInt() ?? offset,
+      data: subjects,
+    );
+  }
 
   /// 使用官方 v0 API 搜索条目。
   Future<PagedResult<SlimSubject>> searchSubjects({
