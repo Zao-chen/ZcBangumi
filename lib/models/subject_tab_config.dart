@@ -17,6 +17,7 @@ class SubjectTabConfig {
   static const String charactersId = 'characters';
   static const String personsId = 'persons';
   static const String relatedId = 'related';
+  static const String indexesId = 'indexes';
   static const String commentsId = 'comments';
   static const String moegirlId = 'moegirl';
 
@@ -42,6 +43,11 @@ class SubjectTabConfig {
       icon: Icons.link_outlined,
     ),
     SubjectTabConfigItem(
+      id: indexesId,
+      label: '\u76ee\u5f55',
+      icon: Icons.format_list_bulleted_rounded,
+    ),
+    SubjectTabConfigItem(
       id: commentsId,
       label: '\u5410\u69fd',
       icon: Icons.chat_bubble_outline,
@@ -58,6 +64,7 @@ class SubjectTabConfig {
     charactersId,
     personsId,
     relatedId,
+    indexesId,
     commentsId,
     moegirlId,
   ];

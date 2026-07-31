@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants.dart';
+import '../models/bangumi_index.dart';
 import '../models/character.dart';
 import '../models/comment.dart';
 import '../models/person.dart';
@@ -11,6 +12,8 @@ import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_post_widgets.dart';
+import '../widgets/bangumi_index_actions.dart';
+import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/mono_detail_scaffold.dart';
 import '../widgets/mono_entity_widgets.dart';
@@ -33,6 +36,7 @@ class _CharacterPageState extends State<CharacterPage>
   static const _tabItems = [
     _CharacterTabItem(label: '概述', icon: Icons.article_outlined),
     _CharacterTabItem(label: '出演', icon: Icons.movie_outlined),
+    _CharacterTabItem(label: '目录', icon: Icons.format_list_bulleted_rounded),
     _CharacterTabItem(label: '吐槽', icon: Icons.chat_bubble_outline),
   ];
 
@@ -412,6 +416,7 @@ class _CharacterPageState extends State<CharacterPage>
       tabChildren: [
         _buildOverviewTab(),
         _buildAppearancesTab(),
+        _buildIndexesTab(),
         _buildCommentsTab(),
       ],
       selectedTabIndex: _selectedTabIndex,
@@ -419,6 +424,18 @@ class _CharacterPageState extends State<CharacterPage>
       title: _character!.name,
       header: _buildHeaderCard(),
       actions: [
+        IconButton(
+          tooltip: '加入目录',
+          onPressed: _activeCharacterId == null
+              ? null
+              : () => showAddToBangumiIndex(
+                  context,
+                  category: IndexRelatedCategory.character,
+                  contentId: _activeCharacterId!,
+                  contentTitle: _character!.name,
+                ),
+          icon: const Icon(Icons.playlist_add_rounded),
+        ),
         IconButton(
           tooltip: _isCollected ? '取消收藏角色' : '收藏角色',
           onPressed: _collectionLoading || _collectionUpdating
@@ -442,6 +459,24 @@ class _CharacterPageState extends State<CharacterPage>
           icon: const Icon(Icons.open_in_new),
         ),
       ],
+    );
+  }
+
+  Widget _buildIndexesTab() {
+    final id = _activeCharacterId;
+    if (id == null) return const Center(child: Text('角色不存在'));
+    final viewerUsername = context.watch<AuthProvider>().username;
+    return BangumiIndexListView(
+      cacheKey: bangumiEntityIndexesCacheKey(
+        IndexRelatedCategory.character,
+        id,
+        viewerUsername,
+      ),
+      viewerUsername: viewerUsername,
+      loadPage: (limit, offset) => context
+          .read<ApiClient>()
+          .getCharacterIndexes(characterId: id, limit: limit, offset: offset),
+      emptyText: '暂无收录此角色的目录',
     );
   }
 

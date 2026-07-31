@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/episode.dart';
+import '../models/bangumi_index.dart';
 import '../models/rakuen_topic.dart';
 import '../models/rakuen_topic_detail.dart';
 import '../pages/profile_page.dart';
@@ -13,6 +14,7 @@ import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_post_widgets.dart';
+import '../widgets/bangumi_index_actions.dart';
 import '../widgets/rakuen_favorite_button.dart';
 
 class RakuenTopicPage extends StatefulWidget {
@@ -33,6 +35,17 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   final GlobalKey _headerKey = GlobalKey();
   double _headerRevealOffset = 160;
   bool _showCollapsedTitle = false;
+
+  BangumiIndexContentRef? get _indexContentRef {
+    if (widget.episode != null) {
+      return BangumiIndexContentRef(
+        category: IndexRelatedCategory.episode,
+        id: widget.episode!.id,
+        sourceUrl: widget.topic.topicUrl,
+      );
+    }
+    return BangumiIndexContentRef.parse(widget.topic.topicUrl);
+  }
 
   @override
   void initState() {
@@ -133,6 +146,20 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
             : null,
         actions: [
           RakuenFavoriteButton(topic: widget.topic),
+          if (_indexContentRef != null)
+            IconButton(
+              tooltip: '加入目录',
+              onPressed: () {
+                final ref = _indexContentRef!;
+                showAddToBangumiIndex(
+                  context,
+                  category: ref.category,
+                  contentId: ref.id,
+                  contentTitle: widget.topic.title,
+                );
+              },
+              icon: const Icon(Icons.playlist_add_rounded),
+            ),
           if (isLandscape)
             IconButton(
               tooltip: '刷新帖子',

@@ -20,6 +20,7 @@ class ProgressGrid extends StatelessWidget {
   final void Function(int episodeId, int newType)? onSetStatus;
   final void Function(int episodeSort)? onWatchUpTo;
   final void Function(int newType)? onSetCollectionType;
+  final void Function(Episode episode)? onAddToIndex;
 
   const ProgressGrid({
     super.key,
@@ -34,6 +35,7 @@ class ProgressGrid extends StatelessWidget {
     this.onSetStatus,
     this.onWatchUpTo,
     this.onSetCollectionType,
+    this.onAddToIndex,
   });
 
   @override
@@ -103,6 +105,7 @@ class ProgressGrid extends StatelessWidget {
                 episode: ep,
                 onSetStatus: onSetStatus,
                 onWatchUpTo: onWatchUpTo,
+                onAddToIndex: onAddToIndex,
               ),
             )
             .toList(),
@@ -588,16 +591,19 @@ class _BookProgressSelector extends StatelessWidget {
 class _EpisodeCell extends StatelessWidget {
   static const int _menuWatchUpTo = -1;
   static const int _menuOpenDiscussion = -2;
+  static const int _menuAddToIndex = -3;
 
   final UserEpisodeCollection episode;
   final void Function(int episodeId, int newType)? onSetStatus;
   final void Function(int episodeSort)? onWatchUpTo;
+  final void Function(Episode episode)? onAddToIndex;
 
   const _EpisodeCell({
     super.key,
     required this.episode,
     this.onSetStatus,
     this.onWatchUpTo,
+    this.onAddToIndex,
   });
 
   bool _isAired() {
@@ -698,6 +704,19 @@ class _EpisodeCell extends StatelessWidget {
         ),
       ),
     );
+    if (onAddToIndex != null) {
+      items.add(
+        const PopupMenuItem(
+          value: _menuAddToIndex,
+          height: 40,
+          child: _MenuRow(
+            icon: Icons.playlist_add_rounded,
+            label: '加入目录',
+            color: Colors.pink,
+          ),
+        ),
+      );
+    }
 
     items.add(const PopupMenuDivider(height: 8));
 
@@ -805,6 +824,8 @@ class _EpisodeCell extends StatelessWidget {
         onWatchUpTo?.call(ep.episode.sort.toInt());
       } else if (value == _menuOpenDiscussion) {
         await _openEpisodeDiscussion(navigator, messenger, ep.episode);
+      } else if (value == _menuAddToIndex) {
+        onAddToIndex?.call(ep.episode);
       } else {
         onSetStatus?.call(ep.episode.id, value);
       }
@@ -822,6 +843,7 @@ class _EpisodeCell extends StatelessWidget {
       if (canSetStatus && currentType != BgmConst.episodeDropped) '抛弃',
       if (canSetStatus && currentType != BgmConst.episodeNotCollected) '撤销',
       '讨论($commentCount)',
+      if (onAddToIndex != null) '加入目录',
     ];
 
     var maxTextWidth = 0.0;

@@ -18,6 +18,7 @@ void main() {
     final api = _CharacterPersonsApiClient();
     await _pumpCharacterPage(tester, api);
 
+    expect(find.text('目录'), findsOneWidget);
     expect(find.text('声优'), findsOneWidget);
 
     const personKey = ValueKey('character_person_3818');

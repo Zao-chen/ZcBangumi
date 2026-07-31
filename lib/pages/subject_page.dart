@@ -9,6 +9,7 @@ import '../models/collection.dart';
 import '../models/comment.dart';
 import '../pages/profile_page.dart';
 import '../models/episode.dart';
+import '../models/bangumi_index.dart';
 import '../models/person.dart';
 import '../models/subject.dart';
 import '../models/subject_tab_config.dart';
@@ -25,6 +26,8 @@ import '../widgets/copyable_text.dart';
 import '../widgets/copyable_chip.dart';
 import '../widgets/mono_detail_scaffold.dart';
 import '../widgets/mono_entity_widgets.dart';
+import '../widgets/bangumi_index_actions.dart';
+import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/mono_relation_graph.dart';
 import 'anime_tag_page.dart';
 import 'character_page.dart';
@@ -816,6 +819,16 @@ class _SubjectPageState extends State<SubjectPage>
       header: _buildHeaderCard(colorScheme, isLandscape: isLandscape),
       actions: [
         IconButton(
+          tooltip: '加入目录',
+          onPressed: () => showAddToBangumiIndex(
+            context,
+            category: IndexRelatedCategory.subject,
+            contentId: widget.subjectId,
+            contentTitle: _subject!.displayName,
+          ),
+          icon: const Icon(Icons.playlist_add_rounded),
+        ),
+        IconButton(
           tooltip: '打开网页',
           onPressed: _openSubjectWebPage,
           icon: const Icon(Icons.open_in_new),
@@ -840,6 +853,8 @@ class _SubjectPageState extends State<SubjectPage>
         return _buildPersonsTab();
       case SubjectTabConfig.relatedId:
         return _buildRelatedTab();
+      case SubjectTabConfig.indexesId:
+        return _buildIndexesTab();
       case SubjectTabConfig.commentsId:
         return _buildCommentsTab();
       case SubjectTabConfig.moegirlId:
@@ -847,6 +862,35 @@ class _SubjectPageState extends State<SubjectPage>
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  void _addEpisodeToIndex(Episode episode) {
+    showAddToBangumiIndex(
+      context,
+      category: IndexRelatedCategory.episode,
+      contentId: episode.id,
+      contentTitle: episode.displayName.isEmpty
+          ? 'EP.${episode.sortLabel}'
+          : episode.displayName,
+    );
+  }
+
+  Widget _buildIndexesTab() {
+    final viewerUsername = context.watch<AuthProvider>().username;
+    return BangumiIndexListView(
+      cacheKey: bangumiEntityIndexesCacheKey(
+        IndexRelatedCategory.subject,
+        widget.subjectId,
+        viewerUsername,
+      ),
+      viewerUsername: viewerUsername,
+      loadPage: (limit, offset) => context.read<ApiClient>().getSubjectIndexes(
+        subjectId: widget.subjectId,
+        limit: limit,
+        offset: offset,
+      ),
+      emptyText: '暂无收录此条目的目录',
+    );
   }
 
   Widget _buildMoegirlTab() {
@@ -980,6 +1024,7 @@ class _SubjectPageState extends State<SubjectPage>
                     episodes: _episodes,
                     loading: _episodesLoading && _episodes.isEmpty,
                     onSetStatus: canManageProgress ? _setEpisodeStatus : null,
+                    onAddToIndex: _addEpisodeToIndex,
                     onWatchUpTo: canManageProgress ? _watchUpTo : null,
                     useNumberPicker: _subject!.type == BgmConst.subjectBook,
                     useCollectionTypePicker:
@@ -1088,6 +1133,7 @@ class _SubjectPageState extends State<SubjectPage>
                   episodes: _episodes,
                   loading: _episodesLoading && _episodes.isEmpty,
                   onSetStatus: canManageProgress ? _setEpisodeStatus : null,
+                  onAddToIndex: _addEpisodeToIndex,
                   onWatchUpTo: canManageProgress ? _watchUpTo : null,
                   useNumberPicker: _subject!.type == BgmConst.subjectBook,
                   useCollectionTypePicker:

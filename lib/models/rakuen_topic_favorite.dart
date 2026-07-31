@@ -6,6 +6,9 @@ const String rakuenFavoriteIndexTitle = 'ZCBangumi 帖子收藏同步';
 const String rakuenFavoriteBlockStart = '[zc_bangumi_topic_favorites_v1]';
 const String rakuenFavoriteBlockEnd = '[/zc_bangumi_topic_favorites_v1]';
 
+String rakuenFavoriteIndexCacheKey(String? username) =>
+    'rakuen_topic_favorite_index_${username?.trim().isNotEmpty == true ? username!.trim() : 'local'}';
+
 class RakuenFavoriteTopic {
   final String key;
   final String type;

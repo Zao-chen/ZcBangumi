@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants.dart';
+import '../models/bangumi_index.dart';
 import '../models/person.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/copyable_text.dart';
+import '../widgets/bangumi_index_actions.dart';
+import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/mono_detail_scaffold.dart';
 import '../widgets/mono_entity_widgets.dart';
 import 'character_page.dart';
@@ -28,6 +31,7 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
     _PersonTab(label: '概述', icon: Icons.article_outlined),
     _PersonTab(label: '作品', icon: Icons.movie_outlined),
     _PersonTab(label: '角色', icon: Icons.theater_comedy_outlined),
+    _PersonTab(label: '目录', icon: Icons.format_list_bulleted_rounded),
   ];
 
   late final TabController _tabController;
@@ -305,12 +309,25 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
         _buildOverviewTab(),
         _buildSubjectsTab(),
         _buildCharactersTab(),
+        _buildIndexesTab(),
       ],
       selectedTabIndex: _selectedTabIndex,
       showCollapsedTitle: _showCollapsedTitle,
       title: _displayPerson!.name,
       header: _buildHeaderCard(),
       actions: [
+        IconButton(
+          tooltip: '加入目录',
+          onPressed: _activePersonId == null
+              ? null
+              : () => showAddToBangumiIndex(
+                  context,
+                  category: IndexRelatedCategory.person,
+                  contentId: _activePersonId!,
+                  contentTitle: _displayPerson!.name,
+                ),
+          icon: const Icon(Icons.playlist_add_rounded),
+        ),
         IconButton(
           key: const ValueKey('person_collection_button'),
           tooltip: _isCollected ? '取消收藏人物' : '收藏人物',
@@ -335,6 +352,26 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
           icon: const Icon(Icons.open_in_new_rounded),
         ),
       ],
+    );
+  }
+
+  Widget _buildIndexesTab() {
+    final id = _activePersonId;
+    if (id == null) return const Center(child: Text('人物不存在'));
+    final viewerUsername = context.watch<AuthProvider>().username;
+    return BangumiIndexListView(
+      cacheKey: bangumiEntityIndexesCacheKey(
+        IndexRelatedCategory.person,
+        id,
+        viewerUsername,
+      ),
+      viewerUsername: viewerUsername,
+      loadPage: (limit, offset) => context.read<ApiClient>().getPersonIndexes(
+        personId: id,
+        limit: limit,
+        offset: offset,
+      ),
+      emptyText: '暂无收录此人物的目录',
     );
   }
 

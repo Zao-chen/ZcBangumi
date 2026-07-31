@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zc_bangumi/models/bangumi_index.dart';
 import 'package:zc_bangumi/models/collection.dart';
 import 'package:zc_bangumi/models/user.dart';
 import 'package:zc_bangumi/pages/profile_page.dart';
 import 'package:zc_bangumi/providers/app_state_provider.dart';
+import 'package:zc_bangumi/providers/auth_provider.dart';
 import 'package:zc_bangumi/services/api_client.dart';
 import 'package:zc_bangumi/services/storage_service.dart';
 import 'package:zc_bangumi/widgets/entity_collection_list_view.dart';
@@ -101,6 +103,9 @@ void main() {
           Provider<StorageService>.value(value: storage),
           Provider<ApiClient>.value(value: api),
           ChangeNotifierProvider<AppStateProvider>.value(value: appState),
+          ChangeNotifierProvider<AuthProvider>.value(
+            value: AuthProvider(api: api, storage: storage),
+          ),
         ],
         child: const MaterialApp(home: OtherUserProfilePage(username: 'alice')),
       ),
@@ -130,7 +135,11 @@ void main() {
       tester.widget(find.byKey(const ValueKey('profile_person_collections'))),
       isA<ChoiceChip>(),
     );
-    expect(find.byType(VerticalDivider), findsOneWidget);
+    expect(find.byType(VerticalDivider), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('profile_index_collection_chip_divider')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const ValueKey('profile_person_collections')));
     await tester.pumpAndSettle();
@@ -160,6 +169,18 @@ void main() {
       find.byKey(const ValueKey('entity_collection_character_10')),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const ValueKey('profile_index_collections')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('创建的'), findsOneWidget);
+    expect(find.text('收藏的'), findsOneWidget);
+    expect(api.createdIndexRequests, 1);
+
+    await tester.tap(find.text('收藏的'));
+    await tester.pumpAndSettle();
+
+    expect(api.collectedIndexRequests, 1);
   });
 
   testWidgets('landscape profile rail switches entity collections inline', (
@@ -180,6 +201,9 @@ void main() {
           Provider<StorageService>.value(value: storage),
           Provider<ApiClient>.value(value: api),
           ChangeNotifierProvider<AppStateProvider>.value(value: appState),
+          ChangeNotifierProvider<AuthProvider>.value(
+            value: AuthProvider(api: api, storage: storage),
+          ),
         ],
         child: const MaterialApp(home: OtherUserProfilePage(username: 'alice')),
       ),
@@ -193,6 +217,10 @@ void main() {
       isA<Icon>(),
     );
     expect(
+      tester.widget(find.byKey(const ValueKey('profile_index_collections'))),
+      isA<Icon>(),
+    );
+    expect(
       find.byKey(const ValueKey('profile_entity_collection_section_divider')),
       findsOneWidget,
     );
@@ -203,6 +231,17 @@ void main() {
       find.byKey(const ValueKey('profile_character_collections')),
     );
     expect(dividerRect.bottom, lessThan(characterIconRect.top));
+    final indexDividerRect = tester.getRect(
+      find.byKey(const ValueKey('profile_index_collection_section_divider')),
+    );
+    final personIconRect = tester.getRect(
+      find.byKey(const ValueKey('profile_person_collections')),
+    );
+    final indexIconRect = tester.getRect(
+      find.byKey(const ValueKey('profile_index_collections')),
+    );
+    expect(indexDividerRect.top, greaterThan(personIconRect.bottom));
+    expect(indexDividerRect.bottom, lessThan(indexIconRect.top));
 
     await tester.tap(find.byKey(const ValueKey('profile_person_collections')));
     await tester.pumpAndSettle();
@@ -315,6 +354,9 @@ class _FailingEntityCollectionApiClient extends ApiClient {
 }
 
 class _ProfileApiClient extends _EntityCollectionApiClient {
+  int createdIndexRequests = 0;
+  int collectedIndexRequests = 0;
+
   @override
   Future<BangumiUser> getUser(String username) async {
     return BangumiUser(
@@ -335,6 +377,26 @@ class _ProfileApiClient extends _EntityCollectionApiClient {
     int limit = 30,
     int offset = 0,
   }) async {
+    return PagedResult(total: 0, limit: limit, offset: offset, data: const []);
+  }
+
+  @override
+  Future<PagedResult<BangumiIndexSummary>> getUserCreatedIndexes({
+    required String username,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    createdIndexRequests++;
+    return PagedResult(total: 0, limit: limit, offset: offset, data: const []);
+  }
+
+  @override
+  Future<PagedResult<BangumiIndexSummary>> getUserCollectedIndexes({
+    required String username,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    collectedIndexRequests++;
     return PagedResult(total: 0, limit: limit, offset: offset, data: const []);
   }
 }
