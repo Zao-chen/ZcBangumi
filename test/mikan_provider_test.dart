@@ -45,8 +45,22 @@ class _FakeMikanService extends MikanService {
       id: bangumiId,
       name: '测试动画',
       subgroupBangumis: const [
-        MikanSubgroupBangumi(dataId: '99', name: '旧字幕组'),
-        MikanSubgroupBangumi(dataId: '15', name: '字幕组', subscribed: true),
+        MikanSubgroupBangumi(
+          dataId: '99',
+          name: '旧字幕组',
+          records: [
+            MikanRecordItem(title: '重复资源', magnet: 'magnet:?xt=duplicate'),
+          ],
+        ),
+        MikanSubgroupBangumi(
+          dataId: '15',
+          name: '字幕组',
+          subscribed: true,
+          records: [
+            MikanRecordItem(title: '重复资源', magnet: 'magnet:?xt=duplicate'),
+            MikanRecordItem(title: '独立资源', magnet: 'magnet:?xt=unique'),
+          ],
+        ),
       ],
     );
   }
@@ -179,4 +193,44 @@ void main() {
     expect(service.searchCalls, 0);
     expect(service.detailCalls, 1);
   });
+
+  test(
+    'resource loading aggregates subtitle groups and removes duplicates',
+    () async {
+      final storage = await storageWithSession();
+      final service = _FakeMikanService();
+      final provider = MikanProvider(service: service, storage: storage);
+      await provider.saveMapping(
+        MikanSubjectMapping(
+          subjectId: 12345,
+          bangumiId: '681',
+          bangumiName: '测试动画',
+          subgroupId: '15',
+          subgroupName: '字幕组',
+          updatedAt: DateTime(2026, 5, 21),
+        ),
+      );
+
+      final bundle = await provider.getResources(
+        Subject(
+          id: 12345,
+          type: 2,
+          name: 'test',
+          nameCn: '测试动画',
+          summary: '',
+          eps: 12,
+          volumes: 0,
+          score: 0,
+          rank: 0,
+          collectionTotal: 0,
+          date: '',
+          tags: const [],
+          infobox: const {},
+        ),
+      );
+
+      expect(bundle?.records, hasLength(2));
+      expect(bundle?.records.map((item) => item.subgroupName), ['旧字幕组', '字幕组']);
+    },
+  );
 }

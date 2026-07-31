@@ -21,6 +21,7 @@ class ProgressGrid extends StatelessWidget {
   final void Function(int episodeSort)? onWatchUpTo;
   final void Function(int newType)? onSetCollectionType;
   final void Function(Episode episode)? onAddToIndex;
+  final void Function(Episode episode)? onShowMikanResources;
 
   const ProgressGrid({
     super.key,
@@ -36,6 +37,7 @@ class ProgressGrid extends StatelessWidget {
     this.onWatchUpTo,
     this.onSetCollectionType,
     this.onAddToIndex,
+    this.onShowMikanResources,
   });
 
   @override
@@ -106,6 +108,7 @@ class ProgressGrid extends StatelessWidget {
                 onSetStatus: onSetStatus,
                 onWatchUpTo: onWatchUpTo,
                 onAddToIndex: onAddToIndex,
+                onShowMikanResources: onShowMikanResources,
               ),
             )
             .toList(),
@@ -592,11 +595,13 @@ class _EpisodeCell extends StatelessWidget {
   static const int _menuWatchUpTo = -1;
   static const int _menuOpenDiscussion = -2;
   static const int _menuAddToIndex = -3;
+  static const int _menuMikanResources = -4;
 
   final UserEpisodeCollection episode;
   final void Function(int episodeId, int newType)? onSetStatus;
   final void Function(int episodeSort)? onWatchUpTo;
   final void Function(Episode episode)? onAddToIndex;
+  final void Function(Episode episode)? onShowMikanResources;
 
   const _EpisodeCell({
     super.key,
@@ -604,6 +609,7 @@ class _EpisodeCell extends StatelessWidget {
     this.onSetStatus,
     this.onWatchUpTo,
     this.onAddToIndex,
+    this.onShowMikanResources,
   });
 
   bool _isAired() {
@@ -717,6 +723,19 @@ class _EpisodeCell extends StatelessWidget {
         ),
       );
     }
+    if (onShowMikanResources != null) {
+      items.add(
+        const PopupMenuItem(
+          value: _menuMikanResources,
+          height: 40,
+          child: _MenuRow(
+            icon: Icons.download_outlined,
+            label: 'Mikan 资源',
+            color: Colors.deepOrange,
+          ),
+        ),
+      );
+    }
 
     items.add(const PopupMenuDivider(height: 8));
 
@@ -826,6 +845,8 @@ class _EpisodeCell extends StatelessWidget {
         await _openEpisodeDiscussion(navigator, messenger, ep.episode);
       } else if (value == _menuAddToIndex) {
         onAddToIndex?.call(ep.episode);
+      } else if (value == _menuMikanResources) {
+        onShowMikanResources?.call(ep.episode);
       } else {
         onSetStatus?.call(ep.episode.id, value);
       }
@@ -844,6 +865,7 @@ class _EpisodeCell extends StatelessWidget {
       if (canSetStatus && currentType != BgmConst.episodeNotCollected) '撤销',
       '讨论($commentCount)',
       if (onAddToIndex != null) '加入目录',
+      if (onShowMikanResources != null) 'Mikan 资源',
     ];
 
     var maxTextWidth = 0.0;

@@ -16,8 +16,10 @@ import '../models/subject_tab_config.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/connectivity_provider.dart';
+import '../providers/mikan_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
+import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
 import '../widgets/subject_action_buttons.dart';
@@ -875,6 +877,15 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
+  Future<void> _showEpisodeMikanResources(Episode episode) {
+    return showMikanSubscriptionDialog(
+      context,
+      _subject!,
+      initialEpisode: episode.sortLabel,
+      showResources: true,
+    );
+  }
+
   Widget _buildIndexesTab() {
     final viewerUsername = context.watch<AuthProvider>().username;
     return BangumiIndexListView(
@@ -995,6 +1006,10 @@ class _SubjectPageState extends State<SubjectPage>
     final canManageProgress = context
         .watch<AuthProvider>()
         .canUseAuthenticatedCache;
+    final canShowMikanResources =
+        PlatformFeatureSupport.mikan &&
+        context.watch<MikanProvider>().isEnabled &&
+        _subject!.type == BgmConst.subjectAnime;
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     final summaryText = _normalizeSummary(_subject!.summary);
@@ -1025,6 +1040,9 @@ class _SubjectPageState extends State<SubjectPage>
                     loading: _episodesLoading && _episodes.isEmpty,
                     onSetStatus: canManageProgress ? _setEpisodeStatus : null,
                     onAddToIndex: _addEpisodeToIndex,
+                    onShowMikanResources: canShowMikanResources
+                        ? _showEpisodeMikanResources
+                        : null,
                     onWatchUpTo: canManageProgress ? _watchUpTo : null,
                     useNumberPicker: _subject!.type == BgmConst.subjectBook,
                     useCollectionTypePicker:
@@ -1134,6 +1152,9 @@ class _SubjectPageState extends State<SubjectPage>
                   loading: _episodesLoading && _episodes.isEmpty,
                   onSetStatus: canManageProgress ? _setEpisodeStatus : null,
                   onAddToIndex: _addEpisodeToIndex,
+                  onShowMikanResources: canShowMikanResources
+                      ? _showEpisodeMikanResources
+                      : null,
                   onWatchUpTo: canManageProgress ? _watchUpTo : null,
                   useNumberPicker: _subject!.type == BgmConst.subjectBook,
                   useCollectionTypePicker:

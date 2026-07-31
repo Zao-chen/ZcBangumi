@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../constants.dart';
@@ -10,8 +9,10 @@ import '../providers/auth_provider.dart';
 import '../providers/mikan_provider.dart';
 import '../pages/settings_page.dart';
 import '../services/api_client.dart';
-import '../services/link_navigator.dart';
+import '../services/mikan_service.dart';
 import '../services/platform_feature_support.dart';
+import '../utils/mikan_error.dart';
+import 'mikan_resource_list.dart';
 
 /// 条目操作按钮组件
 /// 包含编辑按钮，打开统一对话框修改收藏、评分、评论。
@@ -165,10 +166,7 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
   }
 
   Future<void> _handlePressed() async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => _MikanSubscriptionDialog(subject: widget.subject),
-    );
+    await showMikanSubscriptionDialog(context, widget.subject);
     if (!mounted) return;
     setState(() {
       _mapping = context.read<MikanProvider>().mappingForSubject(
@@ -178,10 +176,36 @@ class _MikanSubscriptionButtonState extends State<MikanSubscriptionButton> {
   }
 }
 
+Future<void> showMikanSubscriptionDialog(
+  BuildContext context,
+  Subject subject, {
+  String initialEpisode = '',
+  String initialSubgroup = '',
+  bool showResources = false,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _MikanSubscriptionDialog(
+      subject: subject,
+      initialEpisode: initialEpisode,
+      initialSubgroup: initialSubgroup,
+      showResources: showResources,
+    ),
+  );
+}
+
 class _MikanSubscriptionDialog extends StatefulWidget {
   final Subject subject;
+  final String initialEpisode;
+  final String initialSubgroup;
+  final bool showResources;
 
-  const _MikanSubscriptionDialog({required this.subject});
+  const _MikanSubscriptionDialog({
+    required this.subject,
+    required this.initialEpisode,
+    required this.initialSubgroup,
+    required this.showResources,
+  });
 
   @override
   State<_MikanSubscriptionDialog> createState() =>
@@ -191,8 +215,10 @@ class _MikanSubscriptionDialog extends StatefulWidget {
 class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
   bool _loading = false;
   MikanSubjectMapping? _mapping;
-  MikanSubjectMapping? _resourceMapping;
   Future<MikanBangumiDetail>? _detailFuture;
+  late bool _showResources;
+  late String _resourceEpisode;
+  late String _resourceSubgroup;
 
   @override
   void initState() {
@@ -200,6 +226,9 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
     _mapping = context.read<MikanProvider>().mappingForSubject(
       widget.subject.id,
     );
+    _showResources = widget.showResources;
+    _resourceEpisode = widget.initialEpisode;
+    _resourceSubgroup = widget.initialSubgroup;
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshMapping());
   }
 
@@ -211,10 +240,6 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
     final subjectTitle = widget.subject.nameCn.isNotEmpty
         ? widget.subject.nameCn
         : widget.subject.name;
-    final isLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape &&
-        size.width >= 700;
-
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
         horizontal: size.width * 0.06,
@@ -236,7 +261,7 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Mikan 订阅',
+                          _showResources ? 'Mikan 资源' : 'Mikan 订阅',
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
@@ -265,31 +290,18 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (mapping == null) ...[
-                      SizedBox(
-                        width: double.infinity,
+              child: mapping == null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
                         child: FilledButton.icon(
                           onPressed: _loading ? null : _selectBangumi,
                           icon: const Icon(Icons.search),
                           label: const Text('选择 Mikan 番组'),
                         ),
                       ),
-                    ] else ...[
-                      _buildSubgroupList(
-                        context,
-                        mikan,
-                        mapping,
-                        isLandscape: isLandscape,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                    )
+                  : _buildSubgroupList(context, mikan, mapping),
             ),
             const Divider(height: 1),
             Padding(
@@ -313,32 +325,27 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
   Widget _buildSubgroupList(
     BuildContext context,
     MikanProvider mikan,
-    MikanSubjectMapping mapping, {
-    required bool isLandscape,
-  }) {
+    MikanSubjectMapping mapping,
+  ) {
     _detailFuture ??= mikan.getBangumiDetail(mapping.bangumiId);
     return FutureBuilder<MikanBangumiDetail>(
       future: _detailFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: CircularProgressIndicator(),
-            ),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Text('字幕组加载失败: ${snapshot.error}');
+          return _buildLoadError(context, snapshot.error!);
         }
 
         final detail = snapshot.data;
         final subgroups = detail?.subgroupBangumis ?? const [];
         if (detail == null || subgroups.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: Text('暂无字幕组')),
-          );
+          return const Center(child: Text('暂无字幕组或资源'));
+        }
+
+        if (_showResources) {
+          return _buildResources(context, mikan, detail);
         }
 
         final subgroupList = Column(
@@ -358,117 +365,137 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
                   ),
                   onResources: () {
                     final target = _mappingForSubgroup(mapping, detail, item);
-                    if (isLandscape) {
-                      setState(() => _resourceMapping = target);
-                    } else {
-                      _showResourceDrawer(detail, target);
-                    }
+                    setState(() {
+                      _showResources = true;
+                      _resourceEpisode = '';
+                      _resourceSubgroup = target.subgroupName;
+                    });
                   },
                 ),
               )
               .toList(),
         );
-        final resources = _buildInlineResources(
-          context,
-          detail,
-          _resourceMapping,
-        );
-
-        if (!isLandscape) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [subgroupList],
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 5, child: subgroupList),
-            const SizedBox(width: 20),
-            Expanded(flex: 6, child: resources),
-          ],
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: subgroupList,
         );
       },
     );
   }
 
-  Future<void> _showResourceDrawer(
-    MikanBangumiDetail detail,
-    MikanSubjectMapping mapping,
-  ) {
-    final records = _recordsForMapping(detail, mapping);
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => _MikanResourceDrawer(
-        title: mapping.subgroupName.isEmpty
-            ? '资源'
-            : '${mapping.subgroupName} 资源',
-        records: records,
-      ),
-    );
-  }
-
-  Widget _buildInlineResources(
+  Widget _buildResources(
     BuildContext context,
+    MikanProvider mikan,
     MikanBangumiDetail detail,
-    MikanSubjectMapping? resourceMapping,
   ) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final mapping = resourceMapping;
-    if (mapping == null || mapping.subgroupId.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          '选择一个字幕组后查看资源',
-          style: TextStyle(color: colorScheme.onSurfaceVariant),
-        ),
-      );
-    }
-
-    final records = _recordsForMapping(detail, mapping);
-
+    final records = mikan.recordsFromDetail(detail);
+    final episode = _resourceEpisode.trim();
+    final hasEpisode =
+        episode.isEmpty ||
+        records.any((item) => _sameEpisode(item.episode, episode));
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          mapping.subgroupName.isEmpty ? '资源' : '${mapping.subgroupName} 资源',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
+          child: Row(
+            children: [
+              IconButton(
+                key: const ValueKey('mikan_resources_back'),
+                onPressed: () => setState(() => _showResources = false),
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: '返回字幕组与订阅',
+              ),
+              Expanded(
+                child: Text(
+                  episode.isEmpty ? '整季资源' : 'EP.$episode 资源',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '${records.length} 个',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
-        if (records.isEmpty)
+        const Divider(height: 1),
+        if (!hasEpisode)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(24),
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border.all(color: colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: const Center(child: Text('暂无资源')),
-          )
+            child: Text('未识别到 EP.$episode 的资源，当前显示整季 ${records.length} 个资源。'),
+          ),
+        if (records.isEmpty)
+          const Expanded(child: Center(child: Text('暂无资源')))
         else
-          _MikanResourceList(records: records, scrollable: false),
+          Expanded(
+            child: MikanResourceList(
+              records: records,
+              initialEpisode: _resourceEpisode,
+              initialSubgroup: _resourceSubgroup,
+            ),
+          ),
       ],
     );
   }
 
-  List<MikanRecordItem> _recordsForMapping(
-    MikanBangumiDetail detail,
-    MikanSubjectMapping mapping,
-  ) {
-    return detail.subgroupBangumis
-        .where((item) => item.dataId == mapping.subgroupId)
-        .expand((item) => item.records)
-        .toList();
+  bool _sameEpisode(String a, String b) {
+    final normalizedA = a.trim();
+    final normalizedB = b.trim();
+    if (normalizedA == normalizedB) return true;
+    final numberA = num.tryParse(normalizedA);
+    final numberB = num.tryParse(normalizedB);
+    return numberA != null && numberB != null && numberA == numberB;
+  }
+
+  Widget _buildLoadError(BuildContext context, Object error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 42),
+            const SizedBox(height: 12),
+            Text(mikanErrorMessage(error), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton(onPressed: _retryDetail, child: const Text('重试')),
+                OutlinedButton(
+                  onPressed: _switchSite,
+                  child: const Text('切换站点'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _retryDetail() {
+    setState(() => _detailFuture = null);
+  }
+
+  Future<void> _switchSite() async {
+    final mikan = context.read<MikanProvider>();
+    final urls = MikanService.availableBaseUrls;
+    final index = urls.indexOf(mikan.baseUrl);
+    await mikan.setBaseUrl(urls[(index + 1) % urls.length]);
+    if (!mounted) return;
+    _retryDetail();
   }
 
   Future<void> _refreshMapping() async {
@@ -481,7 +508,6 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
       if (!mounted || exact == null) return;
       setState(() {
         _mapping = exact;
-        _resourceMapping = null;
         _detailFuture = null;
       });
       return;
@@ -491,7 +517,6 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
     if (!mounted || refreshed == null) return;
     setState(() {
       _mapping = refreshed;
-      _resourceMapping = null;
       _detailFuture = null;
     });
   }
@@ -534,7 +559,6 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
     if (!mounted) return;
     setState(() {
       _mapping = mapping;
-      _resourceMapping = null;
       _detailFuture = Future.value(detail);
     });
   }
@@ -551,9 +575,6 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
     if (!mounted || next == null) return;
     setState(() {
       _mapping = next;
-      _resourceMapping = _resourceMapping?.subgroupId == next.subgroupId
-          ? next
-          : _resourceMapping;
       _detailFuture = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -585,7 +606,7 @@ class _MikanSubscriptionDialogState extends State<_MikanSubscriptionDialog> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Mikan 操作失败: $e')));
+        ).showSnackBar(SnackBar(content: Text(mikanErrorMessage(e))));
       }
       return null;
     } finally {
@@ -1256,628 +1277,6 @@ class _MikanSubgroupActionTile extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MikanResourceDrawer extends StatelessWidget {
-  final String title;
-  final List<MikanRecordItem> records;
-
-  const _MikanResourceDrawer({required this.title, required this.records});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            if (records.isEmpty)
-              const Expanded(child: Center(child: Text('暂无资源')))
-            else
-              Expanded(child: _MikanResourceList(records: records)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MikanResourceList extends StatefulWidget {
-  final List<MikanRecordItem> records;
-  final bool scrollable;
-
-  const _MikanResourceList({required this.records, this.scrollable = true});
-
-  @override
-  State<_MikanResourceList> createState() => _MikanResourceListState();
-}
-
-class _MikanResourceListState extends State<_MikanResourceList> {
-  String _episode = '';
-  String _subtitleType = '';
-  String _tag = '';
-
-  @override
-  void didUpdateWidget(_MikanResourceList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.records == widget.records) return;
-    final episodes = _episodes;
-    final subtitleTypes = _subtitleTypes;
-    final tags = _tags;
-    if (_episode.isNotEmpty && !episodes.contains(_episode)) {
-      _episode = '';
-    }
-    if (_subtitleType.isNotEmpty && !subtitleTypes.contains(_subtitleType)) {
-      _subtitleType = '';
-    }
-    if (_tag.isNotEmpty && !tags.contains(_tag)) {
-      _tag = '';
-    }
-  }
-
-  List<String> get _episodes {
-    final values = widget.records
-        .map((item) => item.episode)
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList();
-    values.sort(_compareEpisode);
-    return values;
-  }
-
-  List<String> get _subtitleTypes {
-    final values = widget.records
-        .map((item) => item.subtitleType)
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList();
-    values.sort();
-    return values;
-  }
-
-  List<String> get _tags {
-    final values = widget.records
-        .expand((item) => item.tags)
-        .where((tag) => tag.isNotEmpty && tag != '简' && tag != '繁')
-        .toSet()
-        .toList();
-    values.sort(_compareTag);
-    return values;
-  }
-
-  List<MikanRecordItem> get _filteredRecords {
-    return widget.records.where((item) {
-      if (_episode.isNotEmpty && item.episode != _episode) return false;
-      if (_subtitleType.isNotEmpty && item.subtitleType != _subtitleType) {
-        return false;
-      }
-      if (_tag.isNotEmpty && !item.tags.contains(_tag)) return false;
-      return true;
-    }).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredRecords = _filteredRecords;
-    final children = [
-      if (_episodes.isNotEmpty || _subtitleTypes.isNotEmpty || _tags.isNotEmpty)
-        Padding(
-          padding: EdgeInsets.fromLTRB(12, widget.scrollable ? 12 : 0, 12, 8),
-          child: _MikanResourceFilters(
-            episodes: _episodes,
-            subtitleTypes: _subtitleTypes,
-            tags: _tags,
-            selectedEpisode: _episode,
-            selectedSubtitleType: _subtitleType,
-            selectedTag: _tag,
-            filteredCount: filteredRecords.length,
-            totalCount: widget.records.length,
-            onEpisodeChanged: (value) => setState(() => _episode = value),
-            onSubtitleTypeChanged: (value) =>
-                setState(() => _subtitleType = value),
-            onTagChanged: (value) => setState(() => _tag = value),
-          ),
-        ),
-      if (filteredRecords.isEmpty)
-        const Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: Text('没有符合筛选的资源')),
-        )
-      else if (widget.scrollable)
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            itemCount: filteredRecords.length,
-            itemBuilder: (context, index) =>
-                _MikanRecordTile(item: filteredRecords[index]),
-          ),
-        )
-      else
-        ...filteredRecords.map(
-          (item) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0),
-            child: _MikanRecordTile(item: item),
-          ),
-        ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    );
-  }
-
-  int _compareEpisode(String a, String b) {
-    final aNumber = num.tryParse(a);
-    final bNumber = num.tryParse(b);
-    if (aNumber != null && bNumber != null) {
-      return aNumber.compareTo(bNumber);
-    }
-    return a.compareTo(b);
-  }
-
-  int _compareTag(String a, String b) {
-    final aResolution = _resolution(a);
-    final bResolution = _resolution(b);
-    if (aResolution != null && bResolution != null) {
-      return bResolution.compareTo(aResolution);
-    }
-    if (aResolution != null) return -1;
-    if (bResolution != null) return 1;
-    return a.compareTo(b);
-  }
-
-  int? _resolution(String value) {
-    final match = RegExp(r'^(\d{3,4})P$').firstMatch(value.toUpperCase());
-    return int.tryParse(match?.group(1) ?? '');
-  }
-}
-
-class _MikanResourceFilters extends StatelessWidget {
-  final List<String> episodes;
-  final List<String> subtitleTypes;
-  final List<String> tags;
-  final String selectedEpisode;
-  final String selectedSubtitleType;
-  final String selectedTag;
-  final int filteredCount;
-  final int totalCount;
-  final ValueChanged<String> onEpisodeChanged;
-  final ValueChanged<String> onSubtitleTypeChanged;
-  final ValueChanged<String> onTagChanged;
-
-  const _MikanResourceFilters({
-    required this.episodes,
-    required this.subtitleTypes,
-    required this.tags,
-    required this.selectedEpisode,
-    required this.selectedSubtitleType,
-    required this.selectedTag,
-    required this.filteredCount,
-    required this.totalCount,
-    required this.onEpisodeChanged,
-    required this.onSubtitleTypeChanged,
-    required this.onTagChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.filter_list, size: 18, color: colorScheme.primary),
-                const SizedBox(width: 6),
-                Text(
-                  '$filteredCount / $totalCount',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (episodes.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            _MikanFilterDropdown(
-              key: const ValueKey('mikan_episode_filter'),
-              label: '集数',
-              options: episodes,
-              selected: selectedEpisode,
-              optionLabel: (value) => 'EP.$value',
-              onChanged: onEpisodeChanged,
-            ),
-          ],
-          if (subtitleTypes.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            _MikanFilterDropdown(
-              key: const ValueKey('mikan_subtitle_filter'),
-              label: '字幕',
-              options: subtitleTypes,
-              selected: selectedSubtitleType,
-              onChanged: onSubtitleTypeChanged,
-            ),
-          ],
-          if (tags.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            _MikanFilterDropdown(
-              key: const ValueKey('mikan_tag_filter'),
-              label: '标签',
-              options: tags,
-              selected: selectedTag,
-              onChanged: onTagChanged,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _MikanFilterDropdown extends StatelessWidget {
-  final String label;
-  final List<String> options;
-  final String selected;
-  final String Function(String value)? optionLabel;
-  final ValueChanged<String> onChanged;
-
-  const _MikanFilterDropdown({
-    super.key,
-    required this.label,
-    required this.options,
-    required this.selected,
-    required this.onChanged,
-    this.optionLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textStyle = Theme.of(context).textTheme.labelLarge;
-    final width = switch (label) {
-      '字幕' => 148.0,
-      '集数' => 106.0,
-      _ => 104.0,
-    };
-    return Container(
-      height: 40,
-      width: width,
-      padding: const EdgeInsets.only(left: 10, right: 6),
-      decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          focusColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          splashColor: Colors.transparent,
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: selected,
-            isDense: true,
-            isExpanded: true,
-            focusColor: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            style: textStyle?.copyWith(color: colorScheme.onSurface),
-            icon: const Icon(Icons.arrow_drop_down, size: 20),
-            onChanged: (value) {
-              if (value == null) return;
-              onChanged(value);
-            },
-            items: [
-              DropdownMenuItem(value: '', child: Text('$label: 全部')),
-              ...options.map(
-                (value) => DropdownMenuItem(
-                  value: value,
-                  child: Text('$label: ${optionLabel?.call(value) ?? value}'),
-                ),
-              ),
-            ],
-            selectedItemBuilder: (context) => [
-              Text('$label: 全部', overflow: TextOverflow.ellipsis),
-              ...options.map(
-                (value) => Text(
-                  '$label: ${optionLabel?.call(value) ?? value}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MikanRecordTile extends StatelessWidget {
-  final MikanRecordItem item;
-
-  const _MikanRecordTile({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _showDetails(context),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 8, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.title,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              _MikanRecordMeta(item: item),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      [
-                        if (item.size.isNotEmpty) item.size,
-                        if (item.publishAt.isNotEmpty) item.publishAt,
-                      ].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: item.magnet.isEmpty
-                        ? null
-                        : () => _copyMagnet(context, item.magnet),
-                    icon: const Icon(Icons.copy),
-                    tooltip: '复制磁链',
-                  ),
-                  IconButton(
-                    onPressed: item.magnet.isEmpty
-                        ? null
-                        : () => _openUri(context, item.magnet),
-                    icon: const Icon(Icons.link),
-                    tooltip: '打开磁链',
-                  ),
-                  IconButton(
-                    onPressed: item.torrent.isEmpty
-                        ? null
-                        : () => _openUri(context, item.torrent),
-                    icon: const Icon(Icons.download_outlined),
-                    tooltip: '打开种子',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showDetails(BuildContext context) {
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: _MikanRecordDetails(
-            item: item,
-            onCopyMagnet: () => _copyMagnet(context, item.magnet),
-            onOpenMagnet: () => _openUri(context, item.magnet),
-            onOpenTorrent: () => _openUri(context, item.torrent),
-            onOpenPage: () => _openUri(context, item.url),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _copyMagnet(BuildContext context, String magnet) async {
-    await Clipboard.setData(ClipboardData(text: magnet));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('磁链已复制')));
-  }
-
-  Future<void> _openUri(BuildContext context, String raw) async {
-    final uri = Uri.tryParse(raw);
-    if (uri == null) return;
-    final ok = await LinkNavigator.openBrowser(uri);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('打开失败')));
-    }
-  }
-}
-
-class _MikanRecordMeta extends StatelessWidget {
-  final MikanRecordItem item;
-
-  const _MikanRecordMeta({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final chips = [
-      if (item.episode.isNotEmpty) 'EP.${item.episode}',
-      if (item.subtitleType.isNotEmpty) item.subtitleType,
-      ...item.tags.where((tag) => tag != item.subtitleType),
-    ];
-    if (chips.isEmpty) return const SizedBox.shrink();
-
-    final colorScheme = Theme.of(context).colorScheme;
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: chips
-          .map(
-            (label) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _MikanRecordDetails extends StatelessWidget {
-  final MikanRecordItem item;
-  final VoidCallback onCopyMagnet;
-  final VoidCallback onOpenMagnet;
-  final VoidCallback onOpenTorrent;
-  final VoidCallback onOpenPage;
-
-  const _MikanRecordDetails({
-    required this.item,
-    required this.onCopyMagnet,
-    required this.onOpenMagnet,
-    required this.onOpenTorrent,
-    required this.onOpenPage,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '资源详情',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            item.title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 10),
-          _MikanRecordMeta(item: item),
-          const SizedBox(height: 14),
-          _MikanDetailRow(label: '大小', value: item.size),
-          _MikanDetailRow(label: '发布时间', value: item.publishAt),
-          _MikanDetailRow(label: '资源页', value: item.url),
-          if (item.magnet.isNotEmpty)
-            _MikanDetailRow(label: '磁链', value: item.magnet),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: item.magnet.isEmpty ? null : onCopyMagnet,
-                icon: const Icon(Icons.copy),
-                label: const Text('复制磁链'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: item.magnet.isEmpty ? null : onOpenMagnet,
-                icon: const Icon(Icons.link),
-                label: const Text('打开磁链'),
-              ),
-              OutlinedButton.icon(
-                onPressed: item.torrent.isEmpty ? null : onOpenTorrent,
-                icon: const Icon(Icons.download_outlined),
-                label: const Text('打开种子'),
-              ),
-              OutlinedButton.icon(
-                onPressed: item.url.isEmpty ? null : onOpenPage,
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('资源页'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MikanDetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _MikanDetailRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    if (value.isEmpty) return const SizedBox.shrink();
-    final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 2),
-          SelectableText(value),
         ],
       ),
     );

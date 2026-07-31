@@ -495,11 +495,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     items: const [
                       DropdownMenuItem(
                         value: 'https://mikanani.me',
-                        child: Text('mikanani'),
+                        child: Text('mikanani（国外）'),
                       ),
                       DropdownMenuItem(
                         value: 'https://mikanime.tv',
-                        child: Text('mikanime'),
+                        child: Text('mikanime（大陆）'),
                       ),
                     ],
                   ),
