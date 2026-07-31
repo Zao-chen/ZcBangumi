@@ -233,6 +233,7 @@ class MikanRecordItem {
   final String magnet;
   final String size;
   final String torrent;
+  final String subgroupName;
   final List<String> tags;
 
   const MikanRecordItem({
@@ -246,8 +247,26 @@ class MikanRecordItem {
     this.magnet = '',
     this.size = '',
     this.torrent = '',
+    this.subgroupName = '',
     this.tags = const [],
   });
+
+  MikanRecordItem copyWith({String? subgroupName}) {
+    return MikanRecordItem(
+      id: id,
+      name: name,
+      title: title,
+      episode: episode,
+      subtitleType: subtitleType,
+      publishAt: publishAt,
+      url: url,
+      magnet: magnet,
+      size: size,
+      torrent: torrent,
+      subgroupName: subgroupName ?? this.subgroupName,
+      tags: tags,
+    );
+  }
 }
 
 class MikanSubgroupBangumi {
@@ -308,6 +327,18 @@ class MikanSearchResult {
     this.bangumis = const [],
     this.subgroups = const [],
     this.records = const [],
+  });
+}
+
+class MikanResourceBundle {
+  final MikanSubjectMapping mapping;
+  final MikanBangumiDetail detail;
+  final List<MikanRecordItem> records;
+
+  const MikanResourceBundle({
+    required this.mapping,
+    required this.detail,
+    required this.records,
   });
 }
 

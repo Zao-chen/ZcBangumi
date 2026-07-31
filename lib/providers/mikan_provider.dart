@@ -4,6 +4,7 @@ import '../models/mikan.dart';
 import '../models/subject.dart';
 import '../services/mikan_service.dart';
 import '../services/storage_service.dart';
+import '../utils/mikan_error.dart';
 
 class MikanProvider extends ChangeNotifier {
   final MikanService service;
@@ -67,7 +68,7 @@ class MikanProvider extends ChangeNotifier {
         _error = 'Mikan 登录已过期，请重新登录';
       }
     } catch (e) {
-      _error = 'Mikan 会话验证失败: $e';
+      _error = 'Mikan 会话验证失败：${mikanErrorMessage(e)}';
     } finally {
       _loading = false;
       notifyListeners();
@@ -87,7 +88,7 @@ class MikanProvider extends ChangeNotifier {
       _error = null;
       return true;
     } catch (e) {
-      _error = '$e';
+      _error = mikanErrorMessage(e);
       return false;
     } finally {
       _initialized = true;
@@ -151,6 +152,21 @@ class MikanProvider extends ChangeNotifier {
     return service.getBangumi(bangumiId);
   }
 
+  Future<MikanResourceBundle?> getResources(Subject subject) async {
+    final mapping =
+        mappingForSubject(subject.id) ?? await findExactMapping(subject);
+    if (mapping == null) return null;
+
+    final detail = await service.getBangumi(mapping.bangumiId);
+    final refreshed = _mappingFromDetail(mapping, detail);
+    await saveMapping(refreshed);
+    return MikanResourceBundle(
+      mapping: refreshed,
+      detail: detail,
+      records: recordsFromDetail(detail),
+    );
+  }
+
   Future<MikanSubjectMapping?> findExactMapping(Subject subject) async {
     final saved = mappingForSubject(subject.id);
     if (saved != null && saved.bangumiId.isNotEmpty) {
@@ -189,11 +205,20 @@ class MikanProvider extends ChangeNotifier {
     MikanSubjectMapping mapping,
   ) async {
     final detail = await service.getBangumi(mapping.bangumiId);
+    final refreshed = _mappingFromDetail(mapping, detail);
+    await saveMapping(refreshed);
+    return refreshed;
+  }
+
+  MikanSubjectMapping _mappingFromDetail(
+    MikanSubjectMapping mapping,
+    MikanBangumiDetail detail,
+  ) {
     final currentSubgroup =
         _subscribedSubgroup(detail) ??
         _subgroupById(detail, mapping.subgroupId) ??
         _defaultSubgroup(detail);
-    final refreshed = mapping.copyWith(
+    return mapping.copyWith(
       bangumiName: detail.name.isNotEmpty ? detail.name : mapping.bangumiName,
       bangumiCover: detail.cover.isNotEmpty
           ? detail.cover
@@ -204,8 +229,25 @@ class MikanProvider extends ChangeNotifier {
       subscribed: currentSubgroup?.subscribed ?? detail.subscribed,
       updatedAt: DateTime.now(),
     );
-    await saveMapping(refreshed);
-    return refreshed;
+  }
+
+  List<MikanRecordItem> recordsFromDetail(MikanBangumiDetail detail) {
+    final seen = <String>{};
+    final records = <MikanRecordItem>[];
+    for (final subgroup in detail.subgroupBangumis) {
+      for (final source in subgroup.records) {
+        final item = source.copyWith(subgroupName: subgroup.name);
+        final key = item.magnet.isNotEmpty
+            ? 'magnet:${item.magnet}'
+            : item.torrent.isNotEmpty
+            ? 'torrent:${item.torrent}'
+            : item.url.isNotEmpty
+            ? 'url:${item.url}'
+            : '${item.title}|${item.size}|${item.publishAt}';
+        if (seen.add(key)) records.add(item);
+      }
+    }
+    return List.unmodifiable(records);
   }
 
   Future<void> syncSubscription({

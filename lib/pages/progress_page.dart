@@ -9,8 +9,11 @@ import '../pages/subject_page.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/collection_provider.dart';
+import '../providers/mikan_provider.dart';
+import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
+import '../widgets/subject_action_buttons.dart';
 
 /// 进度页面 - 展示用户正在进行的收藏
 class ProgressPage extends StatefulWidget {
@@ -638,6 +641,14 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
     final provider = context.watch<CollectionProvider>();
     final appState = context.watch<AppStateProvider>();
     final subject = widget.collection.subject;
+    final fullSubject = subject == null
+        ? null
+        : Subject.fromSlimSubject(subject);
+    final canShowMikanResources =
+        fullSubject != null &&
+        widget.collection.subjectType == BgmConst.subjectAnime &&
+        PlatformFeatureSupport.mikan &&
+        context.watch<MikanProvider>().isEnabled;
     final episodes = provider.getEpisodeProgress(widget.collection.subjectId);
     final epLoading = provider.isEpisodeLoading(widget.collection.subjectId);
     final densityScale = switch (appState.listDensityMode) {
@@ -775,6 +786,14 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                                 );
                               }
                             },
+                            onShowMikanResources: canShowMikanResources
+                                ? (episode) => showMikanSubscriptionDialog(
+                                    context,
+                                    fullSubject,
+                                    initialEpisode: episode.sortLabel,
+                                    showResources: true,
+                                  )
+                                : null,
                             onSetCollectionType: (newType) {
                               provider.setCollectionType(
                                 subjectId: widget.collection.subjectId,

@@ -218,7 +218,7 @@ void main() {
     expect(find.text('取消订阅这个字幕组'), findsNothing);
   });
 
-  testWidgets('Mikan subgroup row shows resources inside dialog', (
+  testWidgets('Mikan subgroup row opens unified resources panel', (
     tester,
   ) async {
     await pumpMikanButton(
@@ -245,11 +245,14 @@ void main() {
     await tester.tap(find.text('查看资源'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Mikan 资源'), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Mikan 资源'), findsOneWidget);
     expect(find.text('测试资源'), findsOneWidget);
   });
 
-  testWidgets('portrait Mikan resources open as drawer', (tester) async {
+  testWidgets('portrait Mikan resources use the unified season panel', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -278,7 +281,8 @@ void main() {
     await tester.tap(find.text('查看资源'));
     await tester.pumpAndSettle();
 
-    expect(find.text('字幕组 资源'), findsOneWidget);
+    expect(find.text('Mikan 资源'), findsOneWidget);
+    expect(find.text('字幕组: 字幕组'), findsOneWidget);
     expect(find.text('测试资源'), findsOneWidget);
     expect(find.text('EP.12'), findsWidgets);
     expect(find.text('简繁内封字幕'), findsWidgets);
@@ -363,6 +367,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mikan_episode_filter')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('集数: 全部').last);
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('mikan_resource_filters_scroll')),
+      const Offset(-320, 0),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('mikan_subtitle_filter')));
     await tester.pumpAndSettle();
