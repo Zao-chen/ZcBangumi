@@ -13,6 +13,7 @@ import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/entity_collection_list_view.dart';
+import '../widgets/user_index_collections_view.dart';
 
 enum _SortMode {
   updatedAt('最近操作'),
@@ -27,10 +28,14 @@ enum _SortMode {
 class _NavigationRailSectionLabel extends StatelessWidget {
   final String text;
   final bool showDivider;
+  final Key dividerKey;
 
   const _NavigationRailSectionLabel({
     required this.text,
     this.showDivider = false,
+    this.dividerKey = const ValueKey(
+      'profile_entity_collection_section_divider',
+    ),
   });
 
   @override
@@ -42,13 +47,9 @@ class _NavigationRailSectionLabel extends StatelessWidget {
       children: [
         Text(text),
         const SizedBox(height: 8),
-        const SizedBox(
+        SizedBox(
           width: 48,
-          child: Divider(
-            key: ValueKey('profile_entity_collection_section_divider'),
-            height: 1,
-            thickness: 1,
-          ),
+          child: Divider(key: dividerKey, height: 1, thickness: 1),
         ),
       ],
     );
@@ -958,11 +959,14 @@ class _ProfileContentState extends State<_ProfileContent> {
   ];
   int _subjectType = BgmConst.subjectAnime;
   EntityCollectionKind? _entityCollectionKind;
+  bool _showIndexCollections = false;
   int _collectionType = BgmConst.collectionDoing;
   _SortMode _sortMode = _SortMode.updatedAt;
   final TextEditingController _searchController = TextEditingController();
   final GlobalKey<EntityCollectionListViewState> _entityCollectionKey =
       GlobalKey<EntityCollectionListViewState>();
+  final GlobalKey<UserIndexCollectionsViewState> _indexCollectionKey =
+      GlobalKey<UserIndexCollectionsViewState>();
   List<UserCollection> _items = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -1061,9 +1065,14 @@ class _ProfileContentState extends State<_ProfileContent> {
 
   void _switchSubjectType(int type) {
     final typeChanged = _subjectType != type;
-    if (!typeChanged && _entityCollectionKind == null) return;
+    if (!typeChanged &&
+        _entityCollectionKind == null &&
+        !_showIndexCollections) {
+      return;
+    }
     setState(() {
       _entityCollectionKind = null;
+      _showIndexCollections = false;
       if (typeChanged) {
         _subjectType = type;
         _items = [];
@@ -1077,8 +1086,19 @@ class _ProfileContentState extends State<_ProfileContent> {
   }
 
   void _switchEntityCollection(EntityCollectionKind kind) {
-    if (_entityCollectionKind == kind) return;
-    setState(() => _entityCollectionKind = kind);
+    if (_entityCollectionKind == kind && !_showIndexCollections) return;
+    setState(() {
+      _entityCollectionKind = kind;
+      _showIndexCollections = false;
+    });
+  }
+
+  void _switchIndexCollections() {
+    if (_showIndexCollections) return;
+    setState(() {
+      _entityCollectionKind = null;
+      _showIndexCollections = true;
+    });
   }
 
   void _switchCollectionType(int type) {
@@ -1231,6 +1251,10 @@ class _ProfileContentState extends State<_ProfileContent> {
                 _switchSubjectType(_subjectTypes[index].type);
                 return;
               }
+              if (index == _subjectTypes.length + 2) {
+                _switchIndexCollections();
+                return;
+              }
               _switchEntityCollection(
                 index == _subjectTypes.length
                     ? EntityCollectionKind.character
@@ -1262,7 +1286,20 @@ class _ProfileContentState extends State<_ProfileContent> {
                   Icons.badge_outlined,
                   key: ValueKey('profile_person_collections'),
                 ),
-                label: Text('人物'),
+                label: _NavigationRailSectionLabel(
+                  text: '人物',
+                  showDivider: true,
+                  dividerKey: ValueKey(
+                    'profile_index_collection_section_divider',
+                  ),
+                ),
+              ),
+              const NavigationRailDestination(
+                icon: Icon(
+                  Icons.format_list_bulleted_rounded,
+                  key: ValueKey('profile_index_collections'),
+                ),
+                label: Text('目录'),
               ),
             ],
           ),
@@ -1281,6 +1318,9 @@ class _ProfileContentState extends State<_ProfileContent> {
   }
 
   int get _selectedDestinationIndex {
+    if (_showIndexCollections) {
+      return _subjectTypes.length + 2;
+    }
     if (_entityCollectionKind == EntityCollectionKind.character) {
       return _subjectTypes.length;
     }
@@ -1297,47 +1337,64 @@ class _ProfileContentState extends State<_ProfileContent> {
     required bool includeHeader,
     EdgeInsetsGeometry padding = const EdgeInsets.all(16),
   }) {
-    return RefreshIndicator(
-      onRefresh: _refreshActiveCollection,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: padding,
-        children: [
-          if (includeHeader) ...[
-            _buildUserCard(colorScheme),
-            if (widget.offline) ...[
-              const SizedBox(height: 8),
-              _buildOfflineNotice(colorScheme),
-            ],
-            const SizedBox(height: 20),
-            Text(
-              widget.collectionTitle,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (_showIndexCollections && notification.metrics.extentAfter < 360) {
+          _indexCollectionKey.currentState?.loadMore();
+        }
+        return false;
+      },
+      child: RefreshIndicator(
+        onRefresh: _refreshActiveCollection,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: padding,
+          children: [
+            if (includeHeader) ...[
+              _buildUserCard(colorScheme),
+              if (widget.offline) ...[
+                const SizedBox(height: 8),
+                _buildOfflineNotice(colorScheme),
+              ],
+              const SizedBox(height: 20),
+              Text(
+                widget.collectionTitle,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
+            if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
+            if (_showIndexCollections)
+              UserIndexCollectionsView(
+                key: _indexCollectionKey,
+                username: widget.user.username,
+              )
+            else if (_entityCollectionKind == null) ...[
+              _buildCollectionTypeBar(colorScheme),
+              _buildSearchField(colorScheme),
+              const SizedBox(height: 8),
+              _buildList(colorScheme),
+            ] else
+              EntityCollectionListView(
+                key: _entityCollectionKey,
+                username: widget.user.username,
+                kind: _entityCollectionKind!,
+              ),
           ],
-          if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
-          if (_entityCollectionKind == null) ...[
-            _buildCollectionTypeBar(colorScheme),
-            _buildSearchField(colorScheme),
-            const SizedBox(height: 8),
-            _buildList(colorScheme),
-          ] else
-            EntityCollectionListView(
-              key: _entityCollectionKey,
-              username: widget.user.username,
-              kind: _entityCollectionKind!,
-            ),
-        ],
+        ),
       ),
     );
   }
 
   Future<void> _refreshActiveCollection() {
+    if (_showIndexCollections) {
+      return _indexCollectionKey.currentState?.refresh() ??
+          Future<void>.value();
+    }
     if (_entityCollectionKind == null) return _loadData();
     return _entityCollectionKey.currentState?.refresh() ?? Future<void>.value();
   }
@@ -1455,7 +1512,10 @@ class _ProfileContentState extends State<_ProfileContent> {
             ChoiceChip(
               label: Text(t.label),
               avatar: Icon(t.icon, size: 16),
-              selected: _entityCollectionKind == null && _subjectType == t.type,
+              selected:
+                  !_showIndexCollections &&
+                  _entityCollectionKind == null &&
+                  _subjectType == t.type,
               onSelected: (_) => _switchSubjectType(t.type),
               visualDensity: VisualDensity.compact,
               showCheckmark: false,
@@ -1485,6 +1545,25 @@ class _ProfileContentState extends State<_ProfileContent> {
             selected: _entityCollectionKind == EntityCollectionKind.person,
             onSelected: (_) =>
                 _switchEntityCollection(EntityCollectionKind.person),
+            visualDensity: VisualDensity.compact,
+            showCheckmark: false,
+          ),
+          const SizedBox(width: 2),
+          const SizedBox(
+            height: 24,
+            child: VerticalDivider(
+              key: ValueKey('profile_index_collection_chip_divider'),
+              width: 10,
+              thickness: 1,
+            ),
+          ),
+          const SizedBox(width: 2),
+          ChoiceChip(
+            key: const ValueKey('profile_index_collections'),
+            label: const Text('目录'),
+            avatar: const Icon(Icons.format_list_bulleted_rounded, size: 16),
+            selected: _showIndexCollections,
+            onSelected: (_) => _switchIndexCollections(),
             visualDensity: VisualDensity.compact,
             showCheckmark: false,
           ),

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
 import '../constants.dart';
+import '../models/bangumi_index.dart';
 import '../models/bangumi_tag.dart';
 import '../models/calendar.dart';
 import '../models/character.dart';
@@ -32,6 +33,9 @@ class ApiClient {
 
   /// 公开 Dio 实例供其他服务使用
   Dio get dio => _dio;
+
+  @visibleForTesting
+  Dio get nextDio => _nextDio;
 
   ApiClient({AppLogService? logService}) {
     _dio = Dio(
@@ -124,6 +128,53 @@ class ApiClient {
   bool get hasToken => _accessToken != null && _accessToken!.isNotEmpty;
   bool get hasWebSession => _webSession?.isValid == true;
   bool get hasWebCookie => hasWebSession;
+
+  Future<T> _indexRequest<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      final data = error.response?.data;
+      String? serverMessage;
+      if (data is Map) {
+        for (final key in const ['message', 'description', 'error']) {
+          final value = data[key];
+          if (value is String && value.trim().isNotEmpty) {
+            serverMessage = value.trim();
+            break;
+          }
+        }
+      }
+      final message = switch (status) {
+        401 => '请先登录后再操作目录',
+        403 => '当前账号没有目录操作权限',
+        404 => '目录不存在、已删除或无权查看',
+        409 => '该内容已经在目录中',
+        429 => '操作过于频繁，请稍后再试',
+        _ => serverMessage ?? '目录请求失败，请检查网络后重试',
+      };
+      throw BangumiIndexApiException(message, statusCode: status);
+    }
+  }
+
+  PagedResult<T> _parseIndexPage<T>(
+    dynamic raw, {
+    required int limit,
+    required int offset,
+    required T Function(Map<String, dynamic>) parse,
+  }) {
+    final map = raw is Map ? Map<String, dynamic>.from(raw) : const {};
+    final list = map['data'] is List ? map['data'] as List : const [];
+    final items = list
+        .whereType<Map>()
+        .map((item) => parse(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+    final totalValue = map['total'];
+    final total = totalValue is num
+        ? totalValue.toInt()
+        : int.tryParse('$totalValue') ?? items.length;
+    return PagedResult(total: total, limit: limit, offset: offset, data: items);
+  }
 
   void setWebCookie(String? cookie) {
     final normalized = sanitizeWebCookie(cookie ?? '');
@@ -1573,6 +1624,306 @@ class ApiClient {
     }
 
     return resultUrl;
+  }
+
+  // ==================== 目录（next.bgm.tv/p1） ====================
+
+  Future<BangumiIndex> getBangumiIndex(int indexId) {
+    if (indexId <= 0) {
+      return Future.error(ArgumentError.value(indexId, 'indexId'));
+    }
+    return _indexRequest(() async {
+      final response = await _nextDio.get('/p1/indexes/$indexId');
+      return BangumiIndex.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    });
+  }
+
+  Future<PagedResult<BangumiIndexSummary>> getSubjectIndexes({
+    required int subjectId,
+    int limit = 30,
+    int offset = 0,
+  }) => _getEntityIndexes(
+    path: '/p1/subjects/$subjectId/indexes',
+    id: subjectId,
+    limit: limit,
+    offset: offset,
+  );
+
+  Future<PagedResult<BangumiIndexSummary>> getCharacterIndexes({
+    required int characterId,
+    int limit = 30,
+    int offset = 0,
+  }) => _getEntityIndexes(
+    path: '/p1/characters/$characterId/indexes',
+    id: characterId,
+    limit: limit,
+    offset: offset,
+  );
+
+  Future<PagedResult<BangumiIndexSummary>> getPersonIndexes({
+    required int personId,
+    int limit = 30,
+    int offset = 0,
+  }) => _getEntityIndexes(
+    path: '/p1/persons/$personId/indexes',
+    id: personId,
+    limit: limit,
+    offset: offset,
+  );
+
+  Future<PagedResult<BangumiIndexSummary>> _getEntityIndexes({
+    required String path,
+    required int id,
+    required int limit,
+    required int offset,
+  }) {
+    _validateIndexPaging(limit, offset);
+    if (id <= 0) {
+      return Future.error(ArgumentError.value(id, 'id'));
+    }
+    return _indexRequest(() async {
+      final response = await _nextDio.get(
+        path,
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return _parseIndexPage(
+        response.data,
+        limit: limit,
+        offset: offset,
+        parse: BangumiIndexSummary.fromJson,
+      );
+    });
+  }
+
+  Future<PagedResult<BangumiIndexSummary>> getUserCreatedIndexes({
+    required String username,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    final normalized = username.trim();
+    if (normalized.isEmpty) {
+      return Future.error(ArgumentError.value(username, 'username'));
+    }
+    _validateIndexPaging(limit, offset);
+    return _indexRequest(() async {
+      final response = await _nextDio.get(
+        '/p1/users/${Uri.encodeComponent(normalized)}/indexes',
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return _parseIndexPage(
+        response.data,
+        limit: limit,
+        offset: offset,
+        parse: BangumiIndexSummary.fromJson,
+      );
+    });
+  }
+
+  Future<PagedResult<BangumiIndexSummary>> getUserCollectedIndexes({
+    required String username,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    final normalized = username.trim();
+    if (normalized.isEmpty) {
+      return Future.error(ArgumentError.value(username, 'username'));
+    }
+    _validateIndexPaging(limit, offset);
+    return _indexRequest(() async {
+      final response = await _nextDio.get(
+        '/p1/users/${Uri.encodeComponent(normalized)}/collections/indexes',
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return _parseIndexPage(
+        response.data,
+        limit: limit,
+        offset: offset,
+        parse: BangumiIndexSummary.fromJson,
+      );
+    });
+  }
+
+  Future<PagedResult<BangumiIndexRelated>> getIndexRelated({
+    required int indexId,
+    IndexRelatedCategory? category,
+    int? subjectType,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    if (indexId <= 0) {
+      return Future.error(ArgumentError.value(indexId, 'indexId'));
+    }
+    _validateIndexPaging(limit, offset);
+    return _indexRequest(() async {
+      final response = await _nextDio.get(
+        '/p1/indexes/$indexId/related',
+        queryParameters: {
+          if (category != null) 'cat': category.value,
+          'type': ?subjectType,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
+      return _parseIndexPage(
+        response.data,
+        limit: limit,
+        offset: offset,
+        parse: BangumiIndexRelated.fromJson,
+      );
+    });
+  }
+
+  Future<int> createBangumiIndex({
+    required String title,
+    required String description,
+    required bool private,
+  }) {
+    final normalized = title.trim();
+    if (normalized.isEmpty || normalized.runes.length > 80) {
+      return Future.error(
+        ArgumentError.value(title, 'title', '目录标题必须为 1–80 个字符'),
+      );
+    }
+    return _indexRequest(() async {
+      final response = await _nextDio.post(
+        '/p1/indexes',
+        data: {'title': normalized, 'desc': description, 'private': private},
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final id = data['id'] is num
+          ? (data['id'] as num).toInt()
+          : int.tryParse('${data['id']}');
+      if (id == null || id <= 0) {
+        throw const BangumiIndexApiException('创建目录后未返回有效 ID');
+      }
+      return id;
+    });
+  }
+
+  Future<void> updateBangumiIndex({
+    required int indexId,
+    required String title,
+    required String description,
+    required bool private,
+  }) {
+    final normalized = title.trim();
+    if (indexId <= 0) {
+      return Future.error(ArgumentError.value(indexId, 'indexId'));
+    }
+    if (normalized.isEmpty || normalized.runes.length > 80) {
+      return Future.error(
+        ArgumentError.value(title, 'title', '目录标题必须为 1–80 个字符'),
+      );
+    }
+    return _indexRequest(() async {
+      await _nextDio.patch(
+        '/p1/indexes/$indexId',
+        data: {'title': normalized, 'desc': description, 'private': private},
+      );
+    });
+  }
+
+  Future<void> deleteBangumiIndex(int indexId) {
+    if (indexId <= 0) {
+      return Future.error(ArgumentError.value(indexId, 'indexId'));
+    }
+    return _indexRequest(() async {
+      await _nextDio.delete('/p1/indexes/$indexId');
+    });
+  }
+
+  Future<void> collectBangumiIndex(int indexId) =>
+      _changeBangumiIndexCollection(indexId, collect: true);
+
+  Future<void> uncollectBangumiIndex(int indexId) =>
+      _changeBangumiIndexCollection(indexId, collect: false);
+
+  Future<void> _changeBangumiIndexCollection(
+    int indexId, {
+    required bool collect,
+  }) {
+    if (indexId <= 0) {
+      return Future.error(ArgumentError.value(indexId, 'indexId'));
+    }
+    return _indexRequest(() async {
+      final path = '/p1/collections/indexes/$indexId';
+      if (collect) {
+        await _nextDio.put(path);
+      } else {
+        await _nextDio.delete(path);
+      }
+    });
+  }
+
+  Future<int> addBangumiIndexRelated({
+    required int indexId,
+    required IndexRelatedCategory category,
+    required int subjectId,
+    required int order,
+    String comment = '',
+  }) {
+    if (indexId <= 0 || subjectId <= 0) {
+      return Future.error(ArgumentError('目录 ID 和内容 ID 必须大于 0'));
+    }
+    return _indexRequest(() async {
+      final response = await _nextDio.put(
+        '/p1/indexes/$indexId/related',
+        data: {
+          'cat': category.value,
+          'sid': subjectId,
+          'order': order,
+          'comment': comment,
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final id = data['id'] is num
+          ? (data['id'] as num).toInt()
+          : int.tryParse('${data['id']}');
+      if (id == null || id <= 0) {
+        throw const BangumiIndexApiException('加入目录后未返回有效 ID');
+      }
+      return id;
+    });
+  }
+
+  Future<void> updateBangumiIndexRelated({
+    required int indexId,
+    required int relatedId,
+    required int order,
+    required String comment,
+  }) {
+    if (indexId <= 0 || relatedId <= 0) {
+      return Future.error(ArgumentError('目录 ID 和关联 ID 必须大于 0'));
+    }
+    return _indexRequest(() async {
+      await _nextDio.patch(
+        '/p1/indexes/$indexId/related/$relatedId',
+        data: {'order': order, 'comment': comment},
+      );
+    });
+  }
+
+  Future<void> deleteBangumiIndexRelated({
+    required int indexId,
+    required int relatedId,
+  }) {
+    if (indexId <= 0 || relatedId <= 0) {
+      return Future.error(ArgumentError('目录 ID 和关联 ID 必须大于 0'));
+    }
+    return _indexRequest(() async {
+      await _nextDio.delete('/p1/indexes/$indexId/related/$relatedId');
+    });
+  }
+
+  static void _validateIndexPaging(int limit, int offset) {
+    if (limit < 1 || limit > 100) {
+      throw ArgumentError.value(limit, 'limit', '必须在 1–100 之间');
+    }
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', '不能小于 0');
+    }
   }
 
   Future<PagedResult<RakuenFavoriteIndex>> getUserRakuenFavoriteIndexes({

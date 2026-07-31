@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/timeline.dart';
 import '../pages/profile_page.dart';
+import '../pages/index_page.dart';
 import '../pages/subject_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/app_state_provider.dart';
@@ -837,12 +838,17 @@ class _TimelineFeedItem extends StatelessWidget {
           style: TextStyle(fontSize: 14, color: colorScheme.onSurface),
         ),
         if (item.targetText != null && item.targetText!.isNotEmpty)
-          Text(
-            item.targetText!,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: colorScheme.primary,
+          GestureDetector(
+            onTap: item.indexId == null
+                ? null
+                : () => _openIndexPage(context, item.indexId!),
+            child: Text(
+              item.targetText!,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: colorScheme.primary,
+              ),
             ),
           ),
         Text(
@@ -991,4 +997,10 @@ class _TimelineFeedItem extends StatelessWidget {
       MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subjectId)),
     );
   }
+}
+
+void _openIndexPage(BuildContext context, int indexId) {
+  Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => BangumiIndexPage(indexId: indexId)));
 }

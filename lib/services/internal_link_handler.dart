@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:zc_bangumi/models/rakuen_topic.dart';
 import 'package:zc_bangumi/pages/character_page.dart';
+import 'package:zc_bangumi/pages/index_page.dart';
 import 'package:zc_bangumi/pages/person_page.dart';
 import 'package:zc_bangumi/pages/profile_page.dart';
 import 'package:zc_bangumi/pages/rakuen_topic_page.dart';
@@ -13,6 +14,7 @@ enum InternalLinkResult { handled, openInBrowser, failed }
 class InternalLinkHandler {
   static const String bangumiDomainAlias = 'bgm.tv';
   static const String bangumiDomain = 'bangumi.tv';
+  static const String bangumiLegacyDomain = 'chii.in';
 
   /// 处理链接并进行相应的导航
   /// 返回 InternalLinkResult 来表示处理结果
@@ -58,6 +60,32 @@ class InternalLinkHandler {
         }
       }
 
+      // 单集讨论与日志
+      if (type == 'ep' || type == 'blog') {
+        final id = segments[1];
+        if (_isValidId(id)) {
+          return _handleTopicLink(id, type, uri, context);
+        }
+      }
+
+      // 条目讨论: /subject/topic/{topicId}
+      if (type == 'subject' &&
+          segments.length >= 3 &&
+          segments[1].toLowerCase() == 'topic') {
+        final topicId = segments[2];
+        if (_isValidId(topicId)) {
+          return _handleTopicLink(topicId, 'subject', uri, context);
+        }
+      }
+
+      // 目录链接: /index/{id}
+      if (type == 'index') {
+        final id = segments[1];
+        if (_isValidId(id)) {
+          return _handleIndexLink(id, context);
+        }
+      }
+
       // 用户资料: /user/{username}
       if (type == 'user') {
         final username = segments[1];
@@ -87,10 +115,29 @@ class InternalLinkHandler {
     return InternalLinkResult.openInBrowser;
   }
 
+  static InternalLinkResult _handleIndexLink(String id, BuildContext? context) {
+    if (context == null) return InternalLinkResult.failed;
+    try {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BangumiIndexPage(indexId: int.parse(id)),
+        ),
+      );
+      return InternalLinkResult.handled;
+    } catch (_) {
+      return InternalLinkResult.failed;
+    }
+  }
+
   /// 检查URL是否是Bangumi站内链接
   static bool _isBangumiUrl(Uri uri) {
     final host = uri.host.toLowerCase();
-    return host.endsWith(bangumiDomainAlias) || host.endsWith(bangumiDomain);
+    return host == bangumiDomainAlias ||
+        host.endsWith('.$bangumiDomainAlias') ||
+        host == bangumiDomain ||
+        host.endsWith('.$bangumiDomain') ||
+        host == bangumiLegacyDomain ||
+        host.endsWith('.$bangumiLegacyDomain');
   }
 
   /// 检查ID是否有效（数字）

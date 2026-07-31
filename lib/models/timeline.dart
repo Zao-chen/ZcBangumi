@@ -7,6 +7,7 @@ class TimelineItem {
   final String actionText; // 看过, 在看, 想看, 搁置了, 完成了 ...
   final String? targetText; // 动作目标文本 (ep.34 讨伐要请 / Subject Name)
   final int? subjectId;
+  final int? indexId;
   final String? subjectName;
   final String? subjectNameCn;
   final String? subjectCoverUrl;
@@ -24,6 +25,7 @@ class TimelineItem {
     required this.actionText,
     this.targetText,
     this.subjectId,
+    this.indexId,
     this.subjectName,
     this.subjectNameCn,
     this.subjectCoverUrl,
@@ -51,6 +53,7 @@ class TimelineItem {
     'actionText': actionText,
     'targetText': targetText,
     'subjectId': subjectId,
+    'indexId': indexId,
     'subjectName': subjectName,
     'subjectNameCn': subjectNameCn,
     'subjectCoverUrl': subjectCoverUrl,
@@ -71,6 +74,9 @@ class TimelineItem {
       actionText: json['actionText'] as String? ?? '',
       targetText: json['targetText'] as String?,
       subjectId: json['subjectId'] as int?,
+      indexId: json['indexId'] is num
+          ? (json['indexId'] as num).toInt()
+          : int.tryParse('${json['indexId'] ?? ''}'),
       subjectName: json['subjectName'] as String?,
       subjectNameCn: json['subjectNameCn'] as String?,
       subjectCoverUrl: json['subjectCoverUrl'] as String?,
@@ -129,6 +135,7 @@ class TimelineItem {
     String actionText = '';
     String? targetText;
     int? subjectId;
+    int? indexId;
     String? subjectName;
     String? subjectNameCn;
     String? subjectCoverUrl;
@@ -261,6 +268,10 @@ class TimelineItem {
         final index = memo['index'] as Map<String, dynamic>?;
         if (index != null) {
           targetText = index['title'] as String?;
+          final rawIndexId = index['id'];
+          indexId = rawIndexId is int
+              ? rawIndexId
+              : int.tryParse('$rawIndexId');
         }
         break;
 
@@ -328,6 +339,7 @@ class TimelineItem {
       actionText: actionText,
       targetText: targetText,
       subjectId: subjectId,
+      indexId: indexId,
       subjectName: subjectName,
       subjectNameCn: subjectNameCn,
       subjectCoverUrl: subjectCoverUrl,

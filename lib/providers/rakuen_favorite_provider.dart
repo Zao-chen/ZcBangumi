@@ -283,7 +283,7 @@ class RakuenFavoriteProvider extends ChangeNotifier {
       'rakuen_topic_favorites_${_activeUsername ?? 'local'}';
 
   String get _cloudIndexCacheKey =>
-      'rakuen_topic_favorite_index_${_activeUsername ?? 'local'}';
+      rakuenFavoriteIndexCacheKey(_activeUsername);
 
   String get _cloudSyncPreferenceKey =>
       'rakuen_topic_favorite_cloud_enabled_${_activeUsername ?? 'local'}';

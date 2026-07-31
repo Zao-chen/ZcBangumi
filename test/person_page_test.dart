@@ -40,6 +40,7 @@ void main() {
         SubjectTabConfig.charactersId,
         SubjectTabConfig.personsId,
         SubjectTabConfig.relatedId,
+        SubjectTabConfig.indexesId,
         SubjectTabConfig.commentsId,
         SubjectTabConfig.moegirlId,
       ]);
@@ -73,6 +74,7 @@ void main() {
     expect(find.text('人物简介'), findsOneWidget);
     expect(find.text('作品'), findsOneWidget);
     expect(find.text('角色'), findsOneWidget);
+    expect(find.text('目录'), findsOneWidget);
 
     await tester.tap(find.text('作品'));
     await tester.pumpAndSettle();

@@ -631,6 +631,15 @@ class AppStateProvider extends ChangeNotifier {
       );
     }
 
+    // “目录”是新增标签。迁移旧配置时紧跟在“关联”之后。
+    if (seen.add(SubjectTabConfig.indexesId)) {
+      final relatedIndex = normalized.indexOf(SubjectTabConfig.relatedId);
+      normalized.insert(
+        relatedIndex < 0 ? normalized.length : relatedIndex + 1,
+        SubjectTabConfig.indexesId,
+      );
+    }
+
     for (final id in SubjectTabConfig.allTabIds) {
       if (seen.add(id)) {
         normalized.add(id);
