@@ -80,6 +80,60 @@ void main() {
     expect(find.text('想看'), findsNothing);
     expect(find.text('抛弃'), findsNothing);
   });
+
+  testWidgets('subject comments API failure is not shown as an empty list', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService();
+    await storage.init();
+    await storage.setMikanEnabled(false);
+
+    final api = _FailingCommentsApiClient();
+    final auth = AuthProvider(api: api, storage: storage);
+    final connectivity = ConnectivityProvider(canReachBangumi: () => true);
+    final appState = AppStateProvider(storage: storage);
+    final mikan = MikanProvider(service: MikanService(), storage: storage);
+
+    tester.view.physicalSize = const Size(1000, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(connectivity.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<StorageService>.value(value: storage),
+          Provider<ApiClient>.value(value: api),
+          ChangeNotifierProvider<AuthProvider>.value(value: auth),
+          ChangeNotifierProvider<ConnectivityProvider>.value(
+            value: connectivity,
+          ),
+          ChangeNotifierProvider<AppStateProvider>.value(value: appState),
+          ChangeNotifierProvider<MikanProvider>.value(value: mikan),
+        ],
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(0.9)),
+            child: child!,
+          ),
+          home: SubjectPage(subjectId: 253, subject: api.subject),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('吐槽'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('吐槽加载失败'), findsOneWidget);
+    expect(find.text('获取吐槽失败，请稍后重试'), findsOneWidget);
+    expect(find.text('暂无吐槽'), findsNothing);
+    expect(find.text('重试'), findsOneWidget);
+  });
 }
 
 class _AnonymousEpisodeApiClient extends ApiClient {
@@ -168,5 +222,16 @@ class _AnonymousEpisodeApiClient extends ApiClient {
   }) async {
     collectionEpisodeRequests++;
     throw StateError('anonymous users must not request collection progress');
+  }
+}
+
+class _FailingCommentsApiClient extends _AnonymousEpisodeApiClient {
+  @override
+  Future<PagedResult<Comment>> getSubjectComments({
+    required int subjectId,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    throw StateError('P1 comments failed');
   }
 }
