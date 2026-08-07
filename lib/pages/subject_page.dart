@@ -48,6 +48,7 @@ class SubjectPage extends StatefulWidget {
 
 class _SubjectPageState extends State<SubjectPage>
     with TickerProviderStateMixin {
+  static const int _commentsPageSize = 30;
   static final Map<String, _SubjectTabItem> _tabItemsById = {
     for (final tab in SubjectTabConfig.allTabs)
       tab.id: _SubjectTabItem(label: tab.label, icon: tab.icon),
@@ -67,6 +68,7 @@ class _SubjectPageState extends State<SubjectPage>
   bool _personsLoading = false;
   bool _relatedLoading = false;
   bool _commentsLoading = false;
+  bool _commentsPageLoading = false;
   bool _episodesLoading = false;
   bool _subjectDetailLoading = false;
   bool _showCollapsedTitle = false;
@@ -78,6 +80,8 @@ class _SubjectPageState extends State<SubjectPage>
   MonoRelationViewMode _personsViewMode = MonoRelationViewMode.list;
   MonoRelationViewMode _relatedViewMode = MonoRelationViewMode.list;
   String? _error;
+  Object? _commentsError;
+  int _commentsTotal = 0;
 
   @override
   void initState() {
@@ -308,14 +312,24 @@ class _SubjectPageState extends State<SubjectPage>
 
     if (_comments.isEmpty) {
       final commentsCached = storage.getCache(_commentsCacheName);
-      if (commentsCached is List) {
-        try {
-          _comments = commentsCached
-              .whereType<Map<String, dynamic>>()
-              .map((e) => Comment.fromJson(e))
+      try {
+        final rawComments = commentsCached is Map
+            ? commentsCached['data']
+            : commentsCached;
+        if (rawComments is List) {
+          _comments = rawComments
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .map(Comment.fromJson)
               .toList();
-        } catch (_) {}
-      }
+          final cachedTotal = commentsCached is Map
+              ? commentsCached['total']
+              : null;
+          _commentsTotal = cachedTotal is num
+              ? cachedTotal.toInt()
+              : int.tryParse(cachedTotal?.toString() ?? '') ?? _comments.length;
+        }
+      } catch (_) {}
     }
 
     if (_userCollection == null) {
@@ -371,6 +385,7 @@ class _SubjectPageState extends State<SubjectPage>
       final relatedFuture = api.getSubjectRelations(widget.subjectId);
       final commentsFuture = api.getSubjectComments(
         subjectId: widget.subjectId,
+        limit: _commentsPageSize,
       );
 
       Future<Object?> tolerateFailure(Future<Object?> request) async {
@@ -381,14 +396,25 @@ class _SubjectPageState extends State<SubjectPage>
         }
       }
 
+      Future<Object?> captureCommentFailure(
+        Future<PagedResult<Comment>> request,
+      ) async {
+        try {
+          return await request;
+        } catch (error) {
+          return _CommentRequestFailure(error);
+        }
+      }
+
       final results = await Future.wait<Object?>([
         tolerateFailure(charsFuture),
         tolerateFailure(personsFuture),
         tolerateFailure(relatedFuture),
-        tolerateFailure(commentsFuture),
+        captureCommentFailure(commentsFuture),
       ]);
       if (!mounted) return;
 
+      final commentsRefreshed = results[3] is PagedResult<Comment>;
       setState(() {
         _characters = results[0] is List<Character>
             ? results[0] as List<Character>
@@ -402,6 +428,10 @@ class _SubjectPageState extends State<SubjectPage>
         if (results[3] is PagedResult<Comment>) {
           final commentsResult = results[3] as PagedResult<Comment>;
           _comments = commentsResult.data;
+          _commentsTotal = commentsResult.total;
+          _commentsError = null;
+        } else if (results[3] is _CommentRequestFailure) {
+          _commentsError = (results[3] as _CommentRequestFailure).error;
         }
         _charactersLoading = false;
         _personsLoading = false;
@@ -426,10 +456,9 @@ class _SubjectPageState extends State<SubjectPage>
         _relatedCacheName,
         _relatedSubjects.map((r) => r.toJson()).toList(),
       );
-      storage.setCache(
-        _commentsCacheName,
-        _comments.map((c) => c.toJson()).toList(),
-      );
+      if (commentsRefreshed) {
+        _cacheComments(storage);
+      }
 
       _loadEpisodeProgress();
       _loadUserCollection();
@@ -450,6 +479,118 @@ class _SubjectPageState extends State<SubjectPage>
         });
       }
     }
+  }
+
+  void _cacheComments(StorageService storage) {
+    storage.setCache(_commentsCacheName, {
+      'total': _commentsTotal,
+      'data': _comments.map((comment) => comment.toJson()).toList(),
+    });
+  }
+
+  Future<void> _reloadComments() async {
+    if (_commentsLoading || _commentsPageLoading) return;
+    setState(() {
+      _commentsLoading = _comments.isEmpty;
+      _commentsError = null;
+    });
+
+    final api = context.read<ApiClient>();
+    final storage = context.read<StorageService>();
+    final connectivity = context.read<ConnectivityProvider>();
+    try {
+      final result = await api.getSubjectComments(
+        subjectId: widget.subjectId,
+        limit: _commentsPageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _comments = result.data;
+        _commentsTotal = result.total;
+        _commentsError = null;
+      });
+      _cacheComments(storage);
+      connectivity.reportNetworkSuccess();
+    } catch (error) {
+      connectivity.reportNetworkFailure(error);
+      if (mounted) {
+        setState(() => _commentsError = error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _commentsLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMoreComments() async {
+    if (_commentsLoading ||
+        _commentsPageLoading ||
+        _comments.length >= _commentsTotal) {
+      return;
+    }
+    setState(() {
+      _commentsPageLoading = true;
+      _commentsError = null;
+    });
+
+    final api = context.read<ApiClient>();
+    final storage = context.read<StorageService>();
+    final connectivity = context.read<ConnectivityProvider>();
+    try {
+      final result = await api.getSubjectComments(
+        subjectId: widget.subjectId,
+        limit: _commentsPageSize,
+        offset: _comments.length,
+      );
+      if (!mounted) return;
+      final knownIds = _comments
+          .where((comment) => comment.id > 0)
+          .map((comment) => comment.id)
+          .toSet();
+      final additions = result.data
+          .where((comment) => comment.id <= 0 || knownIds.add(comment.id))
+          .toList();
+      setState(() {
+        _comments = [..._comments, ...additions];
+        _commentsTotal = result.total;
+        _commentsError = null;
+      });
+      _cacheComments(storage);
+      connectivity.reportNetworkSuccess();
+    } catch (error) {
+      connectivity.reportNetworkFailure(error);
+      if (mounted) {
+        setState(() => _commentsError = error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _commentsPageLoading = false);
+      }
+    }
+  }
+
+  String _commentsErrorMessage(Object error) {
+    if (error is FormatException) {
+      return 'Bangumi 返回的数据格式异常，请稍后重试';
+    }
+    if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 404) return '这个条目的吐槽不存在或无法访问';
+      if (statusCode == 429) return '请求过于频繁，请稍后再试';
+      if (statusCode != null && statusCode >= 500) {
+        return 'Bangumi 服务暂时不可用（$statusCode）';
+      }
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        return '连接 Bangumi 超时，请检查网络后重试';
+      }
+      if (error.type == DioExceptionType.connectionError) {
+        return '无法连接 Bangumi，请检查网络后重试';
+      }
+    }
+    return '获取吐槽失败，请稍后重试';
   }
 
   Future<void> _loadEpisodeProgress() async {
@@ -2185,9 +2326,51 @@ class _SubjectPageState extends State<SubjectPage>
       return _buildCommentsSkeletonList();
     }
 
+    if (_commentsError != null && _comments.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _reloadComments,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '吐槽加载失败',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _commentsErrorMessage(_commentsError!),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: _reloadComments,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重试'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_comments.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _loadAllData,
+        onRefresh: _reloadComments,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
@@ -2222,16 +2405,63 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     final colorScheme = Theme.of(context).colorScheme;
+    final showFooter =
+        _commentsPageLoading ||
+        _commentsError != null ||
+        _comments.length < _commentsTotal;
 
     return RefreshIndicator(
-      onRefresh: _loadAllData,
+      onRefresh: _reloadComments,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        itemCount: _comments.length,
+        itemCount: _comments.length + (showFooter ? 1 : 0),
         itemBuilder: (context, index) {
+          if (index == _comments.length) {
+            return _buildCommentsFooter();
+          }
           final comment = _comments[index];
           return _buildCommentItem(comment, colorScheme);
         },
+      ),
+    );
+  }
+
+  Widget _buildCommentsFooter() {
+    if (_commentsPageLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final hasMore = _comments.length < _commentsTotal;
+    if (_commentsError != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+        child: Column(
+          children: [
+            Text(
+              _commentsErrorMessage(_commentsError!),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: hasMore ? _loadMoreComments : _reloadComments,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+      child: OutlinedButton.icon(
+        onPressed: _loadMoreComments,
+        icon: const Icon(Icons.expand_more),
+        label: Text('加载更多（${_comments.length}/$_commentsTotal）'),
       ),
     );
   }
@@ -2412,6 +2642,12 @@ class _SubjectPageState extends State<SubjectPage>
         return '未知';
     }
   }
+}
+
+class _CommentRequestFailure {
+  final Object error;
+
+  const _CommentRequestFailure(this.error);
 }
 
 class _SubjectTabItem {

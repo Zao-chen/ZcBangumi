@@ -762,84 +762,24 @@ class ApiClient {
     required int characterId,
     int limit = 30,
     int offset = 0,
-  }) async {
-    try {
-      final resp = await _nextDio.get(
-        '/p1/characters/$characterId/comments',
-        queryParameters: {'limit': limit, 'offset': offset},
-      );
-      final data = resp.data;
-      if (data is List) {
-        final all = data
-            .whereType<Map>()
-            .map((e) => _normalizeCommentPayload(Map<String, dynamic>.from(e)))
-            .map(Comment.fromJson)
-            .toList();
-        final start = offset.clamp(0, all.length);
-        final end = (offset + limit).clamp(0, all.length);
-        return PagedResult<Comment>(
-          total: all.length,
-          limit: limit,
-          offset: offset,
-          data: all.sublist(start, end),
-        );
-      }
-      if (data is Map<String, dynamic>) {
-        final list =
-            (data['data'] as List<dynamic>?) ??
-            (data['list'] as List<dynamic>?) ??
-            (data['comments'] as List<dynamic>?) ??
-            const [];
-        final comments = list
-            .whereType<Map>()
-            .map((e) => _normalizeCommentPayload(Map<String, dynamic>.from(e)))
-            .map(Comment.fromJson)
-            .toList();
-        final total =
-            (data['total'] as int?) ??
-            (data['count'] as int?) ??
-            comments.length;
-        return PagedResult<Comment>(
-          total: total,
-          limit: limit,
-          offset: offset,
-          data: comments,
-        );
-      }
-    } catch (_) {}
-
-    try {
-      final resp = await _webDio.get('/character/$characterId');
-      final html = resp.data as String;
-      final comments = _parseCommentsFromHtml(html);
-      final start = offset;
-      final end = (offset + limit).clamp(0, comments.length);
-      final List<Comment> paged = start < comments.length
-          ? comments.sublist(start, end)
-          : const <Comment>[];
-      return PagedResult<Comment>(
-        total: comments.length,
-        limit: limit,
-        offset: offset,
-        data: paged,
-      );
-    } catch (_) {
-      return PagedResult<Comment>(
-        total: 0,
-        limit: limit,
-        offset: offset,
-        data: [],
-      );
-    }
-  }
+  }) => _getP1Comments(
+    path: '/p1/characters/$characterId/comments',
+    limit: limit,
+    offset: offset,
+  );
 
   // ========== 吐槽/评论 ==========
-  // 通过网页爬取实现（API 不提供）
 
   static Map<String, dynamic> _normalizeCommentPayload(
     Map<String, dynamic> json,
   ) {
     final normalized = Map<String, dynamic>.from(json);
+    normalized['content'] ??= normalized['comment'];
+    normalized['rating'] ??= normalized['rate'];
+    normalized['state'] ??= normalized['type'];
+    normalized['spoiler'] ??= 0;
+    normalized['usable'] ??= 1;
+    normalized['replies'] ??= 0;
     final createdAt =
         normalized['created_at'] ??
         normalized['createdAt'] ??
@@ -908,279 +848,69 @@ class ApiClient {
     return user;
   }
 
-  /// 获取条目吐槽列表（通过网页爬取）
+  /// 获取条目吐槽列表
   Future<PagedResult<Comment>> getSubjectComments({
     required int subjectId,
     int limit = 30,
     int offset = 0,
+  }) => _getP1Comments(
+    path: '/p1/subjects/$subjectId/comments',
+    limit: limit,
+    offset: offset,
+  );
+
+  Future<PagedResult<Comment>> _getP1Comments({
+    required String path,
+    required int limit,
+    required int offset,
   }) async {
-    try {
-      // 从网页获取条目吐槽
-      final resp = await _webDio.get('/subject/$subjectId');
-      final html = resp.data as String;
-      final comments = _parseCommentsFromHtml(html);
-
-      // 分页处理
-      final start = offset;
-      final end = (offset + limit).clamp(0, comments.length);
-      final List<Comment> paginatedComments = start < comments.length
-          ? comments.sublist(start, end)
-          : [];
-
+    final resp = await _nextDio.get(
+      path,
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    final payload = resp.data;
+    if (payload is List) {
+      final allComments = payload
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .map(_normalizeCommentPayload)
+          .map(Comment.fromJson)
+          .toList(growable: false);
+      final start = offset.clamp(0, allComments.length);
+      final end = (offset + limit).clamp(start, allComments.length);
       return PagedResult<Comment>(
-        total: comments.length,
+        total: allComments.length,
         limit: limit,
         offset: offset,
-        data: paginatedComments,
-      );
-    } catch (e) {
-      // 获取失败返回空列表
-      return PagedResult<Comment>(
-        total: 0,
-        limit: limit,
-        offset: offset,
-        data: [],
+        data: allComments.sublist(start, end),
       );
     }
-  }
-
-  /// 从 HTML 中解析吐槽/评论
-  static List<Comment> _parseCommentsFromHtml(String html) {
-    final comments = <Comment>[];
-
-    try {
-      // HTML 吐槽箱结构：<div id="comment_box">...</div>
-      // 每条评论：<div class="item clearit" data-item-user="...">
-      //   头像：<span style="background-image:url('avatar_url')"></span>
-      //   用户名：<a href="/user/..." class="l">USERNAME</a>
-      //   评分：<span class="starlight starsN"></span> (N = 1-10)
-      //   状态：<small class="grey"> 看过/在看 </small>
-      //   时间：<small class="grey">@ 时间</small>
-      //   内容：<p class="comment">【评分】内容</p>
-
-      // 找到吐槽箱区域
-      final commentBoxStart = html.indexOf('id="comment_box"');
-      if (commentBoxStart == -1) return [];
-
-      // 找到下一个 subject_section 或页面结束
-      final nextSectionStart = html.indexOf(
-        'subject_section',
-        commentBoxStart + 1,
-      );
-      final endIndex = nextSectionStart > 0 ? nextSectionStart : html.length;
-      final commentBoxHtml = html.substring(commentBoxStart, endIndex);
-
-      // 提取所有评论项
-      // 每条评论以 <div class="item clearit" 开始
-      final itemPattern = RegExp(
-        r'<div class="item clearit".*?(?=<div class="item clearit"|$)',
-        dotAll: true,
-      );
-
-      int commentId = 1;
-      for (final itemMatch in itemPattern.allMatches(commentBoxHtml)) {
-        try {
-          final itemHtml = itemMatch.group(0) ?? '';
-
-          // 提取头像URL：<span style="background-image:url('...')"></span>
-          String avatarUrl = '';
-          final avatarMatch = RegExp(
-            r"background-image:url\('([^']+)'\)",
-          ).firstMatch(itemHtml);
-          if (avatarMatch != null) {
-            avatarUrl = avatarMatch.group(1)?.trim() ?? '';
-            // 补充协议，如果是相对路径
-            if (avatarUrl.startsWith('//')) {
-              avatarUrl = 'https:$avatarUrl';
-            }
-          }
-
-          //提取用户标识和昵称，兼容 /user/{用户名} 与 /user/{数字ID}
-          int userId = 0;
-          String userKey = '';
-          String userName = '';
-          final userMatch =
-              RegExp(
-                r'<a[^>]*href="/user/([^"/?#]+)"[^>]*class="[^"]*\bl\b[^"]*"[^>]*>([\s\S]*?)</a>',
-                caseSensitive: false,
-              ).firstMatch(itemHtml) ??
-              RegExp(
-                r'<a[^>]*class="[^"]*\bl\b[^"]*"[^>]*href="/user/([^"/?#]+)"[^>]*>([\s\S]*?)</a>',
-                caseSensitive: false,
-              ).firstMatch(itemHtml);
-          if (userMatch != null) {
-            userKey = (userMatch.group(1) ?? '').trim();
-            userName = _decodeHtml(_stripTags(userMatch.group(2) ?? '')).trim();
-            userId = int.tryParse(userKey) ?? 0;
-          }
-          if (userKey.isEmpty) {
-            userKey =
-                RegExp(
-                  r'data-item-user="([^"]+)"',
-                ).firstMatch(itemHtml)?.group(1)?.trim() ??
-                '';
-            userId = int.tryParse(userKey) ?? 0;
-          }
-          if (userName.isEmpty) {
-            userName = userKey;
-          }
-
-          // 提取评分：<span class="starlight starsN"></span>
-          int rating = 0;
-          final ratingMatch = RegExp(
-            r'class="starlight stars(\d+)"',
-          ).firstMatch(itemHtml);
-          if (ratingMatch != null) {
-            rating = int.tryParse(ratingMatch.group(1) ?? '0') ?? 0;
-          }
-
-          // 提取时间：<small class="grey">@ 时间</small>
-          final timeMatch = RegExp(
-            r'<small class="grey">\s*@\s*([^<]+)</small>',
-          ).firstMatch(itemHtml);
-          final timeStr = timeMatch?.group(1)?.trim() ?? '';
-
-          // 提取内容：<p class="comment">【评分】内容</p>
-          final contentMatch = RegExp(
-            r'<p class="comment">([\s\S]*?)</p>|<div class="message(?: clearit)?">([\s\S]*?)</div>',
-            caseSensitive: false,
-          ).firstMatch(itemHtml);
-          final rawContentHtml =
-              contentMatch?.group(1)?.trim() ??
-              contentMatch?.group(2)?.trim() ??
-              '';
-          final normalizedContentHtml = _normalizePostHtml(rawContentHtml);
-          var content = _htmlBlockToText(rawContentHtml);
-
-          // 从内容中提取评分（如果内容以【数字】开头）
-          final contentRatingMatch = RegExp(
-            r'【(\d+)[+-]*】',
-          ).firstMatch(content);
-          if (contentRatingMatch != null && rating == 0) {
-            rating = int.tryParse(contentRatingMatch.group(1) ?? '0') ?? 0;
-            content = content.replaceFirst(RegExp(r'【\d+[+-]*】'), '').trim();
-          } else if (contentRatingMatch != null) {
-            // 如果已经从星级提取了评分，还是要移除内容中的【】标记
-            content = content.replaceFirst(RegExp(r'【\d+[+-]*】'), '').trim();
-          }
-
-          // 解析时间
-          DateTime createdAt = DateTime.now();
-          try {
-            if (timeStr.isNotEmpty) {
-              // 格式1：相对时间 "1d 17h ago" 或 "2小时前"
-              if (timeStr.contains('ago') || timeStr.contains('前')) {
-                createdAt = _parseRelativeTime(timeStr);
-              }
-              // 格式2：绝对时间 "2026-2-22 22:22"
-              else if (timeStr.contains('-') && timeStr.contains(':')) {
-                // 处理格式 "2026-2-22 22:22"
-                final parts = timeStr.split(' ');
-                if (parts.length >= 2) {
-                  final dateStr = parts[0]; // "2026-2-22"
-                  final timePartStr = parts[1]; // "22:22"
-                  final dateParts = dateStr.split('-');
-                  final timeParts = timePartStr.split(':');
-                  if (dateParts.length == 3 && timeParts.length >= 2) {
-                    try {
-                      final year = int.parse(dateParts[0]);
-                      final month = int.parse(dateParts[1]);
-                      final day = int.parse(dateParts[2]);
-                      final hour = int.parse(timeParts[0]);
-                      final minute = int.parse(timeParts[1]);
-                      createdAt = DateTime(year, month, day, hour, minute);
-                    } catch (_) {
-                      createdAt = DateTime.now();
-                    }
-                  }
-                }
-              }
-              // 格式3：简单时间 "昨天 22:22" 等
-              else {
-                createdAt = DateTime.now();
-              }
-            }
-          } catch (_) {
-            createdAt = DateTime.now();
-          }
-
-          if (content.isNotEmpty &&
-              (userName.isNotEmpty || userKey.isNotEmpty)) {
-            comments.add(
-              Comment(
-                id: commentId++,
-                content: content,
-                contentHtml: normalizedContentHtml.isEmpty
-                    ? null
-                    : normalizedContentHtml,
-                rating: rating,
-                spoiler: 0,
-                state: 0,
-                createdAt: createdAt,
-                updatedAt: createdAt,
-                user: {
-                  'id': userId,
-                  'username': userKey,
-                  'nickname': userName,
-                  'avatar': avatarUrl,
-                },
-                usable: 1,
-                replies: 0,
-              ),
-            );
-          }
-        } catch (e) {
-          // 跳过解析失败的评论
-          continue;
-        }
-      }
-    } catch (e) {
-      // HTML 解析失败，返回空列表
+    if (payload is! Map) {
+      throw const FormatException('吐槽接口返回了无效的数据格式');
     }
 
-    return comments;
-  }
-
-  /// 解析相对时间字符串，返回对应的 DateTime
-  static DateTime _parseRelativeTime(String timeStr) {
-    final now = DateTime.now();
-
-    // 处理格式：1d 17h ago、2小时前等
-    // 天数
-    final dayMatch = RegExp(r'(\d+)\s*d').firstMatch(timeStr);
-    final hourMatch = RegExp(r'(\d+)\s*h').firstMatch(timeStr);
-    final minuteMatch = RegExp(r'(\d+)\s*m').firstMatch(timeStr);
-
-    // 中文格式
-    final dayChMatch = RegExp(r'(\d+)\s*天').firstMatch(timeStr);
-    final hourChMatch = RegExp(r'(\d+)\s*小时').firstMatch(timeStr);
-    final minuteChMatch = RegExp(r'(\d+)\s*分钟').firstMatch(timeStr);
-
-    int days = 0;
-    int hours = 0;
-    int minutes = 0;
-
-    if (dayMatch != null) {
-      days = int.tryParse(dayMatch.group(1) ?? '0') ?? 0;
-    }
-    if (hourMatch != null) {
-      hours = int.tryParse(hourMatch.group(1) ?? '0') ?? 0;
-    }
-    if (minuteMatch != null) {
-      minutes = int.tryParse(minuteMatch.group(1) ?? '0') ?? 0;
+    final data = Map<String, dynamic>.from(payload);
+    final rawItems = data['data'] ?? data['list'] ?? data['comments'];
+    if (rawItems is! List) {
+      throw const FormatException('吐槽接口缺少列表数据');
     }
 
-    if (dayChMatch != null) {
-      days = int.tryParse(dayChMatch.group(1) ?? '0') ?? 0;
-    }
-    if (hourChMatch != null) {
-      hours = int.tryParse(hourChMatch.group(1) ?? '0') ?? 0;
-    }
-    if (minuteChMatch != null) {
-      minutes = int.tryParse(minuteChMatch.group(1) ?? '0') ?? 0;
-    }
-
-    return now.subtract(Duration(days: days, hours: hours, minutes: minutes));
+    final comments = rawItems
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .map(_normalizeCommentPayload)
+        .map(Comment.fromJson)
+        .toList(growable: false);
+    final rawTotal = data['total'] ?? data['count'];
+    final total = rawTotal is num
+        ? rawTotal.toInt()
+        : int.tryParse(rawTotal?.toString() ?? '') ?? comments.length;
+    return PagedResult<Comment>(
+      total: total,
+      limit: limit,
+      offset: offset,
+      data: comments,
+    );
   }
 
   // ========== 收藏 ==========

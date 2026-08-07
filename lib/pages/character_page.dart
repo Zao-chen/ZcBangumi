@@ -58,6 +58,7 @@ class _CharacterPageState extends State<CharacterPage>
   int _selectedTabIndex = 0;
   String? _error;
   String? _personsError;
+  String? _commentsError;
 
   int? get _activeCharacterId => widget.characterId ?? _character?.id;
   String get _cacheKey => 'character_${_activeCharacterId ?? 0}';
@@ -175,6 +176,7 @@ class _CharacterPageState extends State<CharacterPage>
       _commentsLoading = _comments.isEmpty;
       _error = null;
       _personsError = null;
+      _commentsError = null;
     });
     if (_character != null) {
       await storage.saveRecentCharacter(_character!);
@@ -186,6 +188,7 @@ class _CharacterPageState extends State<CharacterPage>
       List<CharacterPerson>? latestPersons;
       List<Comment>? latestComments;
       String? personsError;
+      String? commentsError;
 
       try {
         latestCharacter = await api.getCharacter(characterId);
@@ -208,7 +211,11 @@ class _CharacterPageState extends State<CharacterPage>
           characterId: characterId,
         );
         latestComments = commentsResult.data;
-      } catch (_) {}
+      } catch (_) {
+        if (_comments.isEmpty) {
+          commentsError = '获取吐槽失败，请稍后重试';
+        }
+      }
 
       if (latestCharacter == null && _character == null) {
         setState(() => _error = '无法获取角色信息');
@@ -229,6 +236,7 @@ class _CharacterPageState extends State<CharacterPage>
           _personsLoading = false;
         }
         _personsError = personsError;
+        _commentsError = commentsError;
         if (latestComments != null) {
           _comments = latestComments;
           _commentsLoading = false;
@@ -250,10 +258,12 @@ class _CharacterPageState extends State<CharacterPage>
           _characterPersons.map((e) => e.toJson()).toList(),
         );
       }
-      storage.setCache(
-        _commentCacheKey,
-        _comments.map((e) => e.toJson()).toList(),
-      );
+      if (latestComments != null) {
+        storage.setCache(
+          _commentCacheKey,
+          _comments.map((e) => e.toJson()).toList(),
+        );
+      }
     } catch (e) {
       if (_character == null) {
         setState(() => _error = '加载失败: $e');
@@ -1084,6 +1094,54 @@ class _CharacterPageState extends State<CharacterPage>
   Widget _buildCommentsTab() {
     if (_commentsLoading && _comments.isEmpty) {
       return _buildCommentsSkeletonList();
+    }
+
+    if (_commentsError != null && _comments.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          final id = _activeCharacterId;
+          if (id != null) await _loadAllData(id);
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '吐槽加载失败',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _commentsError!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: () {
+                      final id = _activeCharacterId;
+                      if (id != null) _loadAllData(id);
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重试'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
     if (_comments.isEmpty) {
