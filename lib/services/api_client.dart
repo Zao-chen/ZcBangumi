@@ -1206,15 +1206,14 @@ class ApiClient {
   Future<List<RakuenTopic>> getRakuenTopics({
     String? type,
     String? filter,
-    int page = 1,
   }) async {
-    final params = <String, dynamic>{'page': page};
+    final params = <String, dynamic>{};
     if (type != null && type.isNotEmpty) params['type'] = type;
     if (filter != null && filter.isNotEmpty) params['filter'] = filter;
 
     final resp = await _webDio.get(
       '/rakuen/topiclist',
-      queryParameters: params,
+      queryParameters: params.isEmpty ? null : params,
     );
     return _parseRakuenTopicsHtml(resp.data as String);
   }

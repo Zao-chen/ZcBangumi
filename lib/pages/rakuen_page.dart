@@ -22,9 +22,6 @@ enum _RakuenTab { all, group, subject, ep, character, person }
 class _RakuenTabState {
   final List<RakuenTopic> items = [];
   bool loading = false;
-  bool loadingMore = false;
-  bool hasMore = true;
-  int page = 1;
   String? error;
 }
 
@@ -84,24 +81,14 @@ class _RakuenPageState extends State<RakuenPage>
     await _load(tab);
   }
 
-  Future<void> _load(
-    _RakuenTab tab, {
-    bool refresh = true,
-    bool forceNetwork = true,
-  }) async {
+  Future<void> _load(_RakuenTab tab, {bool forceNetwork = true}) async {
     final state = _tabStates[tab]!;
-    if (state.loading || state.loadingMore) return;
-    if (refresh && !forceNetwork && state.items.isNotEmpty) return;
+    if (state.loading) return;
+    if (!forceNetwork && state.items.isNotEmpty) return;
 
     setState(() {
-      if (refresh) {
-        state.loading = true;
-        state.error = null;
-        state.page = 1;
-        state.hasMore = true;
-      } else {
-        state.loadingMore = true;
-      }
+      state.loading = true;
+      state.error = null;
     });
 
     try {
@@ -109,20 +96,14 @@ class _RakuenPageState extends State<RakuenPage>
       final items = await api.getRakuenTopics(
         type: _typeForTab(tab),
         filter: _filterForTab(tab),
-        page: state.page,
       );
 
       if (!mounted) return;
       setState(() {
-        if (refresh) {
-          state.items
-            ..clear()
-            ..addAll(items);
-        } else {
-          state.items.addAll(items);
-        }
+        state.items
+          ..clear()
+          ..addAll(items);
         state.error = null;
-        state.hasMore = items.isNotEmpty;
       });
     } catch (e) {
       if (!mounted) return;
@@ -135,17 +116,9 @@ class _RakuenPageState extends State<RakuenPage>
       if (mounted) {
         setState(() {
           state.loading = false;
-          state.loadingMore = false;
         });
       }
     }
-  }
-
-  Future<void> _loadMore(_RakuenTab tab) async {
-    final state = _tabStates[tab]!;
-    if (!state.hasMore || state.loading || state.loadingMore) return;
-    state.page += 1;
-    await _load(tab, refresh: false);
   }
 
   String? _typeForTab(_RakuenTab tab) {
@@ -419,26 +392,10 @@ class _RakuenPageState extends State<RakuenPage>
         itemCount: state.items.length + 1,
         itemBuilder: (context, index) {
           if (index == state.items.length) {
-            if (state.hasMore && !state.loadingMore) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _loadMore(tab);
-              });
-            }
-            if (!state.hasMore) {
-              return const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Center(child: Text('没有更多了')),
-              );
-            }
             return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
+              key: Key('rakuen_list_end'),
+              padding: EdgeInsets.only(top: 8),
+              child: Center(child: Text('已加载当前可见的全部讨论')),
             );
           }
 
