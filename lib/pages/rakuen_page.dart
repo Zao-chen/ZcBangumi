@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -22,11 +23,15 @@ enum _RakuenTab { all, group, subject, ep, character, person }
 class _RakuenTabState {
   final List<RakuenTopic> items = [];
   bool loading = false;
+  bool bottomPullActive = false;
+  double bottomPullExtent = 0;
   String? error;
 }
 
 class _RakuenPageState extends State<RakuenPage>
     with SingleTickerProviderStateMixin {
+  static const double _bottomRefreshThreshold = 64;
+
   static const _tabs = [
     _RakuenTabConfig(tab: _RakuenTab.all, label: '全部'),
     _RakuenTabConfig(tab: _RakuenTab.group, label: '小组'),
@@ -38,6 +43,7 @@ class _RakuenPageState extends State<RakuenPage>
 
   late final TabController _tabController;
   late final Map<_RakuenTab, _RakuenTabState> _tabStates;
+  late final Map<_RakuenTab, ScrollController> _scrollControllers;
 
   _RakuenTab get _currentTab => _tabs[_tabController.index].tab;
 
@@ -51,6 +57,9 @@ class _RakuenPageState extends State<RakuenPage>
       initialIndex: initialIndex.clamp(0, _tabs.length - 1),
     );
     _tabStates = {for (final tab in _RakuenTab.values) tab: _RakuenTabState()};
+    _scrollControllers = {
+      for (final tab in _RakuenTab.values) tab: ScrollController(),
+    };
     _tabController.addListener(_handleTabChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = context.read<AuthProvider>();
@@ -65,6 +74,9 @@ class _RakuenPageState extends State<RakuenPage>
   void dispose() {
     _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
+    for (final controller in _scrollControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -88,6 +100,8 @@ class _RakuenPageState extends State<RakuenPage>
 
     setState(() {
       state.loading = true;
+      state.bottomPullActive = false;
+      state.bottomPullExtent = 0;
       state.error = null;
     });
 
@@ -119,6 +133,97 @@ class _RakuenPageState extends State<RakuenPage>
         });
       }
     }
+  }
+
+  bool _handleBottomRefresh(_RakuenTab tab, ScrollNotification notification) {
+    final state = _tabStates[tab]!;
+    if (notification.metrics.axis != Axis.vertical) return false;
+
+    if (notification is ScrollStartNotification) {
+      final active =
+          notification.dragDetails != null &&
+          notification.metrics.extentAfter == 0 &&
+          !state.loading;
+      if (state.bottomPullActive != active || state.bottomPullExtent != 0) {
+        setState(() {
+          state.bottomPullActive = active;
+          state.bottomPullExtent = 0;
+        });
+      }
+      return false;
+    }
+
+    if (notification is OverscrollNotification &&
+        state.bottomPullActive &&
+        notification.dragDetails != null &&
+        notification.overscroll > 0 &&
+        notification.metrics.extentAfter == 0 &&
+        !state.loading) {
+      final nextExtent = (state.bottomPullExtent + notification.overscroll)
+          .clamp(0, _bottomRefreshThreshold + 24)
+          .toDouble();
+      if (nextExtent != state.bottomPullExtent) {
+        setState(() => state.bottomPullExtent = nextExtent);
+      }
+      return false;
+    }
+
+    if (notification is ScrollEndNotification) {
+      final shouldRefresh =
+          state.bottomPullActive &&
+          state.bottomPullExtent >= _bottomRefreshThreshold &&
+          !state.loading;
+      if (state.bottomPullActive || state.bottomPullExtent != 0) {
+        setState(() {
+          state.bottomPullActive = false;
+          state.bottomPullExtent = 0;
+        });
+      }
+      if (shouldRefresh) {
+        _refreshSnapshot(tab);
+      }
+    } else if (notification is ScrollUpdateNotification &&
+        notification.metrics.extentAfter > 0 &&
+        (state.bottomPullActive || state.bottomPullExtent != 0)) {
+      setState(() {
+        state.bottomPullActive = false;
+        state.bottomPullExtent = 0;
+      });
+    }
+
+    return false;
+  }
+
+  Future<void> _refreshSnapshot(_RakuenTab tab) async {
+    final refresh = _load(tab);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      await refresh;
+      return;
+    }
+    final controller = _scrollControllers[tab]!;
+    if (controller.hasClients && controller.offset > 0) {
+      await controller.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    await refresh;
+  }
+
+  void _handleDesktopScroll(_RakuenTab tab, PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || event.scrollDelta.dy <= 0) return;
+
+    final state = _tabStates[tab]!;
+    final controller = _scrollControllers[tab]!;
+    if (state.loading ||
+        !controller.hasClients ||
+        controller.position.extentAfter > 0) {
+      return;
+    }
+
+    _refreshSnapshot(tab);
   }
 
   String? _typeForTab(_RakuenTab tab) {
@@ -168,13 +273,8 @@ class _RakuenPageState extends State<RakuenPage>
           ),
           if (isLandscape)
             IconButton(
-              tooltip: '刷新当前分区',
-              onPressed: () => _load(
-                _currentTab,
-                forceNetwork: context
-                    .read<AppStateProvider>()
-                    .pullToRefreshForceNetwork,
-              ),
+              tooltip: '回到顶部并刷新当前分区',
+              onPressed: () => _refreshSnapshot(_currentTab),
               icon: const Icon(Icons.refresh_rounded),
             ),
           IconButton(
@@ -387,20 +487,65 @@ class _RakuenPageState extends State<RakuenPage>
             .read<AppStateProvider>()
             .pullToRefreshForceNetwork,
       ),
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-        itemCount: state.items.length + 1,
-        itemBuilder: (context, index) {
-          if (index == state.items.length) {
-            return const Padding(
-              key: Key('rakuen_list_end'),
-              padding: EdgeInsets.only(top: 8),
-              child: Center(child: Text('已加载当前可见的全部讨论')),
-            );
-          }
+      child: Listener(
+        onPointerSignal: (event) => _handleDesktopScroll(tab, event),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) =>
+              _handleBottomRefresh(tab, notification),
+          child: ListView.builder(
+            controller: _scrollControllers[tab],
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            itemCount: state.items.length + 1,
+            itemBuilder: (context, index) {
+              if (index == state.items.length) {
+                return _buildListEnd(tab, state);
+              }
 
-          return _RakuenTopicCard(topic: state.items[index]);
-        },
+              return _RakuenTopicCard(topic: state.items[index]);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListEnd(_RakuenTab tab, _RakuenTabState state) {
+    final armed = state.bottomPullExtent >= _bottomRefreshThreshold;
+    final label = state.loading
+        ? '正在刷新'
+        : armed
+        ? '松开刷新'
+        : '已加载当前可见的全部讨论';
+
+    return Padding(
+      key: const Key('rakuen_list_end'),
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (state.loading) ...[
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Flexible(child: Text(label, textAlign: TextAlign.center)),
+            ],
+          ),
+          if (!state.loading && !armed) ...[
+            const SizedBox(height: 4),
+            TextButton.icon(
+              key: const Key('rakuen_refresh_from_end'),
+              onPressed: () => _refreshSnapshot(tab),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('回到顶部并刷新'),
+            ),
+          ],
+        ],
       ),
     );
   }
