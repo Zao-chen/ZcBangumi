@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -585,7 +585,10 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) {
           Future<void> add() async {
-            final ref = BangumiIndexContentRef.parse(linkController.text);
+            final ref = BangumiIndexContentRef.parse(
+              linkController.text,
+              canonicalize: context.read<ApiClient>().endpoints.canonicalUri,
+            );
             if (ref == null) {
               setState(() => error = '无法识别该 Bangumi 链接');
               return;
@@ -773,7 +776,8 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
             ),
           IconButton(
             tooltip: '打开网页',
-            onPressed: () => LinkNavigator.openBrowser(
+            onPressed: () => LinkNavigator.openBrowserFromContext(
+              context,
               Uri.parse('https://bgm.tv/index/${widget.indexId}'),
             ),
             icon: const Icon(Icons.open_in_new_rounded),
@@ -865,7 +869,7 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
                         radius: 24,
                         foregroundImage: index.userAvatar.isEmpty
                             ? null
-                            : CachedNetworkImageProvider(index.userAvatar),
+                            : bangumiImageProvider(context, index.userAvatar),
                         child: index.userAvatar.isEmpty
                             ? const Icon(Icons.person_outline)
                             : null,
@@ -1072,7 +1076,7 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
                   color: colors.surfaceContainerHighest,
                   child: item.imageUrl.isEmpty
                       ? Icon(_categoryIcon(item.category))
-                      : CachedNetworkImage(
+                      : BangumiNetworkImage(
                           imageUrl: item.imageUrl,
                           fit: BoxFit.cover,
                           errorWidget: (_, _, _) =>

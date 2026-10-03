@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'copyable_text.dart';
@@ -246,7 +246,7 @@ class MonoEntityImage extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: imageUrl.isEmpty
           ? placeholder()
-          : CachedNetworkImage(
+          : BangumiNetworkImage(
               imageUrl: imageUrl,
               width: width,
               height: height,

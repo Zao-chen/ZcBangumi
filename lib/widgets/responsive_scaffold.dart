@@ -7,6 +7,8 @@ import '../providers/auth_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/mikan_provider.dart';
 import '../services/link_navigator.dart';
+import '../services/bangumi_endpoint_service.dart';
+import 'bangumi_mirror_challenge_banner.dart';
 import '../services/platform_feature_support.dart';
 
 /// 响应式 Scaffold
@@ -126,7 +128,8 @@ class _CacheAwareContentState extends State<_CacheAwareContent> {
   bool _webLimitationsDismissed = false;
 
   Future<void> _openFullAppReleasePage() async {
-    final ok = await LinkNavigator.openBrowser(
+    final ok = await LinkNavigator.openBrowserFromContext(
+      context,
       Uri.parse(BgmConst.githubReleasesUrl),
     );
     if (!ok && mounted) {
@@ -152,11 +155,14 @@ class _CacheAwareContentState extends State<_CacheAwareContent> {
   @override
   Widget build(BuildContext context) {
     final connectivity = context.watch<ConnectivityProvider>();
+    final endpoints = context.watch<BangumiEndpointService?>();
     final showCacheBanner = connectivity.shouldShowBanner;
     final showWebLimitationsBanner = kIsWeb && !_webLimitationsDismissed;
 
     return Column(
       children: [
+        if (endpoints?.lastChallenge != null)
+          BangumiMirrorChallengeBanner(endpoints: endpoints!),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
           child: showWebLimitationsBanner

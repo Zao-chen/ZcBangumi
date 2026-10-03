@@ -489,18 +489,23 @@ class BangumiIndexContentRef {
     required this.sourceUrl,
   });
 
-  static BangumiIndexContentRef? parse(String input) {
+  static BangumiIndexContentRef? parse(
+    String input, {
+    Uri Function(Uri)? canonicalize,
+  }) {
     final raw = input.trim();
     if (raw.isEmpty) return null;
     final normalized = raw.contains('://')
         ? raw
-        : raw.startsWith('bgm.tv/') ||
+        : raw.split('/').first.contains('.') ||
+              raw.startsWith('bgm.tv/') ||
               raw.startsWith('bangumi.tv/') ||
               raw.startsWith('chii.in/')
         ? 'https://$raw'
         : 'https://bgm.tv/${raw.startsWith('/') ? raw.substring(1) : raw}';
-    final uri = Uri.tryParse(normalized);
+    var uri = Uri.tryParse(normalized);
     if (uri == null) return null;
+    uri = canonicalize?.call(uri) ?? uri;
     final host = uri.host.toLowerCase();
     if (!(host == 'bgm.tv' ||
         host.endsWith('.bgm.tv') ||

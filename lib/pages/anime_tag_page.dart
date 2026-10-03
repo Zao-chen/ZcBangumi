@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -404,7 +404,7 @@ class _AnimeTagSubjectCard extends StatelessWidget {
                   width: coverWidth,
                   height: coverHeight,
                   child: subject.images?.common.isNotEmpty == true
-                      ? CachedNetworkImage(
+                      ? BangumiNetworkImage(
                           imageUrl: subject.images!.common,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(

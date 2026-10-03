@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/collection.dart';
@@ -99,7 +99,7 @@ class _CollectionItemCard extends StatelessWidget {
                   width: coverWidth,
                   height: coverHeight,
                   child: subject?.images?.common.isNotEmpty == true
-                      ? CachedNetworkImage(
+                      ? BangumiNetworkImage(
                           imageUrl: subject!.images!.common,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(
@@ -917,7 +917,7 @@ class _LoginViewState extends State<_LoginView> {
 
   Future<void> _openTokenPage() async {
     final uri = Uri.parse(BgmConst.tokenUrl);
-    await LinkNavigator.openBrowser(uri);
+    await LinkNavigator.openBrowserFromContext(context, uri);
   }
 }
 
@@ -1443,7 +1443,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                 width: 48,
                 height: 48,
                 child: widget.user.avatar.large.isNotEmpty
-                    ? CachedNetworkImage(
+                    ? BangumiNetworkImage(
                         imageUrl: widget.user.avatar.large,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
@@ -1490,7 +1490,7 @@ class _ProfileContentState extends State<_ProfileContent> {
                 final uri = Uri.parse(
                   '${BgmConst.webBaseUrl}/user/${widget.user.username}',
                 );
-                await LinkNavigator.openBrowser(uri);
+                await LinkNavigator.openBrowserFromContext(context, uri);
               },
               padding: const EdgeInsets.all(8),
             ),

@@ -25,6 +25,10 @@ class NetworkProxyConfigPlatform {
     }
   }
 
+  static void uninstallDio(Dio dio) {
+    _registeredDios.remove(dio);
+  }
+
   static void _installAdapter(Dio dio) {
     dio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {

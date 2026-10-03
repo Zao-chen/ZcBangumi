@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 
 import 'internal_link_handler.dart';
+import 'bangumi_endpoint_service.dart';
 
 class LinkNavigator {
   const LinkNavigator._();
@@ -12,11 +14,25 @@ class LinkNavigator {
     if (result == InternalLinkResult.handled) {
       return true;
     }
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
+    final endpoints = context.read<BangumiEndpointService?>();
+    return launchUrl(
+      endpoints?.resolveUri(uri) ?? uri,
+      mode: LaunchMode.externalApplication,
+    );
   }
 
   /// 直接使用系统浏览器打开，不做任何站内链接拦截。
-  static Future<bool> openBrowser(Uri uri) {
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  static Future<bool> openBrowser(
+    Uri uri, {
+    BangumiEndpointService? endpoints,
+  }) {
+    return launchUrl(
+      endpoints?.resolveUri(uri) ?? uri,
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  static Future<bool> openBrowserFromContext(BuildContext context, Uri uri) {
+    return openBrowser(uri, endpoints: context.read<BangumiEndpointService?>());
   }
 }

@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import 'services/app_log_service.dart';
 import 'services/api_client.dart';
+import 'services/bangumi_endpoint_service.dart';
+import 'services/bangumi_image_cache.dart';
+import 'models/bangumi_mirror_settings.dart';
 import 'services/mikan_service.dart';
 import 'services/network_proxy_config.dart';
 import 'services/platform_feature_support.dart';
@@ -38,7 +41,8 @@ void main() async {
   NetworkProxyConfig.initialize(storage.networkProxySettings);
 
   // 初始化 API 客户端
-  final apiClient = ApiClient(logService: logService);
+  final endpoints = BangumiEndpointService(storage: storage);
+  final apiClient = ApiClient(logService: logService, endpoints: endpoints);
   apiClient.setWebSession(storage.webSession);
 
   // 初始化更新服务
@@ -84,6 +88,13 @@ class ZCBangumiApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: apiClient),
+        ChangeNotifierProvider<BangumiEndpointService>.value(
+          value: apiClient.endpoints,
+        ),
+        Provider<BangumiImageCache>(
+          create: (_) => BangumiImageCache(apiClient.endpoints),
+          dispose: (_, cache) => cache.dispose(),
+        ),
         Provider<StorageService>.value(value: storage),
         Provider<UpdateService>.value(value: updateService),
         Provider<MikanService>.value(value: mikanService),
@@ -92,7 +103,14 @@ class ZCBangumiApp extends StatelessWidget {
           create: (_) => AppStateProvider(storage: storage),
         ),
         ChangeNotifierProvider(
-          create: (_) => ConnectivityProvider(logService: logService),
+          create: (_) => ConnectivityProvider(
+            logService: logService,
+            canReachBangumi: () async =>
+                (await apiClient.endpoints.probe(
+                  BangumiServiceKind.api,
+                )).status ==
+                BangumiConnectionStatus.available,
+          ),
         ),
         ChangeNotifierProvider(
           create: (context) => AuthProvider(
@@ -179,7 +197,13 @@ class _AppShellState extends State<_AppShell> {
     final pageKey = _tabPageKeys.putIfAbsent(tabId, GlobalKey.new);
     return PrimaryScrollController(
       controller: _controllerForTab(tabId),
-      child: KeyedSubtree(key: pageKey, child: page),
+      child: KeyedSubtree(
+        key: pageKey,
+        child: KeyedSubtree(
+          key: ValueKey(context.read<BangumiEndpointService>().generation),
+          child: page,
+        ),
+      ),
     );
   }
 
@@ -342,6 +366,9 @@ class _AppShellState extends State<_AppShell> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
+    context.select<BangumiEndpointService, int>(
+      (endpoints) => endpoints.generation,
+    );
     final tabIds = appState.enabledBottomNavTabIds.where(_isSupportedTab);
 
     final shellTabs = tabIds

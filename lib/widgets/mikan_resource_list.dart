@@ -522,7 +522,7 @@ class _MikanRecordTile extends StatelessWidget {
   Future<void> _openUri(BuildContext context, String raw) async {
     final uri = Uri.tryParse(raw);
     if (uri == null) return;
-    final ok = await LinkNavigator.openBrowser(uri);
+    final ok = await LinkNavigator.openBrowserFromContext(context, uri);
     if (!ok && context.mounted) {
       ScaffoldMessenger.of(
         context,

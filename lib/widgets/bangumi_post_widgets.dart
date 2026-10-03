@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'bangumi_content_view.dart';
@@ -84,7 +84,7 @@ class BangumiPostAvatar extends StatelessWidget {
         width: size,
         height: size,
         child: url.isNotEmpty
-            ? CachedNetworkImage(
+            ? BangumiNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
                 placeholder: (context, url) =>

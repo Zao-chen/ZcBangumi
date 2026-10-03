@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'bangumi_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -373,7 +373,7 @@ class _BangumiIndexCardState extends State<BangumiIndexCard> {
                 backgroundColor: colors.surfaceContainerHighest,
                 foregroundImage: avatar.isEmpty
                     ? null
-                    : CachedNetworkImageProvider(avatar),
+                    : bangumiImageProvider(context, avatar),
                 child: avatar.isEmpty
                     ? const Icon(Icons.person_outline_rounded)
                     : null,

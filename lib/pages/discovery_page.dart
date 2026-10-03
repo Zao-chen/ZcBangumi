@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -731,7 +731,8 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
 
   Future<void> _openAnimeTags() async {
     if (kIsWeb) {
-      final opened = await LinkNavigator.openBrowser(
+      final opened = await LinkNavigator.openBrowserFromContext(
+        context,
         Uri.parse('${BgmConst.webBaseUrl}/anime/tag'),
       );
       if (!opened && mounted) {
@@ -999,7 +1000,7 @@ class _RecentViewTile extends StatelessWidget {
                         color: colorScheme.surfaceContainerHighest,
                         child: Icon(fallbackIcon, size: 21),
                       )
-                    : CachedNetworkImage(
+                    : BangumiNetworkImage(
                         imageUrl: imageUrl,
                         fit: BoxFit.cover,
                         errorWidget: (_, _, _) => ColoredBox(

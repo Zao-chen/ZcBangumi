@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -645,7 +645,7 @@ class _RakuenTopicCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   child: topic.avatarUrl.isNotEmpty
-                      ? CachedNetworkImage(
+                      ? BangumiNetworkImage(
                           imageUrl: topic.avatarUrl,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(

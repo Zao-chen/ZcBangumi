@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -54,7 +54,7 @@ class SubjectCoverCard extends StatelessWidget {
                 child: SizedBox.expand(
                   child: imageUrl.isEmpty
                       ? _fallback(colorScheme)
-                      : CachedNetworkImage(
+                      : BangumiNetworkImage(
                           imageUrl: imageUrl,
                           fit: BoxFit.cover,
                           placeholder: (_, _) =>

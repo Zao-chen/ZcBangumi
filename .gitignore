@@ -51,6 +51,5 @@ app.*.map.json
 /android/keystore/*.txt
 
 # macOS generated files
-macos/Podfile
 macos/Podfile.lock
 macos/Runner.xcworkspace/contents.xcworkspacedata
