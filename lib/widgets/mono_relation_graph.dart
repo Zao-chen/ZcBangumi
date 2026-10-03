@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'bangumi_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -1033,7 +1033,7 @@ class _GraphImage extends StatelessWidget {
       borderRadius: BorderRadius.circular(6),
       child: imageUrl.isEmpty
           ? placeholder()
-          : CachedNetworkImage(
+          : BangumiNetworkImage(
               imageUrl: imageUrl,
               width: width,
               height: height,

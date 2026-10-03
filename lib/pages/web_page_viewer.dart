@@ -4,6 +4,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../services/bangumi_endpoint_service.dart';
+import '../models/bangumi_mirror_settings.dart';
 
 import 'package:zc_bangumi/services/internal_link_handler.dart';
 import 'package:zc_bangumi/services/link_navigator.dart';
@@ -52,6 +55,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
       ),
     );
     NetworkProxyConfig.installDio(_dio);
+    context.read<BangumiEndpointService?>()?.install(_dio);
     _loadContent();
   }
 
@@ -64,9 +68,16 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
     }
   }
 
+  @override
+  void dispose() {
+    NetworkProxyConfig.uninstallDio(_dio);
+    _dio.close(force: true);
+    super.dispose();
+  }
+
   Future<void> _openInBrowser() async {
     final uri = _currentUri ?? widget.initialUri;
-    final ok = await LinkNavigator.openBrowser(uri);
+    final ok = await LinkNavigator.openBrowserFromContext(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -75,6 +86,7 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
   }
 
   Future<void> _loadContent({Uri? requestUri}) async {
+    final endpoints = context.read<BangumiEndpointService?>();
     var effectiveUri = requestUri ?? _currentUri ?? widget.initialUri;
     if (_currentUri == null &&
         (requestUri == null ||
@@ -106,7 +118,11 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
           return;
         }
       }
-      final contentHtml = _extractContentHtml(html, response.realUri);
+      var contentHtml = _extractContentHtml(html, response.realUri);
+      if (contentHtml != null &&
+          endpoints?.kindForUri(response.realUri) != null) {
+        contentHtml = endpoints!.rewriteHtml(contentHtml);
+      }
       if (contentHtml == null || contentHtml.trim().isEmpty) {
         throw Exception('Content not found');
       }
@@ -663,7 +679,10 @@ class _EmbeddedWebPageViewState extends State<EmbeddedWebPageView>
                             return NavigationActionPolicy.CANCEL;
                           } else if (result ==
                               InternalLinkResult.openInBrowser) {
-                            await LinkNavigator.openBrowser(url.uriValue);
+                            await LinkNavigator.openBrowserFromContext(
+                              context,
+                              url.uriValue,
+                            );
                             return NavigationActionPolicy.CANCEL;
                           }
 
@@ -744,7 +763,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
 
   Future<void> _openInBrowser() async {
     final uri = _currentUrl?.uriValue ?? widget.initialUri;
-    final ok = await LinkNavigator.openBrowser(uri);
+    final ok = await LinkNavigator.openBrowserFromContext(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -792,7 +811,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'http' && scheme != 'https') {
       // 非HTTP(S)链接，用浏览器打开
-      await LinkNavigator.openBrowser(uri);
+      await LinkNavigator.openBrowserFromContext(context, uri);
       return NavigationActionPolicy.CANCEL;
     }
 
@@ -802,7 +821,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
     if (result == InternalLinkResult.handled) {
       return NavigationActionPolicy.CANCEL;
     } else if (result == InternalLinkResult.openInBrowser) {
-      await LinkNavigator.openBrowser(uri);
+      await LinkNavigator.openBrowserFromContext(context, uri);
       return NavigationActionPolicy.CANCEL;
     }
 
@@ -814,6 +833,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final showProgress = _progress > 0 && _progress < 100;
+    final endpoints = context.watch<BangumiEndpointService?>();
 
     return PopScope<Object?>(
       canPop: _allowRoutePop,
@@ -850,9 +870,28 @@ class _WebPageViewerState extends State<WebPageViewer> {
           ),
         ),
         body: InAppWebView(
+          key: ValueKey(
+            '${endpoints?.generation}:${endpoints?.sessionRevision}',
+          ),
           gestureRecognizers: _webViewVerticalDragGestures(),
-          initialUrlRequest: URLRequest(url: WebUri.uri(widget.initialUri)),
+          initialUrlRequest: URLRequest(
+            url: WebUri.uri(
+              context.read<BangumiEndpointService?>()?.resolveUri(
+                    widget.initialUri,
+                  ) ??
+                  widget.initialUri,
+            ),
+          ),
           initialSettings: InAppWebViewSettings(
+            userAgent:
+                context.read<BangumiEndpointService?>()?.kindForUri(
+                      widget.initialUri,
+                    ) !=
+                    null
+                ? context.read<BangumiEndpointService>().userAgent(
+                    BangumiServiceKind.web,
+                  )
+                : null,
             supportZoom: true,
             useShouldOverrideUrlLoading: true,
           ),
@@ -865,7 +904,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
           onCreateWindow: (controller, createWindowAction) async {
             final uri = createWindowAction.request.url?.uriValue;
             if (uri != null) {
-              await LinkNavigator.openBrowser(uri);
+              await LinkNavigator.openBrowserFromContext(context, uri);
             }
             return false;
           },

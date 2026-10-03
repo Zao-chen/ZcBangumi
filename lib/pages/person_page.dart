@@ -271,7 +271,8 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
   Future<void> _openWebPage() async {
     final personId = _activePersonId;
     if (personId == null) return;
-    final ok = await LinkNavigator.openBrowser(
+    final ok = await LinkNavigator.openBrowserFromContext(
+      context,
       Uri.parse('${BgmConst.webBaseUrl}/person/$personId'),
     );
     if (!ok && mounted) {

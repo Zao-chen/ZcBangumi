@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/character.dart';
@@ -794,7 +794,7 @@ class _SubjectPageState extends State<SubjectPage>
 
   Future<void> _openSubjectWebPage() async {
     final uri = Uri.parse('${BgmConst.webBaseUrl}/subject/${widget.subjectId}');
-    final ok = await LinkNavigator.openBrowser(uri);
+    final ok = await LinkNavigator.openBrowserFromContext(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -1109,7 +1109,7 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   Future<void> _openMoegirlInBrowser(Uri uri) async {
-    final ok = await LinkNavigator.openBrowser(uri);
+    final ok = await LinkNavigator.openBrowserFromContext(context, uri);
     if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -2068,7 +2068,7 @@ class _SubjectPageState extends State<SubjectPage>
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: imageUrl.isNotEmpty
-                      ? CachedNetworkImage(
+                      ? BangumiNetworkImage(
                           imageUrl: imageUrl,
                           width: 80,
                           height: 104,
@@ -2188,7 +2188,7 @@ class _SubjectPageState extends State<SubjectPage>
             if (_subject!.images?.medium.isNotEmpty ?? false)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
+                child: BangumiNetworkImage(
                   imageUrl: _subject!.images!.medium,
                   width: coverWidth.toDouble(),
                   height: coverHeight.toDouble(),
@@ -2497,7 +2497,7 @@ class _SubjectPageState extends State<SubjectPage>
                       width: 40,
                       height: 40,
                       child: comment.userAvatar.isNotEmpty
-                          ? CachedNetworkImage(
+                          ? BangumiNetworkImage(
                               imageUrl: comment.userAvatar,
                               fit: BoxFit.cover,
                               placeholder: (context, url) =>

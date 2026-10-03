@@ -23,9 +23,13 @@ import '../models/user.dart';
 import 'app_log_service.dart';
 import 'network_proxy_config.dart';
 import 'web_network_config.dart';
+import 'bangumi_endpoint_service.dart';
+import '../models/bangumi_mirror_settings.dart';
 
 /// Bangumi API 客户端
 class ApiClient {
+  final BangumiEndpointService endpoints;
+  final bool _ownsEndpoints;
   late final Dio _dio;
   String? _accessToken;
   String? _webCookie;
@@ -37,7 +41,12 @@ class ApiClient {
   @visibleForTesting
   Dio get nextDio => _nextDio;
 
-  ApiClient({AppLogService? logService}) {
+  @visibleForTesting
+  Dio get webDio => _webDio;
+
+  ApiClient({AppLogService? logService, BangumiEndpointService? endpoints})
+    : endpoints = endpoints ?? BangumiEndpointService(),
+      _ownsEndpoints = endpoints == null {
     _dio = Dio(
       BaseOptions(
         baseUrl: BgmConst.apiBaseUrl,
@@ -77,7 +86,9 @@ class ApiClient {
     _webDio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          if (!kIsWeb && options.headers['Cookie'] == null) {
+          if (!kIsWeb &&
+              options.extra['bangumiAnonymous'] != true &&
+              options.headers['Cookie'] == null) {
             final cookieHeader = _buildCookieHeaderForUri(options.uri);
             if (cookieHeader != null && cookieHeader.isNotEmpty) {
               options.headers['Cookie'] = cookieHeader;
@@ -111,6 +122,30 @@ class ApiClient {
       _dio.interceptors.add(LoggingInterceptor());
       _webDio.interceptors.add(LoggingInterceptor());
     }
+    this.endpoints.install(_dio, preferredKind: BangumiServiceKind.api);
+    this.endpoints.install(_webDio, preferredKind: BangumiServiceKind.web);
+    this.endpoints.install(_nextDio, preferredKind: BangumiServiceKind.next);
+    this.endpoints.addListener(_syncEndpointBaseUrls);
+    _syncEndpointBaseUrls();
+  }
+
+  void _syncEndpointBaseUrls() {
+    _dio.options.baseUrl = endpoints.baseUri(BangumiServiceKind.api).toString();
+    _webDio.options.baseUrl = endpoints
+        .baseUri(BangumiServiceKind.web)
+        .toString();
+    _nextDio.options.baseUrl = endpoints
+        .baseUri(BangumiServiceKind.next)
+        .toString();
+  }
+
+  void dispose() {
+    endpoints.removeListener(_syncEndpointBaseUrls);
+    for (final client in [_dio, _webDio, _nextDio]) {
+      NetworkProxyConfig.uninstallDio(client);
+      client.close(force: true);
+    }
+    if (_ownsEndpoints) endpoints.dispose();
   }
 
   /// 设置 Access Token
@@ -126,13 +161,20 @@ class ApiClient {
   }
 
   bool get hasToken => _accessToken != null && _accessToken!.isNotEmpty;
-  bool get hasWebSession => _webSession?.isValid == true;
+  bool get hasWebSession => endpoints.settings.isOfficial
+      ? _webSession?.isValid == true
+      : endpoints
+                .sessionFor(endpoints.baseUri(BangumiServiceKind.web))
+                ?.cookieHeader(endpoints.baseUri(BangumiServiceKind.web))
+                ?.contains('chii_auth=') ==
+            true;
   bool get hasWebCookie => hasWebSession;
 
   Future<T> _indexRequest<T>(Future<T> Function() request) async {
     try {
       return await request();
     } on DioException catch (error) {
+      if (error.error is BangumiMirrorChallengeException) rethrow;
       final status = error.response?.statusCode;
       final data = error.response?.data;
       String? serverMessage;
@@ -197,9 +239,6 @@ class ApiClient {
         print('[ApiClient]   包含 chii_sid: ${_webCookie!.contains('chii_sid')}');
         print(
           '[ApiClient]   包含 chii_sec_id: ${_webCookie!.contains('chii_sec_id')}',
-        );
-        print(
-          '[ApiClient]   开头: ${_webCookie!.substring(0, _webCookie!.length > 100 ? 100 : _webCookie!.length)}',
         );
 
         // 验证 Cookie 是否真的在 HTTP 头中
@@ -1280,8 +1319,7 @@ class ApiClient {
   }) async {
     if (kDebugMode) {
       print('[ApiClient] 开始发帖流程');
-      print('[ApiClient] 来源URL: $sourceUrl');
-      print('[ApiClient] 标题: $title');
+      print('[ApiClient] 来源路径: ${Uri.tryParse(sourceUrl)?.path}');
       print('[ApiClient] 内容长度: ${content.length}');
       print('[ApiClient] Cookie已设置: ${_webCookie != null}');
     }
@@ -1304,7 +1342,7 @@ class ApiClient {
     }
 
     if (kDebugMode) {
-      print('[ApiClient] 发帖页面URL: $newTopicUrl');
+      print('[ApiClient] 发帖页面路径: ${Uri.tryParse(newTopicUrl)?.path}');
     }
 
     final uri = Uri.parse(newTopicUrl);
@@ -1323,8 +1361,7 @@ class ApiClient {
 
     if (kDebugMode) {
       print('[ApiClient] 找到发帖表单，准备提交');
-      print('[ApiClient] formhash: ${form.formhash}');
-      print('[ApiClient] actionUrl: ${form.actionUrl}');
+      print('[ApiClient] actionPath: ${Uri.tryParse(form.actionUrl)?.path}');
       print('[ApiClient] 表单字段: ${form.hiddenFields.keys.toList()}');
     }
 
@@ -1349,7 +1386,7 @@ class ApiClient {
     );
 
     if (kDebugMode) {
-      print('[ApiClient] 发帖提交完成，结果URL: $resultUrl');
+      print('[ApiClient] 发帖提交完成，结果路径: ${Uri.tryParse(resultUrl)?.path}');
     }
 
     return resultUrl;
@@ -2278,7 +2315,7 @@ class ApiClient {
     }
 
     if (kDebugMode) {
-      print('[ApiClient] 提取的表单字段: $fields');
+      print('[ApiClient] 提取的表单字段: ${fields.keys.toList()}');
     }
 
     return fields;
@@ -2327,7 +2364,7 @@ class ApiClient {
     return null;
   }
 
-  static List<String> _buildRakuenTopicCandidates(String input) {
+  List<String> _buildRakuenTopicCandidates(String input) {
     final candidates = <String>[];
 
     void addCandidate(String? value) {
@@ -2385,7 +2422,7 @@ class ApiClient {
     return candidates;
   }
 
-  static String? _normalizeRakuenTopicUrl(String input) {
+  String? _normalizeRakuenTopicUrl(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return null;
 
@@ -2399,6 +2436,7 @@ class ApiClient {
     }
 
     if (uri == null) return null;
+    uri = endpoints.canonicalUri(uri);
     final host = uri.host.toLowerCase();
     if (!{
       'bgm.tv',
@@ -2489,12 +2527,9 @@ class ApiClient {
 
     if (kDebugMode) {
       print('[ApiClient] _submitRakuenForm 详情:');
-      print('[ApiClient]   actionUrl: $actionUrl');
       print('[ApiClient]   uri.path: ${uri.path}');
       print('[ApiClient]   uri.host: ${uri.host}');
       print('[ApiClient]   uri.scheme: ${uri.scheme}');
-      print('[ApiClient]   referer: $refererUrl');
-      print('[ApiClient]   数据: $data');
     }
 
     return _webDio
@@ -2521,7 +2556,7 @@ class ApiClient {
             print('[ApiClient] _submitRakuenForm 响应:');
             print('[ApiClient]   状态码: ${response.statusCode}');
             print(
-              '[ApiClient]   Location header: ${response.headers.value('location')}',
+              '[ApiClient]   Location path: ${Uri.tryParse(response.headers.value('location') ?? '')?.path}',
             );
           }
           return response;
@@ -2549,6 +2584,10 @@ class ApiClient {
   }
 
   String? _buildCookieHeaderForUri(Uri uri, {BangumiWebSession? session}) {
+    if (!endpoints.isActiveOrigin(uri, BangumiServiceKind.web)) return null;
+    if (!endpoints.settings.isOfficial) {
+      return endpoints.sessionFor(uri)?.cookieHeader(uri);
+    }
     final candidate = session ?? _webSession;
     if (candidate == null || !candidate.isValid) return null;
     return candidate.buildCookieHeaderForUri(uri);
@@ -2624,30 +2663,16 @@ class LoggingInterceptor extends Interceptor {
             options.path.contains('/subject/topic')
         ? '🔵'
         : '🌐';
-    debugPrint('$logPrefix ${options.method} ${options.path}');
+    debugPrint(
+      '$logPrefix ${options.method} ${options.uri.origin}${options.uri.path}',
+    );
 
-    // 记录 Cookie 信息
-    if (options.headers['Cookie'] != null) {
-      final cookie = options.headers['Cookie'] as String;
-      debugPrint(
-        '   [Cookie] ${cookie.substring(0, cookie.length > 60 ? 60 : cookie.length)}...',
-      );
-    } else {
-      debugPrint('   [Cookie] 未设置');
-    }
-
-    // 只对特定路径显示详细信息
-    if (options.path.contains('rakuen') || options.path.contains('cookie')) {
-      if (options.queryParameters.isNotEmpty) {
-        debugPrint('   Query: ${options.queryParameters}');
-      }
-    }
     super.onRequest(options, handler);
   }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    final path = response.requestOptions.path;
+    final path = response.requestOptions.uri.path;
     final statusCode = response.statusCode;
 
     // 简化日志输出
@@ -2675,7 +2700,7 @@ class LoggingInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    debugPrint('❌ ${err.type} ${err.requestOptions.path}');
+    debugPrint('❌ ${err.type} ${err.requestOptions.uri.path}');
     debugPrint('   ${err.message}');
     // 不显示完整的响应数据和堆栈，避免刷屏
     if (err.response != null) {

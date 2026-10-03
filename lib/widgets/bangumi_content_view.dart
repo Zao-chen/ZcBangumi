@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:provider/provider.dart';
 
 import '../constants.dart';
 import '../services/link_navigator.dart';
+import '../services/bangumi_endpoint_service.dart';
+import 'bangumi_network_image.dart';
 
 class BangumiContentView extends StatelessWidget {
   final String text;
@@ -26,10 +29,31 @@ class BangumiContentView extends StatelessWidget {
     final resolvedSmileSize = smileSize ?? (fontSize * 1.35);
     final colorScheme = Theme.of(context).colorScheme;
     final trimmedHtml = html?.trim();
+    final endpoints = context.watch<BangumiEndpointService?>();
 
     if (trimmedHtml != null && trimmedHtml.isNotEmpty) {
       return Html(
-        data: _wrapHtml(trimmedHtml),
+        data: _wrapHtml(endpoints?.rewriteHtml(trimmedHtml) ?? trimmedHtml),
+        extensions: [
+          if (endpoints != null)
+            ImageExtension(
+              networkDomains: endpoints.knownHosts,
+              handleAssetImages: false,
+              handleDataImages: false,
+              builder: (imageContext) => BangumiNetworkImage(
+                imageUrl: imageContext.attributes['src'] ?? '',
+                width: imageContext.style?.width?.unit == Unit.px
+                    ? imageContext.style?.width?.value
+                    : null,
+                height: imageContext.style?.height?.unit == Unit.px
+                    ? imageContext.style?.height?.value
+                    : null,
+                fit: BoxFit.contain,
+                errorWidget: (_, _, _) =>
+                    Text(imageContext.attributes['alt'] ?? '图片加载失败'),
+              ),
+            ),
+        ],
         style: {
           'html': Style(margin: Margins.zero, padding: HtmlPaddings.zero),
           'body': Style(
@@ -101,12 +125,12 @@ class BangumiContentView extends StatelessWidget {
               message: raw,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: Image.network(
-                  url,
+                child: BangumiNetworkImage(
+                  imageUrl: url,
                   width: smileSize,
                   height: smileSize,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
+                  errorWidget: (context, url, error) {
                     return Text(raw, style: style);
                   },
                 ),

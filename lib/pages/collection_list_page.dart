@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 
 import '../constants.dart';
@@ -669,7 +669,7 @@ class _CollectionItemCard extends StatelessWidget {
                   width: 56,
                   height: 80,
                   child: subject?.images?.common.isNotEmpty == true
-                      ? CachedNetworkImage(
+                      ? BangumiNetworkImage(
                           imageUrl: subject!.images!.common,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(

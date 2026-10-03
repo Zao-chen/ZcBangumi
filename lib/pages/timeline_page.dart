@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/timeline.dart';
 import '../pages/profile_page.dart';
@@ -769,7 +769,7 @@ class _TimelineFeedItem extends StatelessWidget {
                   width: 40,
                   height: 40,
                   child: item.avatarUrl.isNotEmpty
-                      ? CachedNetworkImage(
+                      ? BangumiNetworkImage(
                           imageUrl: item.avatarUrl,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(
@@ -888,7 +888,7 @@ class _TimelineFeedItem extends StatelessWidget {
                 child: SizedBox(
                   width: 50,
                   height: 70,
-                  child: CachedNetworkImage(
+                  child: BangumiNetworkImage(
                     imageUrl: item.subjectCoverUrl!,
                     fit: BoxFit.cover,
                     placeholder: (context, url) =>

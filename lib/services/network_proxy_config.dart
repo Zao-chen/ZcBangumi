@@ -21,6 +21,10 @@ class NetworkProxyConfig {
     platform.NetworkProxyConfigPlatform.installDio(dio, _settings);
   }
 
+  static void uninstallDio(Dio dio) {
+    platform.NetworkProxyConfigPlatform.uninstallDio(dio);
+  }
+
   static void update(NetworkProxySettings settings) {
     _settings = settings.normalized();
     platform.NetworkProxyConfigPlatform.applySettings(_settings);

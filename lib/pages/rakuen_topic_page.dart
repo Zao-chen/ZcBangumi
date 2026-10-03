@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -44,7 +44,10 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
         sourceUrl: widget.topic.topicUrl,
       );
     }
-    return BangumiIndexContentRef.parse(widget.topic.topicUrl);
+    return BangumiIndexContentRef.parse(
+      widget.topic.topicUrl,
+      canonicalize: context.read<ApiClient>().endpoints.canonicalUri,
+    );
   }
 
   @override
@@ -499,7 +502,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
   static Future<void> _openExternal(BuildContext context, String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
-    await LinkNavigator.openBrowser(uri);
+    await LinkNavigator.openBrowserFromContext(context, uri);
   }
 }
 
@@ -952,7 +955,7 @@ class _CoverImage extends StatelessWidget {
         width: size,
         height: size,
         child: url.isNotEmpty
-            ? CachedNetworkImage(
+            ? BangumiNetworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
                 placeholder: (context, url) =>

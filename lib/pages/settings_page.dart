@@ -17,7 +17,10 @@ import '../services/mikan_service.dart';
 import '../services/platform_feature_support.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
+import '../services/api_client.dart';
+import '../services/bangumi_image_cache.dart';
 import '../widgets/update_dialog.dart';
+import '../widgets/bangumi_mirror_settings_card.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -346,16 +349,18 @@ class _SettingsPageState extends State<SettingsPage> {
           return [_buildDataAndRefreshSettingsCard(ctx, appState)];
         },
       ),
-      if (PlatformFeatureSupport.networkProxy)
-        _SettingsSection(
-          icon: Icons.settings_ethernet_rounded,
-          title: '网络代理',
-          subtitle: '配置 API、网页与更新请求代理',
-          builder: (ctx) {
-            final appState = ctx.watch<AppStateProvider>();
-            return [_NetworkProxySettingsCard(appState: appState)];
-          },
-        ),
+      _SettingsSection(
+        icon: Icons.settings_ethernet_rounded,
+        title: '网络',
+        subtitle: PlatformFeatureSupport.networkProxy
+            ? 'Bangumi 镜像与代理'
+            : 'Bangumi 镜像',
+        builder: (ctx) => [
+          BangumiMirrorSettingsCard(endpoints: ctx.read<ApiClient>().endpoints),
+          if (PlatformFeatureSupport.networkProxy)
+            _NetworkProxySettingsCard(appState: ctx.watch<AppStateProvider>()),
+        ],
+      ),
       if (kIsWeb)
         _SettingsSection(
           icon: Icons.public_outlined,
@@ -450,7 +455,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openFullAppReleasePage(BuildContext context) async {
-    final ok = await LinkNavigator.openBrowser(
+    final ok = await LinkNavigator.openBrowserFromContext(
+      context,
       Uri.parse(BgmConst.githubReleasesUrl),
     );
     if (!ok && context.mounted) {
@@ -1214,6 +1220,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _clearImageCache() async {
+    final bangumiCache = context.read<BangumiImageCache?>();
+    await bangumiCache?.manager.emptyCache();
     await DefaultCacheManager().emptyCache();
     imageCache.clear();
     imageCache.clearLiveImages();
@@ -1418,51 +1426,53 @@ class _NetworkProxySettingsCardState extends State<_NetworkProxySettingsCard> {
                 setState(() => _mode = values.first);
               },
             ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    controller: _hostController,
-                    enabled: canEditManual,
-                    decoration: const InputDecoration(
-                      labelText: '代理主机',
-                      hintText: '127.0.0.1',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.dns_outlined),
+            if (canEditManual) ...[
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _hostController,
+                      decoration: const InputDecoration(
+                        labelText: '代理主机',
+                        hintText: '127.0.0.1',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.dns_outlined),
+                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    onChanged: (_) => setState(() {}),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _portController,
-                    enabled: canEditManual,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '端口',
-                      hintText: '7890',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.numbers_rounded),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _portController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '端口',
+                        hintText: '7890',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.numbers_rounded),
+                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    onChanged: (_) => setState(() {}),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: changed ? () => _save(nextSettings) : null,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('保存'),
+                ],
               ),
-            ),
+            ],
+            if (changed) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: () => _save(nextSettings),
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('保存'),
+                ),
+              ),
+            ],
           ],
         ),
       ),

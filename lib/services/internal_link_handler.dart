@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'bangumi_endpoint_service.dart';
 
 import 'package:zc_bangumi/models/rakuen_topic.dart';
 import 'package:zc_bangumi/pages/character_page.dart';
@@ -20,6 +22,8 @@ class InternalLinkHandler {
   /// 返回 InternalLinkResult 来表示处理结果
   static InternalLinkResult handleLink(Uri uri, BuildContext? context) {
     // 检查是否是bangumi站内链接
+    final endpoints = context?.read<BangumiEndpointService?>();
+    uri = endpoints?.canonicalUri(uri) ?? uri;
     if (!_isBangumiUrl(uri)) {
       return InternalLinkResult.openInBrowser;
     }
@@ -133,11 +137,11 @@ class InternalLinkHandler {
   static bool _isBangumiUrl(Uri uri) {
     final host = uri.host.toLowerCase();
     return host == bangumiDomainAlias ||
-        host.endsWith('.$bangumiDomainAlias') ||
+        host == 'www.$bangumiDomainAlias' ||
         host == bangumiDomain ||
-        host.endsWith('.$bangumiDomain') ||
+        host == 'www.$bangumiDomain' ||
         host == bangumiLegacyDomain ||
-        host.endsWith('.$bangumiLegacyDomain');
+        host == 'www.$bangumiLegacyDomain';
   }
 
   /// 检查ID是否有效（数字）

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/collection.dart';
@@ -704,7 +704,7 @@ class _CollectionProgressCardState extends State<_CollectionProgressCard> {
                       width: coverWidth,
                       height: coverHeight,
                       child: subject?.images?.grid.isNotEmpty == true
-                          ? CachedNetworkImage(
+                          ? BangumiNetworkImage(
                               imageUrl: subject!.images!.common.isNotEmpty
                                   ? subject.images!.common
                                   : subject.images!.grid,

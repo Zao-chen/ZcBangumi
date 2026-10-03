@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bangumi_web_session.dart';
+import '../models/bangumi_mirror_settings.dart';
+import '../models/bangumi_mirror_session.dart';
 import '../models/character.dart';
 import '../models/mikan.dart';
 import '../models/network_proxy_settings.dart';
@@ -32,6 +34,12 @@ class StorageService {
   static const String _keyMikanEnabled = 'mikan_enabled';
   static const String _keyMikanSubjectMappings = 'mikan_subject_mappings';
   static const String _keyNetworkProxySettings = 'network_proxy_settings';
+  static const String _keyBangumiMirrorSettings = 'bangumi_mirror_settings';
+  static const String _keyBangumiMirrorConsents = 'bangumi_mirror_consents';
+  static const String _keyBangumiMirrorHistory = 'bangumi_mirror_history';
+  static const String _keyBangumiMirrorSessions = 'bangumi_mirror_sessions';
+
+  dynamic Function(dynamic)? canonicalizeBangumiCacheData;
 
   late final SharedPreferences _prefs;
 
@@ -40,6 +48,91 @@ class StorageService {
     _prefs = await SharedPreferences.getInstance();
     await _migrateLegacyWebSession();
     await _migrateRecentViewItems();
+  }
+
+  BangumiMirrorSettings get bangumiMirrorSettings {
+    try {
+      final raw = _prefs.getString(_keyBangumiMirrorSettings);
+      if (raw == null) return const BangumiMirrorSettings();
+      return BangumiMirrorSettings.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      );
+    } catch (_) {
+      return const BangumiMirrorSettings();
+    }
+  }
+
+  List<String> get bangumiMirrorConsents =>
+      _prefs.getStringList(_keyBangumiMirrorConsents) ?? const [];
+
+  List<BangumiMirrorSettings> get bangumiMirrorHistory {
+    try {
+      final raw = _prefs.getString(_keyBangumiMirrorHistory);
+      if (raw == null) return const [];
+      return (jsonDecode(raw) as List)
+          .whereType<Map>()
+          .map(
+            (entry) => BangumiMirrorSettings.fromJson(
+              Map<String, dynamic>.from(entry),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  List<BangumiMirrorSession> get bangumiMirrorSessions {
+    try {
+      final raw = _prefs.getString(_keyBangumiMirrorSessions);
+      if (raw == null) return const [];
+      return (jsonDecode(raw) as List)
+          .whereType<Map>()
+          .map(
+            (entry) =>
+                BangumiMirrorSession.fromJson(Map<String, dynamic>.from(entry)),
+          )
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> setBangumiMirrorSettings(BangumiMirrorSettings settings) async {
+    await _prefs.setString(
+      _keyBangumiMirrorSettings,
+      jsonEncode(settings.toJson()),
+    );
+  }
+
+  Future<void> setBangumiMirrorConsents(List<String> fingerprints) async {
+    await _prefs.setStringList(_keyBangumiMirrorConsents, fingerprints);
+  }
+
+  Future<void> setBangumiMirrorHistory(
+    List<BangumiMirrorSettings> settings,
+  ) async {
+    final unique = <String, BangumiMirrorSettings>{};
+    for (final setting in settings) {
+      try {
+        unique[setting.fingerprint] = setting;
+      } catch (_) {
+        continue;
+      }
+    }
+    await _prefs.setString(
+      _keyBangumiMirrorHistory,
+      jsonEncode(unique.values.map((entry) => entry.toJson()).toList()),
+    );
+  }
+
+  Future<void> setBangumiMirrorSessions(
+    List<BangumiMirrorSession> sessions,
+  ) async {
+    await _prefs.setString(
+      _keyBangumiMirrorSessions,
+      jsonEncode(sessions.map((entry) => entry.toJson()).toList()),
+    );
   }
 
   /// 读取 Access Token
@@ -259,7 +352,7 @@ class StorageService {
       final createdAt = existing?.createdAt ?? now;
       final accessCount = existing?.accessCount ?? 0;
       final wrapped = CacheEntry(
-        data: data,
+        data: canonicalizeBangumiCacheData?.call(data) ?? data,
         createdAt: createdAt,
         updatedAt: now,
         lastAccessedAt: now,
@@ -300,7 +393,9 @@ class StorageService {
     final raw = _prefs.getString('cache_$key');
     if (raw == null) return null;
     try {
-      final decoded = jsonDecode(raw);
+      final rawDecoded = jsonDecode(raw);
+      final decoded =
+          canonicalizeBangumiCacheData?.call(rawDecoded) ?? rawDecoded;
       if (decoded is Map) {
         final map = decoded.map((k, v) => MapEntry('$k', v));
         if (map['__cache_meta'] is Map && map.containsKey('data')) {
@@ -515,7 +610,12 @@ class StorageService {
     }
     await _prefs.setString(
       _keyRecentViewItems,
-      jsonEncode(items.map((entry) => entry.toJson()).toList()),
+      jsonEncode(
+        canonicalizeBangumiCacheData?.call(
+              items.map((entry) => entry.toJson()).toList(),
+            ) ??
+            items.map((entry) => entry.toJson()).toList(),
+      ),
     );
   }
 
