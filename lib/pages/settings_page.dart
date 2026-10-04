@@ -385,7 +385,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _SettingsSection(
         icon: Icons.article_outlined,
         title: '诊断日志',
-        subtitle: '查看、复制、导出排错日志',
+        subtitle: kIsWeb ? '查看、复制、下载当前页面的排错日志' : '查看、复制、导出排错日志',
         builder: (ctx) {
           return [_buildLogSettingsCard(ctx)];
         },
@@ -400,7 +400,9 @@ class _SettingsPageState extends State<SettingsPage> {
           ListTile(
             leading: const Icon(Icons.article_outlined),
             title: const Text('查看诊断日志'),
-            subtitle: const Text('包含网络失败、接口状态和应用诊断事件'),
+            subtitle: Text(
+              kIsWeb ? '包含网络失败、接口状态和应用诊断事件，刷新页面后清空' : '包含网络失败、接口状态和应用诊断事件',
+            ),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () {
               Navigator.of(
@@ -439,6 +441,16 @@ class _SettingsPageState extends State<SettingsPage> {
               onTap: () => _openFullAppReleasePage(context),
             ),
             const Divider(height: 1),
+            const ListTile(
+              leading: Icon(Icons.check_circle_outline_rounded),
+              title: Text('浏览、搜索与收藏进度'),
+              subtitle: Text('条目、角色、人物、标签搜索、放送日历及 Token 登录使用公开 API，可在网页版使用'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.open_in_browser_rounded),
+              title: Text('目录、吐槽与讨论'),
+              subtitle: Text('P1 与网页接口未开放跨域访问，网页版隐藏内置入口，相关链接在原站打开'),
+            ),
             const ListTile(
               leading: Icon(Icons.hide_source_outlined),
               title: Text('动态与超展开'),
@@ -643,13 +655,17 @@ class _SettingsPageState extends State<SettingsPage> {
           ListTile(
             leading: const Icon(Icons.delete_sweep_outlined),
             title: const Text('清理接口缓存'),
-            subtitle: const Text('清理动态、进度等接口缓存，不影响设置项'),
+            subtitle: Text(
+              kIsWeb ? '清理浏览、收藏与进度缓存，不影响设置项' : '清理动态、进度等接口缓存，不影响设置项',
+            ),
             onTap: _clearDataCache,
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
             title: const Text('清理图片缓存'),
-            subtitle: const Text('清理内存与磁盘图片缓存'),
+            subtitle: Text(
+              kIsWeb ? '清理应用图片缓存；浏览器 HTTP 缓存由浏览器管理' : '清理内存与磁盘图片缓存',
+            ),
             onTap: _clearImageCache,
           ),
         ],
@@ -994,7 +1010,9 @@ class _SettingsPageState extends State<SettingsPage> {
     BuildContext context,
     AppStateProvider appState,
   ) {
-    final order = appState.subjectTabOrder;
+    final order = appState.subjectTabOrder
+        .where(PlatformFeatureSupport.supportsSubjectTab)
+        .toList(growable: false);
 
     return Card(
       child: Padding(
@@ -1052,7 +1070,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 }
 
                 final isVisible = appState.isSubjectTabVisible(tabId);
-                final enabledCount = appState.enabledSubjectTabIds.length;
+                final enabledCount = appState.enabledSubjectTabIds
+                    .where(PlatformFeatureSupport.supportsSubjectTab)
+                    .length;
                 final canToggle = !isVisible || enabledCount > 1;
                 final hiddenColor = Theme.of(
                   context,

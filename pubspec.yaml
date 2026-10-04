@@ -24,6 +24,7 @@ dependencies:
   flutter_html: ^3.0.0
   flutter_inappwebview: 6.2.0-beta.3
   html: ^0.15.6
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
@@ -36,6 +37,15 @@ flutter:
   
   assets:
     - assets/images/
+    - assets/fonts/OFL.txt
+
+  fonts:
+    - family: ZcWebChinese
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Chinese.woff2
+    - family: ZcWebLatin
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Latin.woff2
 
 flutter_launcher_icons:
   android: true

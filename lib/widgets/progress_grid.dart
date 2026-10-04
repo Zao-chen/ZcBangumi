@@ -7,6 +7,7 @@ import '../models/episode.dart';
 import '../models/rakuen_topic.dart';
 import '../pages/rakuen_topic_page.dart';
 import '../services/platform_feature_support.dart';
+import '../services/link_navigator.dart';
 
 class ProgressGrid extends StatelessWidget {
   final List<UserEpisodeCollection> episodes;
@@ -819,7 +820,9 @@ class _EpisodeCell extends StatelessWidget {
         height: 40,
         child: _MenuRow(
           icon: Icons.forum_outlined,
-          label: '\u8ba8\u8bba(${ep.episode.comment})',
+          label: PlatformFeatureSupport.rakuen
+              ? '\u8ba8\u8bba(${ep.episode.comment})'
+              : '原站讨论(${ep.episode.comment})',
           color: Colors.indigo,
         ),
       ),
@@ -887,7 +890,18 @@ class _EpisodeCell extends StatelessWidget {
     Episode episodeInfo,
   ) async {
     if (!PlatformFeatureSupport.rakuen) {
-      messenger.showSnackBar(const SnackBar(content: Text('静态网页版暂不支持超展开讨论')));
+      try {
+        final opened = await LinkNavigator.openBrowser(
+          Uri.parse('${BgmConst.webBaseUrl}/ep/${episodeInfo.id}'),
+        );
+        if (!opened && messenger.mounted) {
+          messenger.showSnackBar(const SnackBar(content: Text('无法打开章节讨论')));
+        }
+      } catch (_) {
+        if (messenger.mounted) {
+          messenger.showSnackBar(const SnackBar(content: Text('无法打开章节讨论')));
+        }
+      }
       return;
     }
 

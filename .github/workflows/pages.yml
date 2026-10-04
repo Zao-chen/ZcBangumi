@@ -23,7 +23,6 @@ jobs:
     env:
       FLUTTER_VERSION: '3.41.9'
       PAGES_DOMAIN: 'bgm.greatzaochen.dev'
-      ZC_WEB_PROXY_BASE: ${{ vars.ZC_WEB_PROXY_BASE }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +42,13 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Test web startup and experience in Chrome
+        run: flutter test --platform chrome test/web_startup_test.dart test/web_experience_test.dart
+
       - name: Build web
         shell: bash
         run: |
-          flutter build web --release --base-href "/" --dart-define="ZC_WEB_PROXY_BASE=$ZC_WEB_PROXY_BASE"
+          flutter build web --release --base-href "/"
           cp build/web/index.html build/web/404.html
           echo "$PAGES_DOMAIN" > build/web/CNAME
           touch build/web/.nojekyll

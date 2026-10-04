@@ -191,6 +191,7 @@ class MonoDetailScaffold extends StatelessWidget {
           curve: Curves.easeOut,
           padding: EdgeInsets.only(top: topInset),
           child: NavigationRail(
+            scrollable: true,
             selectedIndex: selectedTabIndex,
             onDestinationSelected: tabController.animateTo,
             backgroundColor: colorScheme.surface,

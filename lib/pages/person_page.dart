@@ -8,6 +8,7 @@ import '../models/person.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
+import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/bangumi_index_actions.dart';
@@ -28,11 +29,12 @@ class PersonPage extends StatefulWidget {
 }
 
 class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
-  static const _tabs = [
+  static final _tabs = [
     _PersonTab(label: '概述', icon: Icons.article_outlined),
     _PersonTab(label: '作品', icon: Icons.movie_outlined),
     _PersonTab(label: '角色', icon: Icons.theater_comedy_outlined),
-    _PersonTab(label: '目录', icon: Icons.format_list_bulleted_rounded),
+    if (PlatformFeatureSupport.indexes)
+      _PersonTab(label: '目录', icon: Icons.format_list_bulleted_rounded),
   ];
 
   late final TabController _tabController;
@@ -311,25 +313,26 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
         _buildOverviewTab(),
         _buildSubjectsTab(),
         _buildCharactersTab(),
-        _buildIndexesTab(),
+        if (PlatformFeatureSupport.indexes) _buildIndexesTab(),
       ],
       selectedTabIndex: _selectedTabIndex,
       showCollapsedTitle: _showCollapsedTitle,
       title: _displayPerson!.name,
       header: _buildHeaderCard(),
       actions: [
-        IconButton(
-          tooltip: '加入目录',
-          onPressed: _activePersonId == null
-              ? null
-              : () => showAddToBangumiIndex(
-                  context,
-                  category: IndexRelatedCategory.person,
-                  contentId: _activePersonId!,
-                  contentTitle: _displayPerson!.name,
-                ),
-          icon: const Icon(Icons.playlist_add_rounded),
-        ),
+        if (PlatformFeatureSupport.indexes)
+          IconButton(
+            tooltip: '加入目录',
+            onPressed: _activePersonId == null
+                ? null
+                : () => showAddToBangumiIndex(
+                    context,
+                    category: IndexRelatedCategory.person,
+                    contentId: _activePersonId!,
+                    contentTitle: _displayPerson!.name,
+                  ),
+            icon: const Icon(Icons.playlist_add_rounded),
+          ),
         IconButton(
           key: const ValueKey('person_collection_button'),
           tooltip: _isCollected ? '取消收藏人物' : '收藏人物',

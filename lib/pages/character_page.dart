@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +12,7 @@ import '../pages/profile_page.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
+import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_post_widgets.dart';
 import '../widgets/bangumi_avatar.dart';
@@ -35,11 +37,13 @@ class CharacterPage extends StatefulWidget {
 
 class _CharacterPageState extends State<CharacterPage>
     with TickerProviderStateMixin {
-  static const _tabItems = [
+  static final _tabItems = [
     _CharacterTabItem(label: '概述', icon: Icons.article_outlined),
     _CharacterTabItem(label: '出演', icon: Icons.movie_outlined),
-    _CharacterTabItem(label: '目录', icon: Icons.format_list_bulleted_rounded),
-    _CharacterTabItem(label: '吐槽', icon: Icons.chat_bubble_outline),
+    if (PlatformFeatureSupport.indexes)
+      _CharacterTabItem(label: '目录', icon: Icons.format_list_bulleted_rounded),
+    if (PlatformFeatureSupport.comments)
+      _CharacterTabItem(label: '吐槽', icon: Icons.chat_bubble_outline),
   ];
 
   late TabController _tabController;
@@ -208,17 +212,20 @@ class _CharacterPageState extends State<CharacterPage>
         }
       }
 
-      try {
-        final commentsResult = await api.getCharacterComments(
-          characterId: characterId,
-        );
-        latestComments = commentsResult.data;
-      } catch (_) {
-        if (_comments.isEmpty) {
-          commentsError = '获取吐槽失败，请稍后重试';
+      if (PlatformFeatureSupport.comments) {
+        try {
+          final commentsResult = await api.getCharacterComments(
+            characterId: characterId,
+          );
+          latestComments = commentsResult.data;
+        } catch (_) {
+          if (_comments.isEmpty) {
+            commentsError = '获取吐槽失败，请稍后重试';
+          }
         }
       }
 
+      if (!mounted) return;
       if (latestCharacter == null && _character == null) {
         setState(() => _error = '无法获取角色信息');
         return;
@@ -431,26 +438,27 @@ class _CharacterPageState extends State<CharacterPage>
       tabChildren: [
         _buildOverviewTab(),
         _buildAppearancesTab(),
-        _buildIndexesTab(),
-        _buildCommentsTab(),
+        if (PlatformFeatureSupport.indexes) _buildIndexesTab(),
+        if (PlatformFeatureSupport.comments) _buildCommentsTab(),
       ],
       selectedTabIndex: _selectedTabIndex,
       showCollapsedTitle: _showCollapsedTitle,
       title: _character!.name,
       header: _buildHeaderCard(),
       actions: [
-        IconButton(
-          tooltip: '加入目录',
-          onPressed: _activeCharacterId == null
-              ? null
-              : () => showAddToBangumiIndex(
-                  context,
-                  category: IndexRelatedCategory.character,
-                  contentId: _activeCharacterId!,
-                  contentTitle: _character!.name,
-                ),
-          icon: const Icon(Icons.playlist_add_rounded),
-        ),
+        if (PlatformFeatureSupport.indexes)
+          IconButton(
+            tooltip: '加入目录',
+            onPressed: _activeCharacterId == null
+                ? null
+                : () => showAddToBangumiIndex(
+                    context,
+                    category: IndexRelatedCategory.character,
+                    contentId: _activeCharacterId!,
+                    contentTitle: _character!.name,
+                  ),
+            icon: const Icon(Icons.playlist_add_rounded),
+          ),
         IconButton(
           tooltip: _isCollected ? '取消收藏角色' : '收藏角色',
           onPressed: _collectionLoading || _collectionUpdating
@@ -531,6 +539,9 @@ class _CharacterPageState extends State<CharacterPage>
 
   Widget _buildOverviewTab() {
     final character = _character!;
+    final overviewTextColor = kIsWeb
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : Colors.grey[700];
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     final hasCharacterOverview =
@@ -578,7 +589,7 @@ class _CharacterPageState extends State<CharacterPage>
                                 child: CopyableText(
                                   character.comment,
                                   style: TextStyle(
-                                    color: Colors.grey[700],
+                                    color: overviewTextColor,
                                     fontSize: 14,
                                     height: 1.6,
                                   ),
@@ -596,7 +607,7 @@ class _CharacterPageState extends State<CharacterPage>
                                 child: CopyableText(
                                   character.summary,
                                   style: TextStyle(
-                                    color: Colors.grey[700],
+                                    color: overviewTextColor,
                                     fontSize: 14,
                                     height: 1.6,
                                   ),
@@ -621,7 +632,7 @@ class _CharacterPageState extends State<CharacterPage>
                                     Text(
                                       '${character.collects} \u6b21\u6536\u85cf',
                                       style: TextStyle(
-                                        color: Colors.grey[700],
+                                        color: overviewTextColor,
                                         fontSize: 14,
                                       ),
                                     ),
@@ -701,7 +712,7 @@ class _CharacterPageState extends State<CharacterPage>
                 child: CopyableText(
                   character.comment,
                   style: TextStyle(
-                    color: Colors.grey[700],
+                    color: overviewTextColor,
                     fontSize: 14,
                     height: 1.6,
                   ),
@@ -714,7 +725,7 @@ class _CharacterPageState extends State<CharacterPage>
                 child: CopyableText(
                   character.summary,
                   style: TextStyle(
-                    color: Colors.grey[700],
+                    color: overviewTextColor,
                     fontSize: 14,
                     height: 1.6,
                   ),
@@ -741,7 +752,7 @@ class _CharacterPageState extends State<CharacterPage>
                     const SizedBox(width: 8),
                     Text(
                       '${character.collects} 次收藏',
-                      style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                      style: TextStyle(color: overviewTextColor, fontSize: 14),
                     ),
                   ],
                 ),
@@ -1362,12 +1373,9 @@ class _CharacterPageState extends State<CharacterPage>
                       bottom: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                   ),
-                  child: const MonoDetailTabBar(
-                    tabs: [
-                      Tab(text: '概述'),
-                      Tab(text: '出演'),
-                      Tab(text: '吐槽'),
-                    ],
+                  child: MonoDetailTabBar(
+                    controller: _tabController,
+                    tabs: _tabItems.map((tab) => Tab(text: tab.label)).toList(),
                   ),
                 ),
               ),
@@ -1378,6 +1386,7 @@ class _CharacterPageState extends State<CharacterPage>
           ? Row(
               children: [
                 NavigationRail(
+                  scrollable: true,
                   selectedIndex: _selectedTabIndex,
                   onDestinationSelected: (_) {},
                   backgroundColor: colorScheme.surface,
