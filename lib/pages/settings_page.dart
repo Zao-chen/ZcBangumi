@@ -4,6 +4,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../constants.dart';
 import '../models/navigation_config.dart';
 import '../models/network_proxy_settings.dart';
@@ -84,7 +85,7 @@ class _SettingsPageState extends State<SettingsPage> {
     AuthProvider auth,
     ColorScheme colorScheme,
   ) {
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(title: const Text('设置')),
       body: Column(
         children: [
@@ -117,7 +118,7 @@ class _SettingsPageState extends State<SettingsPage> {
         .toInt();
     final selectedSection = sections[selectedIndex];
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(title: const Text('设置')),
       body: Row(
         children: [
@@ -1310,7 +1311,7 @@ class _SettingsSectionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(title: Text(title)),
       body: ListView(
         padding: const EdgeInsets.all(16),

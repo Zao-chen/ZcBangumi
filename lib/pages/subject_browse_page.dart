@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../constants.dart';
 import '../models/subject.dart';
 import '../models/subject_browse.dart';
@@ -190,7 +191,7 @@ class _SubjectBrowsePageState extends State<SubjectBrowsePage> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 900;
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('浏览条目'),
         centerTitle: false,
@@ -206,9 +207,15 @@ class _SubjectBrowsePageState extends State<SubjectBrowsePage> {
       ),
       body: Column(
         children: [
-          _buildTypeSelector(),
-          _buildSortSelector(),
-          const Divider(height: 1),
+          ScrollChromeCollapse(
+            child: Column(
+              children: [
+                _buildTypeSelector(),
+                _buildSortSelector(),
+                const Divider(height: 1),
+              ],
+            ),
+          ),
           Expanded(
             child: isWide
                 ? Row(

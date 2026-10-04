@@ -18,8 +18,87 @@ import 'package:zc_bangumi/providers/mikan_provider.dart';
 import 'package:zc_bangumi/services/api_client.dart';
 import 'package:zc_bangumi/services/mikan_service.dart';
 import 'package:zc_bangumi/services/storage_service.dart';
+import 'package:zc_bangumi/widgets/subject_action_buttons.dart';
 
 void main() {
+  for (final configuration in [
+    (size: const Size(348, 640), textScale: 1.0),
+    (size: const Size(280, 640), textScale: 1.0),
+    (size: const Size(348, 640), textScale: 1.3),
+    (size: const Size(1000, 800), textScale: 1.0),
+  ]) {
+    testWidgets('subject header fits content at $configuration', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.init();
+      final api = _HeaderSubjectApiClient();
+      final auth = AuthProvider(api: api, storage: storage);
+      final connectivity = ConnectivityProvider(canReachBangumi: () => true);
+      final appState = AppStateProvider(storage: storage);
+      final mikan = MikanProvider(service: MikanService(), storage: storage);
+      addTearDown(connectivity.dispose);
+      tester.view.physicalSize = configuration.size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<StorageService>.value(value: storage),
+            Provider<ApiClient>.value(value: api),
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<ConnectivityProvider>.value(
+              value: connectivity,
+            ),
+            ChangeNotifierProvider<AppStateProvider>.value(value: appState),
+            ChangeNotifierProvider<MikanProvider>.value(value: mikan),
+          ],
+          child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(configuration.textScale),
+              ),
+              child: child!,
+            ),
+            home: SubjectPage(subjectId: 253, subject: api.subject),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final header = find.ancestor(
+        of: find.byType(SubjectActionButtons),
+        matching: find.byType(Card),
+      );
+      final headerRect = tester.getRect(header);
+      for (final button in [
+        find.byType(OutlinedButton),
+        find.byType(FilledButton),
+      ]) {
+        final buttonRect = tester.getRect(button);
+        expect(headerRect.contains(buttonRect.topLeft), isTrue);
+        expect(headerRect.contains(buttonRect.bottomRight), isTrue);
+        expect(button.hitTestable(), findsOneWidget);
+      }
+
+      await tester.tap(find.text('编辑'));
+      await tester.pump();
+      expect(find.text('请先登录'), findsOneWidget);
+
+      await tester.drag(find.byType(NestedScrollView), const Offset(0, -250));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(SliverAppBar, api.subject.displayName),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('game detail tags search games rather than animation', (
     tester,
   ) async {
@@ -284,6 +363,21 @@ class _AnonymousEpisodeApiClient extends ApiClient {
     collectionEpisodeRequests++;
     throw StateError('anonymous users must not request collection progress');
   }
+}
+
+class _HeaderSubjectApiClient extends _AnonymousEpisodeApiClient {
+  final _headerSubject = Subject.fromJson({
+    'id': 253,
+    'type': 2,
+    'name': 'きみが死ぬまで恋をしたい',
+    'name_cn': '与你相恋到生命尽头',
+    'summary': '测试简介' * 100,
+    'rating': {'score': 6.6, 'rank': 4392},
+    'collection_total': 14295,
+  });
+
+  @override
+  Subject get subject => _headerSubject;
 }
 
 class _FailingCommentsApiClient extends _AnonymousEpisodeApiClient {

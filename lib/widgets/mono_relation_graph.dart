@@ -1,3 +1,4 @@
+import 'scroll_aware_scaffold.dart';
 import 'dart:math' as math;
 
 import 'bangumi_network_image.dart';
@@ -985,7 +986,7 @@ class _MonoRelationFullscreenPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final compact = mediaQuery.size.width < 600;
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: Text(
           '$title · 脑图',

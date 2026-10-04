@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../constants.dart';
 import '../models/character.dart';
 import '../models/person.dart';
@@ -415,7 +416,7 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('搜索'),
         centerTitle: false,
@@ -443,14 +444,25 @@ class _SearchPageState extends State<SearchPage> {
                 Expanded(
                   child: Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-                        child: _buildSearchField(),
+                      ScrollChromeCollapse(
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                24,
+                                16,
+                                24,
+                                12,
+                              ),
+                              child: _buildSearchField(),
+                            ),
+                            if (_scope == SearchScope.subjects)
+                              _buildSubjectTagControls(),
+                            if (_scope == SearchScope.subjects)
+                              const SizedBox(height: 8),
+                          ],
+                        ),
                       ),
-                      if (_scope == SearchScope.subjects)
-                        _buildSubjectTagControls(),
-                      if (_scope == SearchScope.subjects)
-                        const SizedBox(height: 8),
                       Expanded(child: _buildResultContent(24, true)),
                     ],
                   ),
@@ -461,16 +473,22 @@ class _SearchPageState extends State<SearchPage> {
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: _buildSearchField(),
+              ScrollChromeCollapse(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                      child: _buildSearchField(),
+                    ),
+                    _buildScopeChips(),
+                    if (_scope == SearchScope.subjects) ...[
+                      const SizedBox(height: 6),
+                      _buildSubjectTagControls(),
+                    ],
+                    const SizedBox(height: 10),
+                  ],
+                ),
               ),
-              _buildScopeChips(),
-              if (_scope == SearchScope.subjects) ...[
-                const SizedBox(height: 6),
-                _buildSubjectTagControls(),
-              ],
-              const SizedBox(height: 10),
               Expanded(child: _buildResultContent(12, false)),
             ],
           );

@@ -68,6 +68,14 @@ macOS 最低运行版本为 12.0。Runner 和 CocoaPods 的最低部署版本统
 
 使用 `flutter run -d macos` 启动调试，无须额外传入 `MACOSX_DEPLOYMENT_TARGET`。
 
+## 统一阅读布局
+
+普通页面统一使用 `ScrollAwareScaffold`，条目、人物与角色详情通过 `MonoDetailScaffold` 接入同一套 `ScrollAwareChrome`。不要在单个页面另写滚动方向判断或收起动画。
+
+向下阅读时，工具栏精简为 48px，分类、标签与筛选区收起；向上轻微滚动或回到顶部时恢复。标题、返回与必要操作保留。首页顶部和底栏共享滚动状态及 200ms 动画，横屏左侧导航栏不隐藏。
+
+正文上方的辅助控件使用 `ScrollChromeCollapse`；工具栏内的辅助选择器使用其横向模式。控件收起时不接收点击、焦点或无障碍操作，但保留自身状态。原生 WebView 通过 `ScrollAwareChrome.maybeOf(context)?.handleNativeScroll(y)` 接入相同规则。
+
 ## 致谢
 
 本项目在开发过程中参考并受益于以下优秀项目：

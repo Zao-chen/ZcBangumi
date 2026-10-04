@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
@@ -914,7 +915,7 @@ class _SubjectPageState extends State<SubjectPage>
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     if (_loading && _subject == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         body: DefaultTabController(
           length: _visibleTabIds.length,
           child: _buildSubjectSkeleton(isLandscape: isLandscape),
@@ -923,7 +924,7 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     if (_error != null && _subject == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: Center(
           child: Column(
@@ -941,7 +942,7 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     if (_subject == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: const Center(child: Text('暂无数据')),
       );
@@ -960,6 +961,7 @@ class _SubjectPageState extends State<SubjectPage>
       title: _subject!.displayName,
       onTitleTap: _showFullTitleDialog,
       header: _buildHeaderCard(colorScheme, isLandscape: isLandscape),
+      contentSizedHeader: true,
       actions: [
         IconButton(
           tooltip: '加入目录',
@@ -2308,12 +2310,20 @@ class _SubjectPageState extends State<SubjectPage>
                           ),
                         ),
                       ),
-                      const Spacer(),
-                      MikanSubscriptionButton(subject: _subject!),
-                      SubjectActionButtons(
-                        subject: _subject!,
-                        existingCollection: _userCollection,
-                        onCollectionChanged: _loadUserCollection,
+                      Expanded(
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          runSpacing: 4,
+                          children: [
+                            MikanSubscriptionButton(subject: _subject!),
+                            SubjectActionButtons(
+                              subject: _subject!,
+                              existingCollection: _userCollection,
+                              onCollectionChanged: _loadUserCollection,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

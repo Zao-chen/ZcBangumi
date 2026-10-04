@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../constants.dart';
 import '../models/bangumi_index.dart';
 import '../models/character.dart';
@@ -381,11 +382,14 @@ class _CharacterPageState extends State<CharacterPage>
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     if (_loading && _character == null) {
-      return Scaffold(appBar: AppBar(), body: _buildSkeleton(isLandscape));
+      return ScrollAwareScaffold(
+        appBar: AppBar(),
+        body: _buildSkeleton(isLandscape),
+      );
     }
 
     if (_error != null && _character == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(title: const Text('角色')),
         body: Center(
           child: Column(
@@ -411,7 +415,7 @@ class _CharacterPageState extends State<CharacterPage>
     }
 
     if (_character == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: const Center(child: Text('角色不存在')),
       );

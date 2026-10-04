@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 
@@ -311,7 +312,7 @@ class _CollectionListPageState extends State<CollectionListPage> {
       subjectType: _subjectType,
     );
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: Text(collectionLabel),
         centerTitle: false,
@@ -386,9 +387,15 @@ class _CollectionListPageState extends State<CollectionListPage> {
   }) {
     return Column(
       children: [
-        if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
-        _buildCollectionTypeBar(colorScheme),
-        _buildSearchField(colorScheme),
+        ScrollChromeCollapse(
+          child: Column(
+            children: [
+              if (showSubjectTypeBar) _buildSubjectTypeBar(colorScheme),
+              _buildCollectionTypeBar(colorScheme),
+              _buildSearchField(colorScheme),
+            ],
+          ),
+        ),
         Expanded(child: _buildList(colorScheme)),
       ],
     );

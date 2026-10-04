@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'scroll_aware_chrome.dart';
 
 class MonoDetailTab {
   final String label;
@@ -23,6 +24,7 @@ class MonoDetailScaffold extends StatelessWidget {
   final ScrollPhysics? nestedScrollPhysics;
   final ScrollPhysics? tabViewPhysics;
   final double expandedHeight;
+  final bool contentSizedHeader;
 
   const MonoDetailScaffold({
     super.key,
@@ -39,6 +41,7 @@ class MonoDetailScaffold extends StatelessWidget {
     this.nestedScrollPhysics,
     this.tabViewPhysics,
     this.expandedHeight = defaultExpandedHeight,
+    this.contentSizedHeader = false,
   }) : assert(tabs.length == tabChildren.length);
 
   @override
@@ -51,58 +54,96 @@ class MonoDetailScaffold extends StatelessWidget {
       children: tabChildren,
     );
 
-    return Scaffold(
-      body: NestedScrollView(
-        controller: scrollController,
-        physics: nestedScrollPhysics,
-        headerSliverBuilder: (context, innerBoxIsScrolled) => [
-          SliverAppBar(
-            pinned: true,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            expandedHeight: expandedHeight,
-            actions: actions,
-            title: showCollapsedTitle ? _buildCollapsedTitle() : null,
-            flexibleSpace: FlexibleSpaceBar(
-              collapseMode: CollapseMode.pin,
-              background: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    12,
-                    kToolbarHeight + 2,
-                    12,
-                    0,
-                  ),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: header,
-                  ),
-                ),
+    return ScrollAwareChrome(
+      resetKey: selectedTabIndex,
+      builder: (context, chrome) {
+        final toolbarHeight = chrome.toolbarHeight(kToolbarHeight);
+        return Scaffold(
+          body: NestedScrollView(
+            controller: scrollController,
+            physics: nestedScrollPhysics,
+            headerSliverBuilder: (context, innerBoxIsScrolled) => [
+              SliverAppBar(
+                pinned: true,
+                toolbarHeight: toolbarHeight,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                expandedHeight: contentSizedHeader
+                    ? null
+                    : expandedHeight - kToolbarHeight + toolbarHeight,
+                actions: actions,
+                title: showCollapsedTitle ? _buildCollapsedTitle() : null,
+                flexibleSpace: contentSizedHeader
+                    ? null
+                    : FlexibleSpaceBar(
+                        collapseMode: CollapseMode.pin,
+                        background: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              12,
+                              toolbarHeight + 2,
+                              12,
+                              0,
+                            ),
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: header,
+                            ),
+                          ),
+                        ),
+                      ),
               ),
-            ),
-          ),
-          if (!isLandscape)
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _MonoDetailTabBarHeaderDelegate(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    border: Border(
-                      bottom: BorderSide(color: Theme.of(context).dividerColor),
+              if (contentSizedHeader)
+                SliverToBoxAdapter(
+                  child: SafeArea(
+                    top: false,
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 0),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: expandedHeight - kToolbarHeight - 2,
+                        ),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: header,
+                        ),
+                      ),
                     ),
                   ),
-                  child: TabBar(
-                    controller: tabController,
-                    tabs: tabs.map((tab) => Tab(text: tab.label)).toList(),
+                ),
+              if (!isLandscape)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _MonoDetailTabBarHeaderDelegate(
+                    height: kTextTabBarHeight * chrome.animation.value,
+                    child: chrome.collapse(
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Theme.of(context).dividerColor,
+                            ),
+                          ),
+                        ),
+                        child: TabBar(
+                          controller: tabController,
+                          tabs: tabs
+                              .map((tab) => Tab(text: tab.label))
+                              .toList(),
+                        ),
+                      ),
+                      fullHeight: kTextTabBarHeight,
+                    ),
                   ),
                 ),
-              ),
-            ),
-        ],
-        body: isLandscape ? _buildLandscapeBody(context, tabView) : tabView,
-      ),
+            ],
+            body: isLandscape ? _buildLandscapeBody(context, tabView) : tabView,
+          ),
+        );
+      },
     );
   }
 
@@ -147,14 +188,18 @@ class MonoDetailScaffold extends StatelessWidget {
 
 class _MonoDetailTabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
+  final double height;
 
-  const _MonoDetailTabBarHeaderDelegate({required this.child});
+  const _MonoDetailTabBarHeaderDelegate({
+    required this.child,
+    required this.height,
+  });
 
   @override
-  double get minExtent => kTextTabBarHeight;
+  double get minExtent => height;
 
   @override
-  double get maxExtent => kTextTabBarHeight;
+  double get maxExtent => height;
 
   @override
   Widget build(
@@ -167,6 +212,6 @@ class _MonoDetailTabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _MonoDetailTabBarHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child;
+    return oldDelegate.child != child || oldDelegate.height != height;
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:open_file/open_file.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../services/app_log_service.dart';
 
 class LogPage extends StatefulWidget {
@@ -85,7 +86,7 @@ class _LogPageState extends State<LogPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('诊断日志'),
         actions: [

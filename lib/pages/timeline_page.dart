@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/timeline.dart';
@@ -503,7 +504,7 @@ class _TimelinePageState extends State<TimelinePage> {
       const ButtonSegment(value: _TimelineTab.mine, label: Text('我的')),
     ];
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('动态'),
         centerTitle: false,
@@ -514,17 +515,20 @@ class _TimelinePageState extends State<TimelinePage> {
               onPressed: _refreshCurrentTab,
               icon: const Icon(Icons.refresh_rounded),
             ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: SegmentedButton<_TimelineTab>(
-              segments: tabSegments,
-              selected: {_currentTab},
-              onSelectionChanged: (val) => _onTabChanged(val.first),
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: WidgetStatePropertyAll(
-                  TextStyle(fontSize: 13, color: colorScheme.onSurface),
+          ScrollChromeCollapse(
+            axis: Axis.horizontal,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: SegmentedButton<_TimelineTab>(
+                segments: tabSegments,
+                selected: {_currentTab},
+                onSelectionChanged: (val) => _onTabChanged(val.first),
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: WidgetStatePropertyAll(
+                    TextStyle(fontSize: 13, color: colorScheme.onSurface),
+                  ),
                 ),
               ),
             ),

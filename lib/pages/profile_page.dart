@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
@@ -278,7 +279,7 @@ class _ProfilePageState extends State<ProfilePage> {
           )
         : const _LoginView();
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('我的'),
         centerTitle: false,
@@ -716,7 +717,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
     final title = widget.displayName?.trim().isNotEmpty == true
         ? widget.displayName!.trim()
         : '@${widget.username}';
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(title: Text(title)),
       body: _buildBody(),
     );

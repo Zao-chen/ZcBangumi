@@ -1,3 +1,4 @@
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -261,7 +262,7 @@ class _RakuenPageState extends State<RakuenPage>
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('超展开'),
         centerTitle: false,
@@ -800,7 +801,7 @@ class _RakuenFavoritesPageState extends State<_RakuenFavoritesPage> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(title: const Text('收藏帖子'), centerTitle: false),
       body: Consumer<RakuenFavoriteProvider>(
         builder: (context, favorites, _) {

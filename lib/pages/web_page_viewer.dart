@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../services/bangumi_endpoint_service.dart';
 import '../models/bangumi_mirror_settings.dart';
 
@@ -838,7 +839,7 @@ class _WebPageViewerState extends State<WebPageViewer> {
     return PopScope<Object?>(
       canPop: _allowRoutePop,
       onPopInvokedWithResult: _handlePopInvoked,
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         appBar: AppBar(
           title: Text(
             _resolvedTitle,
@@ -869,75 +870,84 @@ class _WebPageViewerState extends State<WebPageViewer> {
                 : const SizedBox.shrink(),
           ),
         ),
-        body: InAppWebView(
-          key: ValueKey(
-            '${endpoints?.generation}:${endpoints?.sessionRevision}',
-          ),
-          gestureRecognizers: _webViewVerticalDragGestures(),
-          initialUrlRequest: URLRequest(
-            url: WebUri.uri(
-              context.read<BangumiEndpointService?>()?.resolveUri(
-                    widget.initialUri,
-                  ) ??
-                  widget.initialUri,
+        body: Builder(
+          builder: (chromeContext) => InAppWebView(
+            key: ValueKey(
+              '${endpoints?.generation}:${endpoints?.sessionRevision}',
             ),
-          ),
-          initialSettings: InAppWebViewSettings(
-            userAgent:
-                context.read<BangumiEndpointService?>()?.kindForUri(
+            gestureRecognizers: _webViewVerticalDragGestures(),
+            initialUrlRequest: URLRequest(
+              url: WebUri.uri(
+                context.read<BangumiEndpointService?>()?.resolveUri(
                       widget.initialUri,
-                    ) !=
-                    null
-                ? context.read<BangumiEndpointService>().userAgent(
-                    BangumiServiceKind.web,
-                  )
-                : null,
-            supportZoom: true,
-            useShouldOverrideUrlLoading: true,
+                    ) ??
+                    widget.initialUri,
+              ),
+            ),
+            initialSettings: InAppWebViewSettings(
+              userAgent:
+                  context.read<BangumiEndpointService?>()?.kindForUri(
+                        widget.initialUri,
+                      ) !=
+                      null
+                  ? context.read<BangumiEndpointService>().userAgent(
+                      BangumiServiceKind.web,
+                    )
+                  : null,
+              supportZoom: true,
+              useShouldOverrideUrlLoading: true,
+            ),
+            onWebViewCreated: (controller) {
+              _controller = controller;
+            },
+            shouldOverrideUrlLoading: (controller, navigationAction) {
+              return _handleNavigationAction(navigationAction);
+            },
+            onCreateWindow: (controller, createWindowAction) async {
+              final uri = createWindowAction.request.url?.uriValue;
+              if (uri != null) {
+                await LinkNavigator.openBrowserFromContext(context, uri);
+              }
+              return false;
+            },
+            onTitleChanged: (controller, title) {
+              if (!mounted) {
+                return;
+              }
+              setState(() => _pageTitle = title);
+            },
+            onLoadStart: (controller, url) {
+              if (!mounted) {
+                return;
+              }
+              setState(() {
+                _currentUrl = url;
+                _progress = 0;
+              });
+            },
+            onLoadStop: (controller, url) {
+              if (!mounted) {
+                return;
+              }
+              setState(() {
+                _currentUrl = url;
+                _progress = 100;
+              });
+            },
+            onProgressChanged: (controller, progress) {
+              if (!mounted) {
+                return;
+              }
+              setState(() => _progress = progress.clamp(0, 100).toInt());
+            },
+            onScrollChanged: (_, _, offset) {
+              if (chromeContext.mounted) {
+                ScrollAwareChrome.maybeOf(
+                  chromeContext,
+                )?.handleNativeScroll(offset.toDouble());
+              }
+            },
           ),
-          onWebViewCreated: (controller) {
-            _controller = controller;
-          },
-          shouldOverrideUrlLoading: (controller, navigationAction) {
-            return _handleNavigationAction(navigationAction);
-          },
-          onCreateWindow: (controller, createWindowAction) async {
-            final uri = createWindowAction.request.url?.uriValue;
-            if (uri != null) {
-              await LinkNavigator.openBrowserFromContext(context, uri);
-            }
-            return false;
-          },
-          onTitleChanged: (controller, title) {
-            if (!mounted) {
-              return;
-            }
-            setState(() => _pageTitle = title);
-          },
-          onLoadStart: (controller, url) {
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _currentUrl = url;
-              _progress = 0;
-            });
-          },
-          onLoadStop: (controller, url) {
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _currentUrl = url;
-              _progress = 100;
-            });
-          },
-          onProgressChanged: (controller, progress) {
-            if (!mounted) {
-              return;
-            }
-            setState(() => _progress = progress.clamp(0, 100).toInt());
-          },
         ),
       ),
     );

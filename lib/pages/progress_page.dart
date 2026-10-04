@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
@@ -153,7 +154,7 @@ class _ProgressPageState extends State<ProgressPage>
                 )
         : _buildNotLoggedIn();
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('进度'),
         centerTitle: false,

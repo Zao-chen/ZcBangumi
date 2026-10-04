@@ -1,3 +1,4 @@
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -743,7 +744,7 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
   @override
   Widget build(BuildContext context) {
     final index = _index;
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: Text(index?.title ?? '目录'),
         actions: [

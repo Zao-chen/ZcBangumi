@@ -35,6 +35,7 @@ class BangumiContentView extends StatelessWidget {
       return Html(
         data: _wrapHtml(endpoints?.rewriteHtml(trimmedHtml) ?? trimmedHtml),
         extensions: [
+          _BangumiSmileImageExtension(smileSize: resolvedSmileSize),
           if (endpoints != null)
             ImageExtension(
               networkDomains: endpoints.knownHosts,
@@ -118,6 +119,7 @@ class BangumiContentView extends StatelessWidget {
       if (url == null) {
         spans.add(TextSpan(text: raw));
       } else {
+        final imageSize = _smileSizeForUrl(url, smileSize);
         spans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
@@ -127,8 +129,8 @@ class BangumiContentView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: BangumiNetworkImage(
                   imageUrl: url,
-                  width: smileSize,
-                  height: smileSize,
+                  width: imageSize,
+                  height: imageSize,
                   fit: BoxFit.contain,
                   errorWidget: (context, url, error) {
                     return Text(raw, style: style);
@@ -151,6 +153,13 @@ class BangumiContentView extends StatelessWidget {
 
   static String _wrapHtml(String value) {
     return '<div>${value.trim()}</div>';
+  }
+
+  static double _smileSizeForUrl(String url, double standardSize) {
+    final imagePath = Uri.tryParse(url)?.path ?? '';
+    return imagePath.startsWith('/img/smiles/musume/')
+        ? standardSize * 2
+        : standardSize;
   }
 
   static String? _smileUrlForToken(String token) {
@@ -184,5 +193,37 @@ class BangumiContentView extends StatelessWidget {
         : Uri.parse(BgmConst.webBaseUrl).resolveUri(parsed);
 
     await LinkNavigator.open(context, uri);
+  }
+}
+
+class _BangumiSmileImageExtension extends ImageExtension {
+  _BangumiSmileImageExtension({required double smileSize})
+    : super.inline(
+        builder: (imageContext) {
+          final imageUrl = Uri.parse(
+            BgmConst.webBaseUrl,
+          ).resolve(imageContext.attributes['src'] ?? '').toString();
+          final imageSize = BangumiContentView._smileSizeForUrl(
+            imageUrl,
+            smileSize,
+          );
+          return WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: BangumiNetworkImage(
+              imageUrl: imageUrl,
+              width: imageSize,
+              height: imageSize,
+              fit: BoxFit.contain,
+              errorWidget: (_, _, _) =>
+                  Text(imageContext.attributes['alt'] ?? '表情加载失败'),
+            ),
+          );
+        },
+      );
+
+  @override
+  bool matches(ExtensionContext context) {
+    final imagePath = Uri.tryParse(context.attributes['src'] ?? '')?.path ?? '';
+    return context.elementName == 'img' && imagePath.startsWith('/img/smiles/');
   }
 }
