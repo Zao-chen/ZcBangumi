@@ -18,7 +18,9 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="ZcBangumi 网页版：浏览与搜索 Bangumi 条目、角色和人物，管理收藏与观看进度。">
+  <meta name="theme-color" content="#F09199">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,8 +33,24 @@
 
   <title>ZcBangumi</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; background: #fff8f9; color: #30242a; }
+    #app-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; box-sizing: border-box; text-align: center; font-family: system-ui, sans-serif; }
+    #app-loading img { width: 72px; height: 72px; border-radius: 16px; }
+    #app-loading h1, #app-loading p { margin: 0; }
+    #loading-status { max-width: 32em; line-height: 1.7; }
+    #app-retry { border: 0; padding: 12px 20px; border-radius: 24px; background: #f09199; color: #30242a; cursor: pointer; font: inherit; }
+    @media (prefers-color-scheme: dark) { html, body { background: #1b1115; color: #f8e8ef; } }
+  </style>
 </head>
 <body>
+  <main id="app-loading" role="status" aria-live="polite">
+    <img src="icons/Icon-192.png" alt="">
+    <h1>ZcBangumi</h1>
+    <p id="loading-status">正在启动网页版，首次访问需要加载应用资源…</p>
+    <button id="app-retry" type="button" hidden>重新加载</button>
+  </main>
+  <noscript>请启用 JavaScript 后使用 ZcBangumi 网页版。</noscript>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

@@ -31,6 +31,13 @@ class _BangumiMirrorSettingsCardState extends State<BangumiMirrorSettingsCard> {
   bool _detailsExpanded = false;
   String? _error;
 
+  Iterable<BangumiServiceKind> get _supportedKinds =>
+      BangumiServiceKind.values.where(
+        (kind) =>
+            !kIsWeb ||
+            (kind != BangumiServiceKind.web && kind != BangumiServiceKind.next),
+      );
+
   @override
   void initState() {
     super.initState();
@@ -144,7 +151,7 @@ class _BangumiMirrorSettingsCardState extends State<BangumiMirrorSettingsCard> {
       _error = null;
     });
     try {
-      await Future.wait(BangumiServiceKind.values.map(widget.endpoints.probe));
+      await Future.wait(_supportedKinds.map(widget.endpoints.probe));
     } finally {
       if (mounted) setState(() => _checking = false);
     }
@@ -217,14 +224,16 @@ class _BangumiMirrorSettingsCardState extends State<BangumiMirrorSettingsCard> {
 
   String _connectionSummary() {
     if (_checking) return '正在检查…';
-    final results = widget.endpoints.results.values;
+    final results = _supportedKinds
+        .map((kind) => widget.endpoints.results[kind])
+        .whereType<BangumiConnectionResult>();
     if (results.isEmpty) return '尚未检查';
     final available = results
         .where((result) => result.status == BangumiConnectionStatus.available)
         .length;
-    if (available == BangumiServiceKind.values.length) return '全部可用';
+    if (available == _supportedKinds.length) return '全部可用';
     final issues = <String>[
-      '可用 $available/${BangumiServiceKind.values.length}',
+      '可用 $available/${_supportedKinds.length}',
       for (final entry in const {
         BangumiConnectionStatus.challenge: '需验证',
         BangumiConnectionStatus.failed: '失败',
@@ -341,7 +350,7 @@ class _BangumiMirrorSettingsCardState extends State<BangumiMirrorSettingsCard> {
                           value: _MirrorSettingsAction.help,
                           child: Text('使用说明'),
                         ),
-                        if (!active.isOfficial)
+                        if (!kIsWeb && !active.isOfficial)
                           const PopupMenuItem(
                             value: _MirrorSettingsAction.clearSessions,
                             child: Text('清除验证会话'),
@@ -401,7 +410,7 @@ class _BangumiMirrorSettingsCardState extends State<BangumiMirrorSettingsCard> {
                         padding: EdgeInsets.only(bottom: 12),
                         child: Text('留空时自动生成子域名，不支持路径式反代。'),
                       ),
-                      for (final kind in BangumiServiceKind.values)
+                      for (final kind in _supportedKinds)
                         if (kind != BangumiServiceKind.web)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),
@@ -460,9 +469,10 @@ class _BangumiMirrorSettingsCardState extends State<BangumiMirrorSettingsCard> {
                   },
                   children: _detailsExpanded
                       ? [
-                          for (final kind in BangumiServiceKind.values)
+                          for (final kind in _supportedKinds)
                             _buildConnectionResult(kind, busy),
-                          if (!supportsBangumiMirrorVerification &&
+                          if (!kIsWeb &&
+                              !supportsBangumiMirrorVerification &&
                               widget.onVerify == null &&
                               !active.isOfficial)
                             const Padding(

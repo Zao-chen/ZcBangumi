@@ -3,10 +3,10 @@
     "short_name": "ZcBangumi",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#FFF8F9",
+    "theme_color": "#F09199",
+    "description": "Bangumi 条目浏览、搜索、收藏与进度管理",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

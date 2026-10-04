@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'bangumi_endpoint_service.dart';
+import 'platform_feature_support.dart';
 
 import 'package:zc_bangumi/models/rakuen_topic.dart';
 import 'package:zc_bangumi/pages/character_page.dart';
@@ -120,6 +121,9 @@ class InternalLinkHandler {
   }
 
   static InternalLinkResult _handleIndexLink(String id, BuildContext? context) {
+    if (!PlatformFeatureSupport.indexes) {
+      return InternalLinkResult.openInBrowser;
+    }
     if (context == null) return InternalLinkResult.failed;
     try {
       Navigator.of(context).push(
@@ -243,6 +247,9 @@ class InternalLinkHandler {
     Uri uri,
     BuildContext? context,
   ) {
+    if (!PlatformFeatureSupport.rakuen) {
+      return InternalLinkResult.openInBrowser;
+    }
     if (context == null) {
       return InternalLinkResult.failed;
     }

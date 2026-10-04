@@ -75,7 +75,7 @@ class _SubjectPageState extends State<SubjectPage>
   bool _subjectDetailLoading = false;
   bool _showCollapsedTitle = false;
   int _selectedTabIndex = 0;
-  List<String> _visibleTabIds = List<String>.from(
+  List<String> _visibleTabIds = PlatformFeatureSupport.subjectTabs(
     SubjectTabConfig.defaultOrder,
   );
   MonoRelationViewMode _charactersViewMode = MonoRelationViewMode.list;
@@ -130,7 +130,9 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   void _syncSubjectTabs(AppStateProvider appState) {
-    final nextVisibleIds = appState.enabledSubjectTabIds;
+    final nextVisibleIds = PlatformFeatureSupport.subjectTabs(
+      appState.enabledSubjectTabIds,
+    );
     if (listEquals(_visibleTabIds, nextVisibleIds) || nextVisibleIds.isEmpty) {
       return;
     }
@@ -385,10 +387,19 @@ class _SubjectPageState extends State<SubjectPage>
       final charsFuture = api.getSubjectCharacters(widget.subjectId);
       final personsFuture = api.getSubjectPersons(widget.subjectId);
       final relatedFuture = api.getSubjectRelations(widget.subjectId);
-      final commentsFuture = api.getSubjectComments(
-        subjectId: widget.subjectId,
-        limit: _commentsPageSize,
-      );
+      final commentsFuture = PlatformFeatureSupport.comments
+          ? api.getSubjectComments(
+              subjectId: widget.subjectId,
+              limit: _commentsPageSize,
+            )
+          : Future.value(
+              PagedResult<Comment>(
+                total: 0,
+                limit: _commentsPageSize,
+                offset: 0,
+                data: const [],
+              ),
+            );
 
       Future<Object?> tolerateFailure(Future<Object?> request) async {
         try {
@@ -416,7 +427,8 @@ class _SubjectPageState extends State<SubjectPage>
       ]);
       if (!mounted) return;
 
-      final commentsRefreshed = results[3] is PagedResult<Comment>;
+      final commentsRefreshed =
+          PlatformFeatureSupport.comments && results[3] is PagedResult<Comment>;
       setState(() {
         _characters = results[0] is List<Character>
             ? results[0] as List<Character>
@@ -964,16 +976,17 @@ class _SubjectPageState extends State<SubjectPage>
       header: _buildHeaderCard(colorScheme, isLandscape: isLandscape),
       contentSizedHeader: true,
       actions: [
-        IconButton(
-          tooltip: '加入目录',
-          onPressed: () => showAddToBangumiIndex(
-            context,
-            category: IndexRelatedCategory.subject,
-            contentId: widget.subjectId,
-            contentTitle: _subject!.displayName,
+        if (PlatformFeatureSupport.indexes)
+          IconButton(
+            tooltip: '加入目录',
+            onPressed: () => showAddToBangumiIndex(
+              context,
+              category: IndexRelatedCategory.subject,
+              contentId: widget.subjectId,
+              contentTitle: _subject!.displayName,
+            ),
+            icon: const Icon(Icons.playlist_add_rounded),
           ),
-          icon: const Icon(Icons.playlist_add_rounded),
-        ),
         IconButton(
           tooltip: '打开网页',
           onPressed: _openSubjectWebPage,
@@ -1183,7 +1196,9 @@ class _SubjectPageState extends State<SubjectPage>
                     episodes: _episodes,
                     loading: _episodesLoading && _episodes.isEmpty,
                     onSetStatus: canManageProgress ? _setEpisodeStatus : null,
-                    onAddToIndex: _addEpisodeToIndex,
+                    onAddToIndex: PlatformFeatureSupport.indexes
+                        ? _addEpisodeToIndex
+                        : null,
                     onShowMikanResources: canShowMikanResources
                         ? _showEpisodeMikanResources
                         : null,
@@ -1234,7 +1249,9 @@ class _SubjectPageState extends State<SubjectPage>
                                 child: CopyableText(
                                   summaryText,
                                   style: TextStyle(
-                                    color: Colors.grey[600],
+                                    color: kIsWeb
+                                        ? colorScheme.onSurfaceVariant
+                                        : Colors.grey[600],
                                     fontSize: 14,
                                   ),
                                   enableLongPressCopy: false,
@@ -1295,7 +1312,9 @@ class _SubjectPageState extends State<SubjectPage>
                   episodes: _episodes,
                   loading: _episodesLoading && _episodes.isEmpty,
                   onSetStatus: canManageProgress ? _setEpisodeStatus : null,
-                  onAddToIndex: _addEpisodeToIndex,
+                  onAddToIndex: PlatformFeatureSupport.indexes
+                      ? _addEpisodeToIndex
+                      : null,
                   onShowMikanResources: canShowMikanResources
                       ? _showEpisodeMikanResources
                       : null,
@@ -1332,7 +1351,12 @@ class _SubjectPageState extends State<SubjectPage>
                 title: '简介',
                 child: CopyableText(
                   summaryText,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  style: TextStyle(
+                    color: kIsWeb
+                        ? colorScheme.onSurfaceVariant
+                        : Colors.grey[600],
+                    fontSize: 14,
+                  ),
                   enableLongPressCopy: false,
                 ),
               ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_file/open_file.dart';
@@ -5,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../widgets/scroll_aware_scaffold.dart';
 import '../services/app_log_service.dart';
+import '../services/log_download.dart';
 
 class LogPage extends StatefulWidget {
   const LogPage({super.key});
@@ -36,7 +38,15 @@ class _LogPageState extends State<LogPage> {
     final logService = context.read<AppLogService>();
     final text = await logService.readText();
     if (!mounted) return;
-    await Clipboard.setData(ClipboardData(text: text));
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法复制日志，请使用文件导出或检查浏览器剪贴板权限')),
+      );
+      return;
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -45,6 +55,15 @@ class _LogPageState extends State<LogPage> {
 
   Future<void> _export() async {
     final logService = context.read<AppLogService>();
+    if (kIsWeb) {
+      final text = await logService.readText();
+      if (!mounted) return;
+      downloadLogText(logService.exportFileName, text);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已请求浏览器下载日志文件')));
+      return;
+    }
     final file = await logService.exportLogFile();
     await logService.info('log', '日志已导出: ${file.path}');
     if (!mounted) return;
@@ -60,7 +79,9 @@ class _LogPageState extends State<LogPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('清空日志'),
-        content: const Text('将删除当前本地诊断日志，后续问题会继续记录新日志。'),
+        content: Text(
+          kIsWeb ? '将删除当前页面的诊断日志，后续问题会继续记录新日志。' : '将删除当前本地诊断日志，后续问题会继续记录新日志。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -118,7 +139,7 @@ class _LogPageState extends State<LogPage> {
                 value: _LogAction.export,
                 child: ListTile(
                   leading: Icon(Icons.ios_share_rounded),
-                  title: Text('导出日志文件'),
+                  title: Text(kIsWeb ? '下载日志文件' : '导出日志文件'),
                 ),
               ),
               PopupMenuDivider(),

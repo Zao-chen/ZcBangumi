@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
@@ -12,6 +13,7 @@ import '../providers/auth_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../services/api_client.dart';
 import '../services/link_navigator.dart';
+import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/entity_collection_list_view.dart';
@@ -372,6 +374,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 top: false,
                 right: false,
                 child: NavigationRail(
+                  scrollable: true,
                   selectedIndex: _initializingSelectedSubjectIndex(
                     selectedSubjectType,
                   ),
@@ -860,6 +863,18 @@ class _LoginViewState extends State<_LoginView> {
                 label: const Text('获取 Access Token'),
               ),
 
+              if (kIsWeb) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Token 保存在当前浏览器中，退出登录会清除。请勿在共享设备上登录，也不要将 Token 发送给他人。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+
               if (auth.error != null) ...[
                 const SizedBox(height: 16),
                 Container(
@@ -1089,7 +1104,7 @@ class _ProfileContentState extends State<_ProfileContent> {
   }
 
   void _switchIndexCollections() {
-    if (_showIndexCollections) return;
+    if (!PlatformFeatureSupport.indexes || _showIndexCollections) return;
     setState(() {
       _entityCollectionKind = null;
       _showIndexCollections = true;
@@ -1240,6 +1255,7 @@ class _ProfileContentState extends State<_ProfileContent> {
           top: false,
           right: false,
           child: NavigationRail(
+            scrollable: true,
             selectedIndex: _selectedDestinationIndex,
             onDestinationSelected: (index) {
               if (index < _subjectTypes.length) {
@@ -1289,13 +1305,14 @@ class _ProfileContentState extends State<_ProfileContent> {
                   ),
                 ),
               ),
-              const NavigationRailDestination(
-                icon: Icon(
-                  Icons.format_list_bulleted_rounded,
-                  key: ValueKey('profile_index_collections'),
+              if (PlatformFeatureSupport.indexes)
+                const NavigationRailDestination(
+                  icon: Icon(
+                    Icons.format_list_bulleted_rounded,
+                    key: ValueKey('profile_index_collections'),
+                  ),
+                  label: Text('目录'),
                 ),
-                label: Text('目录'),
-              ),
             ],
           ),
         ),
@@ -1524,25 +1541,27 @@ class _ProfileContentState extends State<_ProfileContent> {
             visualDensity: VisualDensity.compact,
             showCheckmark: false,
           ),
-          const SizedBox(width: 2),
-          const SizedBox(
-            height: 24,
-            child: VerticalDivider(
-              key: ValueKey('profile_index_collection_chip_divider'),
-              width: 10,
-              thickness: 1,
+          if (PlatformFeatureSupport.indexes) const SizedBox(width: 2),
+          if (PlatformFeatureSupport.indexes)
+            const SizedBox(
+              height: 24,
+              child: VerticalDivider(
+                key: ValueKey('profile_index_collection_chip_divider'),
+                width: 10,
+                thickness: 1,
+              ),
             ),
-          ),
-          const SizedBox(width: 2),
-          ChoiceChip(
-            key: const ValueKey('profile_index_collections'),
-            label: const Text('目录'),
-            avatar: const Icon(Icons.format_list_bulleted_rounded, size: 16),
-            selected: _showIndexCollections,
-            onSelected: (_) => _switchIndexCollections(),
-            visualDensity: VisualDensity.compact,
-            showCheckmark: false,
-          ),
+          if (PlatformFeatureSupport.indexes) const SizedBox(width: 2),
+          if (PlatformFeatureSupport.indexes)
+            ChoiceChip(
+              key: const ValueKey('profile_index_collections'),
+              label: const Text('目录'),
+              avatar: const Icon(Icons.format_list_bulleted_rounded, size: 16),
+              selected: _showIndexCollections,
+              onSelected: (_) => _switchIndexCollections(),
+              visualDensity: VisualDensity.compact,
+              showCheckmark: false,
+            ),
         ],
       ),
     );

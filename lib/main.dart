@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'services/app_log_service.dart';
@@ -28,8 +30,14 @@ import 'pages/progress_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/discovery_page.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'Noto Sans SC',
+    ], await rootBundle.loadString('assets/fonts/OFL.txt'));
+  });
 
   // 初始化存储
   final storage = StorageService();
@@ -152,8 +160,9 @@ class ZCBangumiApp extends StatelessWidget {
           colorSchemeSeed: const Color(0xFFF09199), // Bangumi 粉色
           useMaterial3: true,
           brightness: Brightness.light,
-          fontFamily: 'Roboto',
+          fontFamily: kIsWeb ? 'ZcWebLatin' : 'Roboto',
           fontFamilyFallback: const [
+            if (kIsWeb) 'ZcWebChinese',
             'PingFang SC',
             'Microsoft YaHei',
             'SimHei',
@@ -163,8 +172,9 @@ class ZCBangumiApp extends StatelessWidget {
           colorSchemeSeed: const Color(0xFFF09199),
           useMaterial3: true,
           brightness: Brightness.dark,
-          fontFamily: 'Roboto',
+          fontFamily: kIsWeb ? 'ZcWebLatin' : 'Roboto',
           fontFamilyFallback: const [
+            if (kIsWeb) 'ZcWebChinese',
             'PingFang SC',
             'Microsoft YaHei',
             'SimHei',

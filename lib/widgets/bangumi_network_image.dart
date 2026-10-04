@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -41,6 +42,30 @@ class BangumiNetworkImage extends StatelessWidget {
     final cache = context.read<BangumiImageCache?>();
     final resolved = endpoints?.resolveUrl(imageUrl) ?? imageUrl;
     final uri = Uri.tryParse(resolved);
+    if (kIsWeb) {
+      final provider = NetworkImage(
+        resolved,
+        webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      );
+      return Image(
+        key: ValueKey('${endpoints?.generation}:$resolved'),
+        image: provider,
+        width: width,
+        height: height,
+        fit: fit,
+        alignment: alignment,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (frame == null && !wasSynchronouslyLoaded) {
+            return placeholder?.call(context, resolved) ??
+                SizedBox(width: width, height: height);
+          }
+          return imageBuilder?.call(context, provider) ?? child;
+        },
+        errorBuilder: (context, error, stackTrace) =>
+            errorWidget?.call(context, resolved, error) ??
+            SizedBox(width: width, height: height),
+      );
+    }
     return CachedNetworkImage(
       key: ValueKey(
         '${endpoints?.generation}:${endpoints?.sessionRevision}:$resolved',
@@ -71,6 +96,12 @@ ImageProvider bangumiImageProvider(BuildContext context, String imageUrl) {
   final cache = context.read<BangumiImageCache?>();
   final resolved = endpoints?.resolveUrl(imageUrl) ?? imageUrl;
   final uri = Uri.tryParse(resolved);
+  if (kIsWeb) {
+    return NetworkImage(
+      resolved,
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+    );
+  }
   return CachedNetworkImageProvider(
     resolved,
     cacheManager: cache?.manager,

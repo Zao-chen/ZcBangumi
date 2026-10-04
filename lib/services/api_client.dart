@@ -21,6 +21,7 @@ import '../models/user.dart';
 import 'app_log_service.dart';
 import 'network_proxy_config.dart';
 import 'web_network_config.dart';
+import 'platform_feature_support.dart';
 import 'bangumi_endpoint_service.dart';
 import '../models/bangumi_mirror_settings.dart';
 
@@ -77,7 +78,10 @@ class ApiClient {
       ),
     );
     NetworkProxyConfig.installDio(_webDio);
-    WebNetworkConfig.installWebAdapter(_webDio);
+    WebNetworkConfig.installWebAdapter(
+      _webDio,
+      available: PlatformFeatureSupport.webSession,
+    );
     if (logService != null) {
       _webDio.interceptors.add(AppLogDioInterceptor(logService));
     }
@@ -110,7 +114,10 @@ class ApiClient {
       ),
     );
     NetworkProxyConfig.installDio(_nextDio);
-    WebNetworkConfig.installWebAdapter(_nextDio);
+    WebNetworkConfig.installWebAdapter(
+      _nextDio,
+      available: PlatformFeatureSupport.nextApi,
+    );
     if (logService != null) {
       _nextDio.interceptors.add(AppLogDioInterceptor(logService));
     }
@@ -151,7 +158,9 @@ class ApiClient {
     _accessToken = token;
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
-      _nextDio.options.headers['Authorization'] = 'Bearer $token';
+      if (PlatformFeatureSupport.nextApi) {
+        _nextDio.options.headers['Authorization'] = 'Bearer $token';
+      }
     } else {
       _dio.options.headers.remove('Authorization');
       _nextDio.options.headers.remove('Authorization');

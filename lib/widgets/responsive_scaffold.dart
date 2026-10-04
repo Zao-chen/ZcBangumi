@@ -10,6 +10,7 @@ import '../services/link_navigator.dart';
 import '../services/bangumi_endpoint_service.dart';
 import 'bangumi_mirror_challenge_banner.dart';
 import '../services/platform_feature_support.dart';
+import '../services/storage_service.dart';
 import 'scroll_aware_chrome.dart';
 
 /// 响应式 Scaffold
@@ -150,6 +151,17 @@ class _CacheAwareContent extends StatefulWidget {
 
 class _CacheAwareContentState extends State<_CacheAwareContent> {
   bool _webLimitationsDismissed = false;
+  bool _noticePreferenceLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_noticePreferenceLoaded && kIsWeb) {
+      _webLimitationsDismissed =
+          context.read<StorageService?>()?.webFeatureNoticeDismissed ?? false;
+      _noticePreferenceLoaded = true;
+    }
+  }
 
   Future<void> _openFullAppReleasePage() async {
     final ok = await LinkNavigator.openBrowserFromContext(
@@ -194,6 +206,7 @@ class _CacheAwareContentState extends State<_CacheAwareContent> {
                   onOpenFullApp: _openFullAppReleasePage,
                   onClose: () {
                     setState(() => _webLimitationsDismissed = true);
+                    context.read<StorageService?>()?.dismissWebFeatureNotice();
                   },
                 )
               : const SizedBox.shrink(),
@@ -237,14 +250,14 @@ class _WebLimitationsBanner extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                Icons.public_off_rounded,
+                Icons.public_rounded,
                 color: colorScheme.onSecondaryContainer,
                 size: 18,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '静态网页版部分跨站功能不可用',
+                  '网页版 · 条目浏览、收藏与进度管理',
                   style: TextStyle(
                     color: colorScheme.onSecondaryContainer,
                     fontSize: 13,

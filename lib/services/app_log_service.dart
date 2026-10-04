@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -12,6 +14,8 @@ class AppLogService extends ChangeNotifier {
 
   final DateTime Function() _now;
   File? _logFile;
+  final Queue<String> _webLines = Queue<String>();
+  int _webLogBytes = 0;
   Future<void> _writeQueue = Future.value();
 
   Future<void> init() async {
@@ -19,8 +23,10 @@ class AppLogService extends ChangeNotifier {
     await info('app', '日志服务已启动');
   }
 
+  String get exportFileName => 'zc_bangumi_log_${_formatFileStamp(_now())}.txt';
+
   Future<void> _prepareLogFile() async {
-    if (_logFile != null) return;
+    if (kIsWeb || _logFile != null) return;
     final dir = await getApplicationSupportDirectory();
     final logDir = Directory('${dir.path}${Platform.pathSeparator}logs');
     if (!await logDir.exists()) {
@@ -34,18 +40,25 @@ class AppLogService extends ChangeNotifier {
   }
 
   Future<File> exportLogFile() async {
+    if (kIsWeb) {
+      throw UnsupportedError('Web 版本请使用浏览器下载导出日志');
+    }
+    await _writeQueue;
     final source = await _ensureLogFile();
     final exportDir = await getTemporaryDirectory();
-    final stamp = _formatFileStamp(_now());
     final target = File(
-      '${exportDir.path}${Platform.pathSeparator}zc_bangumi_log_$stamp.txt',
+      '${exportDir.path}${Platform.pathSeparator}$exportFileName',
     );
     return source.copy(target.path);
   }
 
   Future<List<AppLogEntry>> readEntries({int limit = 300}) async {
-    final file = await _ensureLogFile();
-    final lines = await file.readAsLines();
+    await _writeQueue;
+    final lines = kIsWeb
+        ? _webLines
+              .map((line) => line.substring(0, line.length - 1))
+              .toList(growable: false)
+        : await (await _ensureLogFile()).readAsLines();
     return lines.reversed
         .map(AppLogEntry.tryParse)
         .whereType<AppLogEntry>()
@@ -54,13 +67,21 @@ class AppLogService extends ChangeNotifier {
   }
 
   Future<String> readText() async {
+    await _writeQueue;
+    if (kIsWeb) return _webLines.join();
     final file = await _ensureLogFile();
     return file.readAsString();
   }
 
   Future<void> clear() async {
-    final file = await _ensureLogFile();
-    await file.writeAsString('');
+    await _writeQueue;
+    if (kIsWeb) {
+      _webLines.clear();
+      _webLogBytes = 0;
+    } else {
+      final file = await _ensureLogFile();
+      await file.writeAsString('');
+    }
     notifyListeners();
   }
 
@@ -85,9 +106,17 @@ class AppLogService extends ChangeNotifier {
     final line =
         '${_now().toIso8601String()} [$level] ${_sanitize(category)} ${_sanitize(message)}\n';
     _writeQueue = _writeQueue.then((_) async {
-      final file = await _ensureLogFile();
-      await _trimIfNeeded();
-      await file.writeAsString(line, mode: FileMode.append, flush: true);
+      if (kIsWeb) {
+        _webLines.addLast(line);
+        _webLogBytes += utf8.encode(line).length;
+        while (_webLogBytes > maxLogBytes) {
+          _webLogBytes -= utf8.encode(_webLines.removeFirst()).length;
+        }
+      } else {
+        final file = await _ensureLogFile();
+        await _trimIfNeeded();
+        await file.writeAsString(line, mode: FileMode.append, flush: true);
+      }
       notifyListeners();
     });
     return _writeQueue;

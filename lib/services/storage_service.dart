@@ -53,6 +53,13 @@ class StorageService {
     await _migrateRecentViewItems();
   }
 
+  bool get webFeatureNoticeDismissed =>
+      _prefs.getBool('web_feature_notice_dismissed') ?? false;
+
+  Future<void> dismissWebFeatureNotice() async {
+    await _prefs.setBool('web_feature_notice_dismissed', true);
+  }
+
   List<SubjectTagQuery> get recentTagSearches =>
       _readTagSearches(_keyRecentTagSearches);
 
