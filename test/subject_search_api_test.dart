@@ -83,6 +83,7 @@ void main() {
       expect(subject.score, 8.9);
       expect(subject.rank, 2);
       expect(subject.collectionTotal, 25);
+      expect(subject.ratingTotal, 100);
     });
 
     test('propagates server failures instead of returning no results', () {
@@ -97,6 +98,63 @@ void main() {
         throwsA(isA<DioException>()),
       );
     });
+
+    test(
+      'allows filter-only tag searches without using website clients',
+      () async {
+        final adapter = _RecordingAdapter(
+          (_) => _jsonResponse({
+            'total': 1,
+            'limit': 2,
+            'offset': 0,
+            'data': [
+              {
+                ..._subjectJson(),
+                'date': '1998-04-03',
+                'tags': [
+                  {'name': '科幻', 'count': 10, 'total_count': 500},
+                  {'name': '音乐', 'count': 5, 'total_count': 200},
+                ],
+              },
+            ],
+          }),
+        );
+        final forbiddenAdapter = _RecordingAdapter(
+          (_) => throw StateError('标签搜索不得使用网页或 next API'),
+        );
+        final client = ApiClient();
+        client.dio.httpClientAdapter = adapter;
+        client.webDio.httpClientAdapter = forbiddenAdapter;
+        client.nextDio.httpClientAdapter = forbiddenAdapter;
+
+        final page = await client.searchSubjects(
+          keyword: '  ',
+          sort: SubjectSearchSort.score,
+          filter: const SubjectSearchFilter(
+            types: [2],
+            tags: ['科幻', '音乐'],
+            ratingCounts: ['>=200'],
+          ),
+          limit: 2,
+        );
+
+        expect(adapter.requests.single.uri.host, 'api.bgm.tv');
+        expect(adapter.requests.single.data, {
+          'keyword': '',
+          'sort': 'score',
+          'filter': {
+            'type': [2],
+            'tag': ['科幻', '音乐'],
+            'rating_count': ['>=200'],
+          },
+        });
+        expect(page.data.single.tags, ['科幻', '音乐']);
+        expect(page.data.single.date, '1998-04-03');
+        expect(page.data.single.ratingTotal, 100);
+        expect(page.data.single.collectionTotal, 25);
+        expect(forbiddenAdapter.requests, isEmpty);
+      },
+    );
 
     test('rejects invalid pagination arguments before sending a request', () {
       final adapter = _RecordingAdapter((_) => _jsonResponse({}));

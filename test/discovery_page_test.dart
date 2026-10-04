@@ -13,6 +13,7 @@ import 'package:zc_bangumi/models/subject_browse.dart';
 import 'package:zc_bangumi/pages/discovery_page.dart';
 import 'package:zc_bangumi/pages/rakuen_topic_page.dart';
 import 'package:zc_bangumi/pages/subject_browse_page.dart';
+import 'package:zc_bangumi/pages/subject_tag_page.dart';
 import 'package:zc_bangumi/providers/app_state_provider.dart';
 import 'package:zc_bangumi/providers/auth_provider.dart';
 import 'package:zc_bangumi/providers/discovery_provider.dart';
@@ -21,6 +22,40 @@ import 'package:zc_bangumi/services/api_client.dart';
 import 'package:zc_bangumi/services/storage_service.dart';
 
 void main() {
+  testWidgets('anime tag shortcut opens API-only in-app tag exploration', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService();
+    await storage.init();
+    final api = _DiscoveryPageApi();
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiClient>.value(value: api),
+          Provider<StorageService>.value(value: storage),
+          ChangeNotifierProvider(
+            create: (_) => DiscoveryProvider(api: api, storage: storage),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AppStateProvider(storage: storage),
+          ),
+        ],
+        child: const MaterialApp(home: DiscoveryPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const Key('discovery_anime_tags_entry'));
+    await tester.ensureVisible(entry);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.byType(SubjectTagPage), findsOneWidget);
+    expect(find.text('常用标签'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('discovery is usable without login and switches ranking type', (

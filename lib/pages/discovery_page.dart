@@ -1,5 +1,4 @@
 import '../widgets/bangumi_network_image.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,9 +10,8 @@ import '../models/subject.dart';
 import '../models/subject_browse.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/discovery_provider.dart';
-import '../services/link_navigator.dart';
 import '../widgets/subject_cover_card.dart';
-import 'anime_tag_page.dart';
+import 'subject_tag_page.dart';
 import 'character_page.dart';
 import 'person_page.dart';
 import 'rakuen_topic_page.dart';
@@ -275,7 +273,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
             key: const Key('discovery_anime_tags_entry'),
             icon: Icons.sell_outlined,
             title: '动画标签',
-            subtitle: kIsWeb ? '在 Bangumi 打开' : '按标签探索',
+            subtitle: '按标签与条件探索',
             onTap: _openAnimeTags,
           ),
         ),
@@ -729,22 +727,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
     );
   }
 
-  Future<void> _openAnimeTags() async {
-    if (kIsWeb) {
-      final opened = await LinkNavigator.openBrowserFromContext(
-        context,
-        Uri.parse('${BgmConst.webBaseUrl}/anime/tag'),
-      );
-      if (!opened && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无法打开动画标签页面')));
-      }
-      return;
-    }
-    if (!mounted) return;
-    await _openPage(const AnimeTagPage());
-  }
+  Future<void> _openAnimeTags() => _openPage(const SubjectTagPage());
 
   Future<void> _openSeasonalAnime() {
     final current = DateTime.now();
