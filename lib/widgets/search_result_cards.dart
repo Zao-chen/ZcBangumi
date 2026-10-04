@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/character.dart';
 import '../models/person.dart';
 import '../models/subject.dart';
+import '../models/subject_browse.dart';
 import '../pages/character_page.dart';
 import '../pages/person_page.dart';
 import '../pages/subject_page.dart';
@@ -12,8 +13,13 @@ import '../providers/app_state_provider.dart';
 
 class SubjectSearchResultCard extends StatelessWidget {
   final SlimSubject subject;
+  final bool showSearchDetails;
 
-  const SubjectSearchResultCard({super.key, required this.subject});
+  const SubjectSearchResultCard({
+    super.key,
+    required this.subject,
+    this.showSearchDetails = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +44,14 @@ class SubjectSearchResultCard extends StatelessWidget {
       imageUrl: subject.images?.common ?? '',
       fallbackIcon: Icons.movie_outlined,
       title: subject.displayName,
-      subtitle: subject.nameCn.isNotEmpty && subject.name != subject.nameCn
-          ? subject.name
-          : '',
+      subtitle: [
+        if (subject.nameCn.isNotEmpty && subject.name != subject.nameCn)
+          subject.name,
+        if (showSearchDetails) subjectTypeLabel(subject.type),
+        if (showSearchDetails && subject.date.isNotEmpty) subject.date,
+        if (showSearchDetails && subject.ratingTotal > 0)
+          '${subject.ratingTotal} 人评分',
+      ].join(' · '),
       summary: subject.shortSummary,
       footer: details,
       onTap: () => Navigator.of(context).push(
@@ -179,60 +190,69 @@ class SearchEntityResultCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: SizedBox(
-                  height: coverHeight,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: coverHeight),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 14 * densityScale,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 14 * densityScale,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (subtitle.isNotEmpty) ...[
+                            SizedBox(height: 4 * densityScale),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                fontSize: 11 * densityScale,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          if (summary.isNotEmpty) ...[
+                            SizedBox(height: 4 * densityScale),
+                            Text(
+                              summary,
+                              style: TextStyle(
+                                fontSize: 11 * densityScale,
+                                color: colorScheme.onSurfaceVariant,
+                                height: 1.2,
+                              ),
+                              maxLines: subtitle.isNotEmpty ? 1 : 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
                       ),
-                      if (subtitle.isNotEmpty) ...[
-                        SizedBox(height: 4 * densityScale),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 11 * densityScale,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (summary.isNotEmpty) ...[
-                        SizedBox(height: 4 * densityScale),
-                        Text(
-                          summary,
-                          style: TextStyle(
-                            fontSize: 11 * densityScale,
-                            color: colorScheme.onSurfaceVariant,
-                            height: 1.2,
-                          ),
-                          maxLines: subtitle.isNotEmpty ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (footer.isNotEmpty) ...[
-                        const Spacer(),
-                        DefaultTextStyle(
-                          style: TextStyle(
-                            fontSize: 11 * densityScale,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                          child: IconTheme(
-                            data: IconThemeData(
+                      if (footer.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: 4 * densityScale),
+                          child: DefaultTextStyle(
+                            style: TextStyle(
+                              fontSize: 11 * densityScale,
                               color: colorScheme.onSurfaceVariant,
                             ),
-                            child: Row(children: footer),
+                            child: IconTheme(
+                              data: IconThemeData(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              child: Row(children: footer),
+                            ),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ),

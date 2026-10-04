@@ -449,8 +449,11 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
         SearchFilterSelection(
           sort: _sort,
           options: UnifiedSearchOptions(
-            metaTags: _parseTags(_metaTagsController.text),
-            tags: _parseTags(_tagsController.text),
+            metaTags: _parseTags(
+              _metaTagsController.text,
+              widget.initialOptions.metaTags,
+            ),
+            tags: _parseTags(_tagsController.text, widget.initialOptions.tags),
             airDateFrom: _airDateFrom,
             airDateTo: _airDateTo,
             ratingMin: ratingMin,
@@ -495,7 +498,8 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
     }
   }
 
-  List<String> _parseTags(String value) {
+  List<String> _parseTags(String value, List<String> initialTags) {
+    if (value == initialTags.join(', ')) return initialTags;
     final seen = <String>{};
     return value
         .split(RegExp(r'[,，\n]+'))

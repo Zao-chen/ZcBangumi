@@ -62,6 +62,8 @@ class SlimSubject {
   final double score;
   final int rank;
   final String date;
+  final int ratingTotal;
+  final List<String> tags;
 
   SlimSubject({
     required this.id,
@@ -76,6 +78,8 @@ class SlimSubject {
     required this.score,
     required this.rank,
     this.date = '',
+    this.ratingTotal = 0,
+    this.tags = const [],
   });
 
   /// 优先显示中文名
@@ -95,6 +99,8 @@ class SlimSubject {
       score: subject.score,
       rank: subject.rank,
       date: subject.date,
+      ratingTotal: subject.ratingTotal,
+      tags: subject.tags,
     );
   }
 
@@ -120,6 +126,11 @@ class SlimSubject {
           0.0,
       rank: (json['rating']?['rank'] as int?) ?? (json['rank'] as int?) ?? 0,
       date: (json['date'] as String?) ?? '',
+      ratingTotal:
+          (json['rating']?['total'] as num?)?.toInt() ??
+          (json['rating_total'] as num?)?.toInt() ??
+          0,
+      tags: _parseTagNames(json['tags']),
     );
   }
 
@@ -136,6 +147,8 @@ class SlimSubject {
     'score': score,
     'rank': rank,
     'date': date,
+    'rating_total': ratingTotal,
+    'tags': tags,
   };
 }
 
@@ -155,6 +168,7 @@ class Subject {
   final String date;
   final List<String> tags;
   final Map<String, String> infobox;
+  final int ratingTotal;
 
   Subject({
     required this.id,
@@ -171,6 +185,7 @@ class Subject {
     required this.date,
     required this.tags,
     required this.infobox,
+    this.ratingTotal = 0,
   });
 
   String get displayName => nameCn.isNotEmpty ? nameCn : name;
@@ -188,26 +203,14 @@ class Subject {
       score: slim.score,
       rank: slim.rank,
       collectionTotal: slim.collectionTotal,
-      date: '',
-      tags: const [],
+      date: slim.date,
+      tags: slim.tags,
       infobox: const {},
+      ratingTotal: slim.ratingTotal,
     );
   }
 
   factory Subject.fromJson(Map<String, dynamic> json) {
-    // 解析 tags
-    final tagsList = <String>[];
-    final rawTags = json['tags'];
-    if (rawTags is List) {
-      for (final tag in rawTags) {
-        if (tag is Map<String, dynamic> && tag['name'] != null) {
-          tagsList.add(tag['name'] as String);
-        } else if (tag is String) {
-          tagsList.add(tag);
-        }
-      }
-    }
-
     // 解析 infobox
     final infoboxMap = <String, String>{};
     final rawInfobox = json['infobox'];
@@ -262,8 +265,12 @@ class Subject {
       rank: (json['rating']?['rank'] as int?) ?? (json['rank'] as int?) ?? 0,
       collectionTotal: _parseCollectionTotal(json),
       date: (json['date'] as String?) ?? '',
-      tags: tagsList,
+      tags: _parseTagNames(json['tags']),
       infobox: infoboxMap,
+      ratingTotal:
+          (json['rating']?['total'] as num?)?.toInt() ??
+          (json['rating_total'] as num?)?.toInt() ??
+          0,
     );
   }
 
@@ -282,5 +289,17 @@ class Subject {
     'date': date,
     'tags': tags,
     'infobox': infobox,
+    'rating_total': ratingTotal,
   };
+}
+
+List<String> _parseTagNames(dynamic rawTags) {
+  if (rawTags is! List) return const [];
+  return rawTags
+      .map((tag) => tag is Map ? tag['name'] : tag)
+      .whereType<String>()
+      .map((tag) => tag.trim())
+      .where((tag) => tag.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
 }

@@ -31,7 +31,7 @@ import '../widgets/mono_entity_widgets.dart';
 import '../widgets/bangumi_index_actions.dart';
 import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/mono_relation_graph.dart';
-import 'anime_tag_page.dart';
+import 'subject_tag_page.dart';
 import 'character_page.dart';
 import 'person_page.dart';
 import 'web_page_viewer.dart';
@@ -1442,7 +1442,7 @@ class _SubjectPageState extends State<SubjectPage>
                   label: tag,
                   labelStyle: const TextStyle(fontSize: 12),
                   backgroundColor: colorScheme.surfaceContainerHigh,
-                  onTap: () => _openAnimeTagPage(tag),
+                  onTap: () => _openTagPage(tag),
                 );
               }).toList(),
             ),
@@ -2145,10 +2145,15 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  void _openAnimeTagPage(String tag) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => AnimeTagPage(initialTag: tag)));
+  void _openTagPage(String tag) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubjectTagPage(
+          initialTag: tag,
+          initialSubjectType: _subject?.type ?? BgmConst.subjectAnime,
+        ),
+      ),
+    );
   }
 
   void _showFullTitleDialog() {

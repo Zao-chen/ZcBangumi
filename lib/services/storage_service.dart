@@ -11,6 +11,7 @@ import '../models/person.dart';
 import '../models/rakuen_topic.dart';
 import '../models/recent_view_item.dart';
 import '../models/subject.dart';
+import '../models/subject_tag_query.dart';
 
 /// 本地存储服务
 class StorageService {
@@ -38,6 +39,8 @@ class StorageService {
   static const String _keyBangumiMirrorConsents = 'bangumi_mirror_consents';
   static const String _keyBangumiMirrorHistory = 'bangumi_mirror_history';
   static const String _keyBangumiMirrorSessions = 'bangumi_mirror_sessions';
+  static const String _keyRecentTagSearches = 'subject_tag_recent_v1';
+  static const String _keyFavoriteTagSearches = 'subject_tag_favorites_v1';
 
   dynamic Function(dynamic)? canonicalizeBangumiCacheData;
 
@@ -48,6 +51,55 @@ class StorageService {
     _prefs = await SharedPreferences.getInstance();
     await _migrateLegacyWebSession();
     await _migrateRecentViewItems();
+  }
+
+  List<SubjectTagQuery> get recentTagSearches =>
+      _readTagSearches(_keyRecentTagSearches);
+
+  List<SubjectTagQuery> get favoriteTagSearches =>
+      _readTagSearches(_keyFavoriteTagSearches);
+
+  List<SubjectTagQuery> _readTagSearches(String key) {
+    final result = <SubjectTagQuery>[];
+    final identities = <String>{};
+    for (final raw in _prefs.getStringList(key) ?? const <String>[]) {
+      try {
+        final query = SubjectTagQuery.fromJson(
+          Map<String, dynamic>.from(jsonDecode(raw) as Map),
+        );
+        if (identities.add(query.identity)) result.add(query);
+      } catch (_) {
+        continue;
+      }
+    }
+    return result;
+  }
+
+  Future<void> recordTagSearch(SubjectTagQuery query) async {
+    final queries = [
+      query,
+      ...recentTagSearches.where((entry) => entry.identity != query.identity),
+    ].take(20);
+    await _prefs.setStringList(
+      _keyRecentTagSearches,
+      queries.map((entry) => jsonEncode(entry.toJson())).toList(),
+    );
+  }
+
+  Future<void> clearRecentTagSearches() async {
+    await _prefs.remove(_keyRecentTagSearches);
+  }
+
+  Future<void> toggleFavoriteTagSearch(SubjectTagQuery query) async {
+    final queries = favoriteTagSearches;
+    final exists = queries.any((entry) => entry.identity == query.identity);
+    await _prefs.setStringList(
+      _keyFavoriteTagSearches,
+      [
+        if (!exists) query,
+        ...queries.where((entry) => entry.identity != query.identity),
+      ].map((entry) => jsonEncode(entry.toJson())).toList(),
+    );
   }
 
   BangumiMirrorSettings get bangumiMirrorSettings {

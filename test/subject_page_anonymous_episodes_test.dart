@@ -7,7 +7,10 @@ import 'package:zc_bangumi/models/comment.dart';
 import 'package:zc_bangumi/models/episode.dart';
 import 'package:zc_bangumi/models/person.dart';
 import 'package:zc_bangumi/models/subject.dart';
+import 'package:zc_bangumi/models/subject_search.dart';
+import 'package:zc_bangumi/models/subject_tab_config.dart';
 import 'package:zc_bangumi/pages/subject_page.dart';
+import 'package:zc_bangumi/pages/subject_tag_page.dart';
 import 'package:zc_bangumi/providers/app_state_provider.dart';
 import 'package:zc_bangumi/providers/auth_provider.dart';
 import 'package:zc_bangumi/providers/connectivity_provider.dart';
@@ -17,6 +20,64 @@ import 'package:zc_bangumi/services/mikan_service.dart';
 import 'package:zc_bangumi/services/storage_service.dart';
 
 void main() {
+  testWidgets('game detail tags search games rather than animation', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService();
+    await storage.init();
+    await storage.setMikanEnabled(false);
+    final api = _GameTagNavigationApi();
+    final appState = AppStateProvider(storage: storage);
+    for (final tabId in SubjectTabConfig.allTabIds) {
+      if (tabId != SubjectTabConfig.overviewId) {
+        appState.setSubjectTabVisible(tabId, false);
+      }
+    }
+    final connectivity = ConnectivityProvider(canReachBangumi: () => true);
+    addTearDown(connectivity.dispose);
+    await tester.binding.setSurfaceSize(const Size(1000, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<StorageService>.value(value: storage),
+          Provider<ApiClient>.value(value: api),
+          ChangeNotifierProvider(
+            create: (_) => AuthProvider(api: api, storage: storage),
+          ),
+          ChangeNotifierProvider<ConnectivityProvider>.value(
+            value: connectivity,
+          ),
+          ChangeNotifierProvider<AppStateProvider>.value(value: appState),
+          ChangeNotifierProvider(
+            create: (_) =>
+                MikanProvider(service: MikanService(), storage: storage),
+          ),
+        ],
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(0.9)),
+            child: child!,
+          ),
+          home: SubjectPage(subjectId: 1, subject: api.game),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final tag = find.text('剧情');
+    await tester.ensureVisible(tag);
+    await tester.tap(tag);
+    await tester.pumpAndSettle();
+    expect(find.byType(SubjectTagPage), findsOneWidget);
+    expect(find.widgetWithText(AppBar, '游戏标签'), findsOneWidget);
+    expect(api.tagFilter!.types, [4]);
+    expect(api.tagFilter!.tags, ['剧情']);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('anonymous subject page loads public episodes as read-only', (
     tester,
   ) async {
@@ -233,5 +294,30 @@ class _FailingCommentsApiClient extends _AnonymousEpisodeApiClient {
     int offset = 0,
   }) async {
     throw StateError('P1 comments failed');
+  }
+}
+
+class _GameTagNavigationApi extends _AnonymousEpisodeApiClient {
+  final game = Subject.fromJson({
+    'id': 1,
+    'type': 4,
+    'name': '测试游戏',
+    'tags': ['剧情'],
+  });
+  SubjectSearchFilter? tagFilter;
+
+  @override
+  Future<Subject> getSubject(int subjectId) async => game;
+
+  @override
+  Future<PagedResult<SlimSubject>> searchSubjects({
+    required String keyword,
+    SubjectSearchSort sort = SubjectSearchSort.match,
+    SubjectSearchFilter filter = const SubjectSearchFilter(),
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    tagFilter = filter;
+    return PagedResult(total: 0, limit: limit, offset: offset, data: const []);
   }
 }
