@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:zc_bangumi/pages/subject_tag_page.dart';
+import 'package:zc_bangumi/constants.dart';
+import 'package:zc_bangumi/pages/search_page.dart';
 import 'package:zc_bangumi/providers/app_state_provider.dart';
 import 'package:zc_bangumi/providers/auth_provider.dart';
 import 'package:zc_bangumi/providers/connectivity_provider.dart';
@@ -41,7 +42,7 @@ void main() async {
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF09199)),
           useMaterial3: true,
         ),
-        home: const SubjectTagPage(),
+        home: const SearchPage(initialSubjectType: BgmConst.subjectAnime),
       ),
     ),
   );

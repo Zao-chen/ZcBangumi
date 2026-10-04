@@ -31,7 +31,7 @@ import '../widgets/mono_entity_widgets.dart';
 import '../widgets/bangumi_index_actions.dart';
 import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/mono_relation_graph.dart';
-import 'subject_tag_page.dart';
+import 'search_page.dart';
 import 'character_page.dart';
 import 'person_page.dart';
 import 'web_page_viewer.dart';
@@ -2148,7 +2148,7 @@ class _SubjectPageState extends State<SubjectPage>
   void _openTagPage(String tag) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SubjectTagPage(
+        builder: (_) => SearchPage(
           initialTag: tag,
           initialSubjectType: _subject?.type ?? BgmConst.subjectAnime,
         ),

@@ -11,7 +11,6 @@ import '../models/subject_browse.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/discovery_provider.dart';
 import '../widgets/subject_cover_card.dart';
-import 'subject_tag_page.dart';
 import 'character_page.dart';
 import 'person_page.dart';
 import 'rakuen_topic_page.dart';
@@ -218,16 +217,6 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
           ),
         ),
-        const SizedBox(width: 10),
-        OutlinedButton.icon(
-          key: const Key('discovery_anime_tags_button'),
-          onPressed: _openAnimeTags,
-          icon: const Icon(Icons.sell_outlined),
-          label: const Text('动画标签'),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
-          ),
-        ),
       ],
     );
   }
@@ -256,28 +245,12 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
   }
 
   Widget _buildCompactQuickActions() {
-    return Row(
-      children: [
-        Expanded(
-          child: _QuickActionCard(
-            key: const Key('discovery_seasonal_entry'),
-            icon: Icons.auto_awesome_outlined,
-            title: '本季新番',
-            subtitle: '浏览当季动画',
-            onTap: _openSeasonalAnime,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _QuickActionCard(
-            key: const Key('discovery_anime_tags_entry'),
-            icon: Icons.sell_outlined,
-            title: '动画标签',
-            subtitle: '按标签与条件探索',
-            onTap: _openAnimeTags,
-          ),
-        ),
-      ],
+    return _QuickActionCard(
+      key: const Key('discovery_seasonal_entry'),
+      icon: Icons.auto_awesome_outlined,
+      title: '本季新番',
+      subtitle: '浏览当季动画',
+      onTap: _openSeasonalAnime,
     );
   }
 
@@ -726,8 +699,6 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
       WeeklyCalendarPage(initialWeekday: DateTime.now().weekday),
     );
   }
-
-  Future<void> _openAnimeTags() => _openPage(const SubjectTagPage());
 
   Future<void> _openSeasonalAnime() {
     final current = DateTime.now();

@@ -149,82 +149,15 @@ class SubjectTagQuery {
   }
 }
 
-class RelatedSubjectTag {
-  final String name;
-  final int subjectCount;
-
-  const RelatedSubjectTag({required this.name, required this.subjectCount});
-}
-
 List<String> normalizeSubjectTags(Iterable<String> tags) => tags
     .map((tag) => tag.trim())
     .where((tag) => tag.isNotEmpty)
     .toSet()
     .toList(growable: false);
 
-List<String> parseSubjectTags(String input) =>
-    normalizeSubjectTags(input.split(RegExp(r'[,，\n]+')));
-
 String subjectTagSortLabel(SubjectSearchSort sort) => switch (sort) {
   SubjectSearchSort.match => '匹配程度',
   SubjectSearchSort.heat => '收藏热度',
   SubjectSearchSort.rank => '排名',
   SubjectSearchSort.score => '评分',
-};
-
-List<String> commonSubjectTags(int? type) => switch (type) {
-  BgmConst.subjectBook => const [
-    '漫画',
-    '小说',
-    '轻小说',
-    '恋爱',
-    '奇幻',
-    '科幻',
-    '悬疑',
-    '日常',
-  ],
-  BgmConst.subjectMusic => const [
-    'OST',
-    'OP',
-    'ED',
-    'JPOP',
-    'ACG',
-    '同人',
-    '声优',
-    '纯音乐',
-  ],
-  BgmConst.subjectGame => const [
-    'Galgame',
-    'RPG',
-    'ADV',
-    '视觉小说',
-    '剧情',
-    '恋爱',
-    '独立游戏',
-    '动作',
-  ],
-  BgmConst.subjectReal => const [
-    '日剧',
-    '电影',
-    '美剧',
-    '特摄',
-    '悬疑',
-    '喜剧',
-    '科幻',
-    '恋爱',
-  ],
-  _ => const [
-    '治愈',
-    '日常',
-    '校园',
-    '恋爱',
-    '科幻',
-    '奇幻',
-    '悬疑',
-    '冒险',
-    '搞笑',
-    '音乐',
-    '原创',
-    '轻小说改',
-  ],
 };

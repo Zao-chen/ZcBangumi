@@ -34,6 +34,34 @@ class UnifiedSearchOptions {
     this.personCareers = const [],
   });
 
+  UnifiedSearchOptions copyWith({
+    List<String>? metaTags,
+    List<String>? tags,
+    DateTime? airDateFrom,
+    DateTime? airDateTo,
+    double? ratingMin,
+    double? ratingMax,
+    int? ratingCountMin,
+    int? ratingCountMax,
+    int? rankMin,
+    int? rankMax,
+    SearchNsfwMode? nsfwMode,
+    List<String>? personCareers,
+  }) => UnifiedSearchOptions(
+    metaTags: metaTags ?? this.metaTags,
+    tags: tags ?? this.tags,
+    airDateFrom: airDateFrom ?? this.airDateFrom,
+    airDateTo: airDateTo ?? this.airDateTo,
+    ratingMin: ratingMin ?? this.ratingMin,
+    ratingMax: ratingMax ?? this.ratingMax,
+    ratingCountMin: ratingCountMin ?? this.ratingCountMin,
+    ratingCountMax: ratingCountMax ?? this.ratingCountMax,
+    rankMin: rankMin ?? this.rankMin,
+    rankMax: rankMax ?? this.rankMax,
+    nsfwMode: nsfwMode ?? this.nsfwMode,
+    personCareers: personCareers ?? this.personCareers,
+  );
+
   List<String> activeLabelsFor(SearchScope scope) => [
     if (scope == SearchScope.all || scope == SearchScope.subjects) ...[
       if (metaTags.isNotEmpty) '公共标签',

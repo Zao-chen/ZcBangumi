@@ -6,17 +6,20 @@ import '../models/character.dart';
 import '../models/person.dart';
 import '../models/subject.dart';
 import '../models/subject_search.dart';
+import '../models/subject_tag_query.dart';
 import '../models/unified_search.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
+import '../services/storage_service.dart';
 import '../widgets/search_filter_drawer.dart';
 import '../widgets/search_result_cards.dart';
 
 /// 同时支持条目、角色和人物的统一搜索页面。
 class SearchPage extends StatefulWidget {
   final int? initialSubjectType;
+  final String? initialTag;
 
-  const SearchPage({super.key, this.initialSubjectType});
+  const SearchPage({super.key, this.initialSubjectType, this.initialTag});
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -41,12 +44,15 @@ class _SearchPageState extends State<SearchPage> {
   ];
 
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _tagController = TextEditingController();
+  final FocusNode _tagFocusNode = FocusNode();
   final ScrollController _resultsController = ScrollController();
 
   late SearchScope _scope;
   late int _selectedSubjectType;
   SubjectSearchSort _subjectSort = SubjectSearchSort.match;
   UnifiedSearchOptions _options = const UnifiedSearchOptions();
+  bool _tagEditorOpen = false;
 
   List<SlimSubject> _subjects = const [];
   List<Character> _characters = const [];
@@ -75,15 +81,54 @@ class _SearchPageState extends State<SearchPage> {
         ? SearchScope.all
         : SearchScope.subjects;
     _selectedSubjectType = widget.initialSubjectType ?? _allSubjectTypes;
+    final initialTag = widget.initialTag?.trim() ?? '';
+    if (initialTag.isNotEmpty) {
+      _options = UnifiedSearchOptions(tags: [initialTag]);
+    }
     _resultsController.addListener(_handleResultsScroll);
+    if (initialTag.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _search('');
+      });
+    }
   }
 
   @override
   void dispose() {
     _resultsController.dispose();
     _searchController.dispose();
+    _tagController.dispose();
+    _tagFocusNode.dispose();
     super.dispose();
   }
+
+  StorageService? get _storage =>
+      context.read<AuthProvider?>()?.storage ?? context.read<StorageService?>();
+
+  ApiClient? get _api =>
+      context.read<AuthProvider?>()?.api ?? context.read<ApiClient?>();
+
+  bool get _hasSubjectCriteria =>
+      _submittedQuery.isNotEmpty ||
+      _options.activeLabelsFor(SearchScope.subjects).isNotEmpty;
+
+  bool get _hasCurrentCriteria => switch (_scope) {
+    SearchScope.subjects => _hasSubjectCriteria,
+    SearchScope.characters || SearchScope.persons => _submittedQuery.isNotEmpty,
+    SearchScope.all => _submittedQuery.isNotEmpty,
+  };
+
+  SubjectTagQuery get _savedSubjectQuery => SubjectTagQuery(
+    subjectType: _subjectTypeFilter,
+    keyword: _submittedQuery,
+    sort: _subjectSort,
+    options: _options,
+  );
+
+  bool get _isFavoriteSubjectQuery =>
+      (_storage?.favoriteTagSearches ?? const []).any(
+        (query) => query.identity == _savedSubjectQuery.identity,
+      );
 
   int? get _subjectTypeFilter =>
       _scope != SearchScope.subjects || _selectedSubjectType == _allSubjectTypes
@@ -108,7 +153,15 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _search(String keyword) async {
     final query = keyword.trim();
     final generation = ++_searchGeneration;
-    if (query.isEmpty) {
+    final canSearch = switch (_scope) {
+      SearchScope.subjects =>
+        query.isNotEmpty ||
+            _options.activeLabelsFor(SearchScope.subjects).isNotEmpty,
+      SearchScope.characters || SearchScope.persons =>
+        query.isNotEmpty || _options.activeLabelsFor(_scope).isNotEmpty,
+      SearchScope.all => query.isNotEmpty,
+    };
+    if (!canSearch) {
       _clearSearchState(clearInput: false);
       return;
     }
@@ -141,7 +194,13 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _searchAll(String query, int generation) async {
-    final api = context.read<AuthProvider>().api;
+    final api = _api;
+    if (api == null) {
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _isSearching = false);
+      }
+      return;
+    }
     const unfilteredOptions = UnifiedSearchOptions();
     PagedResult<SlimSubject>? subjectPage;
     PagedResult<Character>? characterPage;
@@ -212,7 +271,13 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _searchSingleScope(String query, int generation) async {
-    final api = context.read<AuthProvider>().api;
+    final api = _api;
+    if (api == null) {
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _isSearching = false);
+      }
+      return;
+    }
     try {
       switch (_scope) {
         case SearchScope.subjects:
@@ -228,6 +293,7 @@ class _SearchPageState extends State<SearchPage> {
             _subjectTotal = page.total;
             _subjectOffset = _nextOffset(page);
           });
+          await _storage?.recordTagSearch(_savedSubjectQuery);
         case SearchScope.characters:
           final page = await api.searchCharacters(
             keyword: query,
@@ -268,16 +334,20 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _loadMore() async {
+    final hasSearchCriteria = _scope == SearchScope.subjects
+        ? _hasSubjectCriteria
+        : _submittedQuery.isNotEmpty;
     if (_isSearching ||
         _isLoadingMore ||
         !_hasMoreResults ||
-        _submittedQuery.isEmpty ||
+        !hasSearchCriteria ||
         _scope == SearchScope.all) {
       return;
     }
 
     final generation = _searchGeneration;
-    final api = context.read<AuthProvider>().api;
+    final api = _api;
+    if (api == null) return;
     setState(() {
       _isLoadingMore = true;
       _loadMoreError = null;
@@ -346,7 +416,21 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('搜索'), centerTitle: false),
+      appBar: AppBar(
+        title: const Text('搜索'),
+        centerTitle: false,
+        actions: [
+          if (_scope == SearchScope.subjects && _hasSubjectCriteria)
+            IconButton(
+              key: const Key('search_save_search'),
+              tooltip: _isFavoriteSubjectQuery ? '取消收藏此筛选' : '收藏此筛选',
+              icon: Icon(
+                _isFavoriteSubjectQuery ? Icons.star : Icons.star_border,
+              ),
+              onPressed: _toggleFavoriteSubjectQuery,
+            ),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 900;
@@ -364,7 +448,7 @@ class _SearchPageState extends State<SearchPage> {
                         child: _buildSearchField(),
                       ),
                       if (_scope == SearchScope.subjects)
-                        _buildSubjectTypeChips(),
+                        _buildSubjectTagControls(),
                       if (_scope == SearchScope.subjects)
                         const SizedBox(height: 8),
                       Expanded(child: _buildResultContent(24, true)),
@@ -384,7 +468,7 @@ class _SearchPageState extends State<SearchPage> {
               _buildScopeChips(),
               if (_scope == SearchScope.subjects) ...[
                 const SizedBox(height: 6),
-                _buildSubjectTypeChips(),
+                _buildSubjectTagControls(),
               ],
               const SizedBox(height: 10),
               Expanded(child: _buildResultContent(12, false)),
@@ -463,24 +547,62 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  void _openTagEditor() {
+    setState(() => _tagEditorOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _tagFocusNode.requestFocus();
+    });
+  }
+
+  void _submitTag() {
+    final tag = _tagController.text.trim();
+    if (tag.isEmpty || _options.tags.contains(tag)) return;
+    _tagController.clear();
+    setState(() {
+      _options = _options.copyWith(tags: [..._options.tags, tag]);
+    });
+    _search(_submittedQuery);
+    _tagFocusNode.requestFocus();
+  }
+
+  void _removeSubjectTag(String tag) {
+    final tags = _options.tags.where((entry) => entry != tag).toList();
+    setState(() => _options = _options.copyWith(tags: tags));
+    if (_hasSubjectCriteria) {
+      _search(_submittedQuery);
+    } else {
+      _clearSearchState(clearInput: false);
+    }
+  }
+
+  Future<void> _toggleFavoriteSubjectQuery() async {
+    final storage = _storage;
+    if (storage == null) return;
+    await storage.toggleFavoriteTagSearch(_savedSubjectQuery);
+    if (mounted) setState(() {});
+  }
+
   Widget _buildScopeChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: SegmentedButton<SearchScope>(
-        key: const Key('search_scope_selector'),
-        showSelectedIcon: false,
-        segments: SearchScope.values
-            .map(
-              (scope) => ButtonSegment(
-                value: scope,
-                icon: Icon(scope.icon, size: 18),
-                label: Text(scope.label),
-              ),
-            )
-            .toList(),
-        selected: {_scope},
-        onSelectionChanged: (selection) => _selectScope(selection.single),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<SearchScope>(
+          key: const Key('search_scope_selector'),
+          expandedInsets: EdgeInsets.zero,
+          showSelectedIcon: false,
+          segments: SearchScope.values
+              .map(
+                (scope) => ButtonSegment(
+                  value: scope,
+                  icon: Icon(scope.icon, size: 18),
+                  label: Text(scope.label),
+                ),
+              )
+              .toList(),
+          selected: {_scope},
+          onSelectionChanged: (selection) => _selectScope(selection.single),
+        ),
       ),
     );
   }
@@ -503,35 +625,155 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSubjectTypeChips() {
-    return Row(
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 16, right: 4),
-          child: Text('条目类型'),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+    final selected = _subjectTypes.firstWhere(
+      (config) => config.type == _selectedSubjectType,
+    );
+    final colorScheme = Theme.of(context).colorScheme;
+    return PopupMenuButton<int>(
+      key: const Key('search_subject_type_menu'),
+      tooltip: '选择条目类型',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 4),
+      onSelected: _selectSubjectType,
+      itemBuilder: (context) => [
+        for (final config in _subjectTypes)
+          PopupMenuItem<int>(
+            key: Key('search_subject_type_${config.type}'),
+            value: config.type,
             child: Row(
-              children: _subjectTypes
-                  .map(
-                    (config) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: FilterChip(
-                        key: Key('search_subject_type_${config.type}'),
-                        selected: _selectedSubjectType == config.type,
-                        avatar: Icon(config.icon, size: 16),
-                        label: Text(config.label),
-                        onSelected: (_) => _selectSubjectType(config.type),
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: [
+                Icon(config.icon, size: 18),
+                const SizedBox(width: 10),
+                Text(config.label),
+                if (config.type == _selectedSubjectType) ...[
+                  const Spacer(),
+                  Icon(Icons.check, size: 18, color: colorScheme.primary),
+                ],
+              ],
             ),
           ),
-        ),
       ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(selected.icon, size: 18),
+              const SizedBox(width: 7),
+              Text(selected.label),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubjectTagControls() {
+    final tags = _options.tags;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final tag in tags)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: InputChip(
+                          key: ValueKey('search_tag_$tag'),
+                          label: Text(tag),
+                          selected: true,
+                          showCheckmark: false,
+                          onDeleted: () => _removeSubjectTag(tag),
+                          deleteButtonTooltipMessage: '移除标签：$tag',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final addButton = _tagEditorOpen
+                  ? _buildTagInput()
+                  : OutlinedButton.icon(
+                      key: const Key('search_add_tag_button'),
+                      onPressed: _openTagEditor,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('添加标签'),
+                    );
+              final typeButton = _buildSubjectTypeChips();
+              if (_tagEditorOpen) {
+                return Row(
+                  key: const Key('search_tag_shortcuts_row'),
+                  children: [
+                    typeButton,
+                    const SizedBox(width: 8),
+                    Expanded(child: addButton),
+                  ],
+                );
+              }
+              if (constraints.maxWidth < 330) {
+                return Wrap(
+                  key: const Key('search_tag_shortcuts_row'),
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [typeButton, addButton],
+                );
+              }
+              return Row(
+                key: const Key('search_tag_shortcuts_row'),
+                children: [
+                  typeButton,
+                  const SizedBox(width: 8),
+                  addButton,
+                  const Spacer(),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTagInput() {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _tagController,
+      builder: (context, value, child) => TextField(
+        key: const Key('search_tag_input'),
+        controller: _tagController,
+        focusNode: _tagFocusNode,
+        textInputAction: TextInputAction.search,
+        onEditingComplete: () {},
+        onSubmitted: (_) => _submitTag(),
+        decoration: InputDecoration(
+          hintText: '输入标签后回车',
+          isDense: true,
+          prefixIcon: const Icon(Icons.local_offer_outlined, size: 20),
+          suffixIcon: IconButton(
+            key: const Key('search_tag_submit'),
+            tooltip: '添加标签',
+            onPressed: value.text.trim().isEmpty ? null : _submitTag,
+            icon: const Icon(Icons.add),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
     );
   }
 
@@ -585,7 +827,11 @@ class _SearchPageState extends State<SearchPage> {
       _subjectSort = result.sort;
       _options = result.options;
     });
-    if (_submittedQuery.isNotEmpty) _search(_submittedQuery);
+    if (_scope == SearchScope.subjects
+        ? _hasSubjectCriteria
+        : _submittedQuery.isNotEmpty) {
+      _search(_submittedQuery);
+    }
   }
 
   void _selectScope(SearchScope scope) {
@@ -596,18 +842,31 @@ class _SearchPageState extends State<SearchPage> {
       _searchError = null;
       _loadMoreError = null;
     });
-    if (_submittedQuery.isNotEmpty) _search(_submittedQuery);
+    if (_scope == SearchScope.subjects
+        ? _hasSubjectCriteria
+        : _submittedQuery.isNotEmpty) {
+      _search(_submittedQuery);
+    }
   }
 
   void _selectSubjectType(int type) {
     if (_selectedSubjectType == type) return;
     setState(() => _selectedSubjectType = type);
-    if (_submittedQuery.isNotEmpty) _search(_submittedQuery);
+    if (_scope == SearchScope.subjects
+        ? _hasSubjectCriteria
+        : _submittedQuery.isNotEmpty) {
+      _search(_submittedQuery);
+    }
   }
 
   void _clearSearch() {
     _searchController.clear();
-    _clearSearchState(clearInput: false);
+    if (_scope == SearchScope.subjects &&
+        _options.activeLabelsFor(SearchScope.subjects).isNotEmpty) {
+      _search('');
+    } else {
+      _clearSearchState(clearInput: false);
+    }
   }
 
   void _clearSearchState({required bool clearInput}) {
@@ -639,7 +898,10 @@ class _SearchPageState extends State<SearchPage> {
       return _buildSearchSkeletonList(horizontalPadding, isWide);
     }
     if (_searchError != null) return _buildErrorState(_searchError!);
-    if (_submittedQuery.isEmpty) {
+    if (!_hasCurrentCriteria) {
+      if (_scope == SearchScope.subjects) {
+        return _buildSubjectHome(horizontalPadding);
+      }
       return _buildMessageState(
         icon: Icons.manage_search_outlined,
         message: '输入关键词搜索条目、角色或人物',
@@ -687,6 +949,65 @@ class _SearchPageState extends State<SearchPage> {
       isWide: isWide,
       count: count,
       itemBuilder: builder,
+    );
+  }
+
+  Widget _buildSubjectHome(double horizontalPadding) {
+    final recent = _storage?.recentTagSearches ?? const <SubjectTagQuery>[];
+    final favorites =
+        _storage?.favoriteTagSearches ?? const <SubjectTagQuery>[];
+    return ListView(
+      controller: _resultsController,
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 4, horizontalPadding, 24),
+      children: [
+        if (favorites.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text('收藏', style: Theme.of(context).textTheme.titleSmall),
+          for (final query in favorites) _buildSavedSubjectQuery(query, true),
+        ],
+        if (recent.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text('最近搜索', style: Theme.of(context).textTheme.titleSmall),
+              const Spacer(),
+              TextButton(
+                key: const Key('search_clear_history'),
+                onPressed: () async {
+                  await _storage?.clearRecentTagSearches();
+                  if (mounted) setState(() {});
+                },
+                child: const Text('清空'),
+              ),
+            ],
+          ),
+          for (final query in recent) _buildSavedSubjectQuery(query, false),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSavedSubjectQuery(SubjectTagQuery query, bool favorite) {
+    return ListTile(
+      key: ValueKey('search_saved_${query.identity}'),
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(favorite ? Icons.star_outline : Icons.history),
+      title: Text(query.label, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        query.description,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () {
+        setState(() {
+          _scope = SearchScope.subjects;
+          _selectedSubjectType = query.subjectType ?? _allSubjectTypes;
+          _subjectSort = query.sort;
+          _options = query.options;
+          _searchController.text = query.keyword;
+        });
+        _search(query.keyword);
+      },
     );
   }
 
