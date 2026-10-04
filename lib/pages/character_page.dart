@@ -13,6 +13,7 @@ import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_post_widgets.dart';
+import '../widgets/bangumi_avatar.dart';
 import '../widgets/bangumi_index_actions.dart';
 import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/copyable_text.dart';
@@ -1603,14 +1604,7 @@ class _CharacterPageState extends State<CharacterPage>
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colorScheme.surfaceContainerHighest,
-                      ),
-                    ),
+                    const BangumiAvatar.skeleton(size: 40),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'bangumi_network_image.dart';
+import 'bangumi_avatar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -368,15 +368,10 @@ class _BangumiIndexCardState extends State<BangumiIndexCard> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: colors.surfaceContainerHighest,
-                foregroundImage: avatar.isEmpty
-                    ? null
-                    : bangumiImageProvider(context, avatar),
-                child: avatar.isEmpty
-                    ? const Icon(Icons.person_outline_rounded)
-                    : null,
+              BangumiAvatar(
+                url: avatar,
+                size: 40,
+                placeholderIcon: Icons.person_outline_rounded,
               ),
               const SizedBox(width: 12),
               Expanded(

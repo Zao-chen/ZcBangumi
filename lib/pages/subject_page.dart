@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
+import '../widgets/bangumi_avatar.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/character.dart';
@@ -1918,14 +1919,7 @@ class _SubjectPageState extends State<SubjectPage>
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colorScheme.surfaceContainerHighest,
-                      ),
-                    ),
+                    const BangumiAvatar.skeleton(size: 40),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(

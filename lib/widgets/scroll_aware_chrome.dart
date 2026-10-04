@@ -37,6 +37,9 @@ class ScrollChromeData {
         child: ExcludeSemantics(excluding: !expanded, child: child),
       ),
     );
+    final alignedContent = axis == Axis.horizontal
+        ? Center(child: content)
+        : content;
     final direction = fromTop ? -1.0 : 1.0;
     if (fullHeight != null) {
       return ClipRect(
@@ -67,7 +70,7 @@ class ScrollChromeData {
               : Offset(direction, 0),
           end: Offset.zero,
         ).animate(animation),
-        child: content,
+        child: alignedContent,
       ),
     );
   }

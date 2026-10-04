@@ -1,5 +1,5 @@
 import '../widgets/scroll_aware_scaffold.dart';
-import '../widgets/bangumi_network_image.dart';
+import '../widgets/bangumi_avatar.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -640,28 +640,10 @@ class _RakuenTopicCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: topic.avatarUrl.isNotEmpty
-                      ? BangumiNetworkImage(
-                          imageUrl: topic.avatarUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: colorScheme.surfaceContainerHighest,
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.forum_outlined),
-                          ),
-                        )
-                      : Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.forum_outlined),
-                        ),
-                ),
+              BangumiAvatar(
+                url: topic.avatarUrl,
+                size: 44,
+                placeholderIcon: Icons.forum_outlined,
               ),
               const SizedBox(width: 10),
               Expanded(

@@ -1,4 +1,4 @@
-import 'bangumi_network_image.dart';
+import 'bangumi_avatar.dart';
 import 'package:flutter/material.dart';
 
 import '../models/comment.dart';
@@ -113,29 +113,7 @@ class BangumiPostAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.24),
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url.isNotEmpty
-            ? BangumiNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    Container(color: colorScheme.surfaceContainerHighest),
-                errorWidget: (context, url, error) => Container(
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Icon(Icons.person_outline, size: size * 0.45),
-                ),
-              )
-            : Container(
-                color: colorScheme.surfaceContainerHighest,
-                child: Icon(Icons.person_outline, size: size * 0.45),
-              ),
-      ),
-    );
+    return BangumiAvatar(url: url, size: size);
   }
 }
 

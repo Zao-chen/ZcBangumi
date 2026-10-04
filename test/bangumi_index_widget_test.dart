@@ -10,6 +10,7 @@ import 'package:zc_bangumi/providers/auth_provider.dart';
 import 'package:zc_bangumi/services/api_client.dart';
 import 'package:zc_bangumi/services/storage_service.dart';
 import 'package:zc_bangumi/widgets/bangumi_index_list_view.dart';
+import 'package:zc_bangumi/widgets/bangumi_avatar.dart';
 
 void main() {
   test('subject directory tab defaults to immediately after related', () {
@@ -49,6 +50,9 @@ void main() {
     expect(find.textContaining('Alice'), findsOneWidget);
     expect(find.textContaining('5 项'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
+    expect(find.byType(BangumiAvatar), findsOneWidget);
+    expect(find.byType(CircleAvatar), findsNothing);
+    expect(tester.widget<BangumiAvatar>(find.byType(BangumiAvatar)).size, 40);
 
     await tester.tap(find.text('推荐目录'));
     expect(tapped, isTrue);
@@ -155,6 +159,22 @@ void main() {
     );
     expect(find.byType(PopupMenuButton<String>), findsOneWidget);
   });
+
+  testWidgets(
+    'directory author and blog author both use shared square avatars',
+    (tester) async {
+      await _pumpIndexPage(tester, _BlogIndexPageApiClient());
+
+      expect(find.text('测试日志'), findsOneWidget);
+      final avatars = tester.widgetList<BangumiAvatar>(
+        find.byType(BangumiAvatar),
+      );
+      expect(avatars.length, 2);
+      expect(avatars.every((avatar) => avatar.size == 48), isTrue);
+      expect(find.byType(CircleAvatar), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 class _IndexDetailApiClient extends ApiClient {
@@ -207,6 +227,50 @@ class _IndexPageApiClient extends ApiClient {
   }) async {
     return PagedResult(total: 0, limit: limit, offset: offset, data: const []);
   }
+}
+
+class _BlogIndexPageApiClient extends _IndexPageApiClient {
+  _BlogIndexPageApiClient() : super(system: false);
+
+  @override
+  Future<BangumiIndex> getBangumiIndex(int indexId) async {
+    final index = await super.getBangumiIndex(indexId);
+    return BangumiIndex.fromJson({
+      ...index.toJson(),
+      'total': 1,
+      'stats': {'blog': 1},
+    });
+  }
+
+  @override
+  Future<PagedResult<BangumiIndexRelated>> getIndexRelated({
+    required int indexId,
+    IndexRelatedCategory? category,
+    int? subjectType,
+    int limit = 30,
+    int offset = 0,
+  }) async => PagedResult(
+    total: 1,
+    limit: limit,
+    offset: offset,
+    data: [
+      BangumiIndexRelated(
+        id: 100,
+        category: IndexRelatedCategory.blog,
+        rid: 1,
+        type: 0,
+        sid: 100,
+        order: 0,
+        comment: '',
+        award: '',
+        createdAt: DateTime(2026, 10, 4),
+        payload: const {
+          'title': '测试日志',
+          'user': {'nickname': '日志作者', 'avatar': <String, dynamic>{}},
+        },
+      ),
+    ],
+  );
 }
 
 class _LoggedInIndexAuthProvider extends AuthProvider {
