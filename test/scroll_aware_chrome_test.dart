@@ -265,6 +265,20 @@ void main() {
         ),
       ),
     );
+    expect(find.byType(MonoDetailTabBar), findsOneWidget);
+    expect(tester.widget<TabBar>(find.byType(TabBar)).isScrollable, isTrue);
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(find.byType(TabBar)),
+        scrollDelta: const Offset(100, 0),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SliverAppBar>(find.byType(SliverAppBar)).toolbarHeight,
+      56,
+    );
+    expect(find.text('概览').hitTestable(), findsOneWidget);
     await wheel(tester, 240);
     expect(
       tester.widget<SliverAppBar>(find.byType(SliverAppBar)).toolbarHeight,

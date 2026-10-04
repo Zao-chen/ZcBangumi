@@ -19,6 +19,7 @@ import 'package:zc_bangumi/services/api_client.dart';
 import 'package:zc_bangumi/services/mikan_service.dart';
 import 'package:zc_bangumi/services/storage_service.dart';
 import 'package:zc_bangumi/widgets/subject_action_buttons.dart';
+import 'package:zc_bangumi/widgets/bangumi_post_widgets.dart';
 
 void main() {
   for (final configuration in [
@@ -221,6 +222,77 @@ void main() {
     expect(find.text('抛弃'), findsNothing);
   });
 
+  testWidgets(
+    'subject comments reuse shared cards and preserve review metadata',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.init();
+      await storage.setMikanEnabled(false);
+      final api = _StyledCommentsApiClient();
+      final auth = AuthProvider(api: api, storage: storage);
+      final connectivity = ConnectivityProvider(canReachBangumi: () => true);
+      final appState = AppStateProvider(storage: storage);
+      final mikan = MikanProvider(service: MikanService(), storage: storage);
+      addTearDown(connectivity.dispose);
+      for (final tabId in SubjectTabConfig.allTabIds) {
+        if (tabId != SubjectTabConfig.overviewId &&
+            tabId != SubjectTabConfig.commentsId) {
+          appState.setSubjectTabVisible(tabId, false);
+        }
+      }
+      tester.view.physicalSize = const Size(348, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<StorageService>.value(value: storage),
+            Provider<ApiClient>.value(value: api),
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<ConnectivityProvider>.value(
+              value: connectivity,
+            ),
+            ChangeNotifierProvider<AppStateProvider>.value(value: appState),
+            ChangeNotifierProvider<MikanProvider>.value(value: mikan),
+          ],
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: SubjectPage(subjectId: 253, subject: api.subject),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('吐槽'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BangumiPostCard), findsOneWidget);
+      expect(find.text('条目短评'), findsOneWidget);
+      expect(find.text('2026-7-17 12:06'), findsOneWidget);
+      expect(find.text('9/10'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(BangumiPostCard),
+          matching: find.byIcon(Icons.star),
+        ),
+        findsNWidgets(4),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(BangumiPostCard),
+          matching: find.byIcon(Icons.star_border),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('剧透'), findsOneWidget);
+      expect(find.text('2 条回复'), findsOneWidget);
+      final card = tester.widget<BangumiPostCard>(find.byType(BangumiPostCard));
+      expect(card.post.authorKey, '42');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('subject comments API failure is not shown as an empty list', (
     tester,
   ) async {
@@ -378,6 +450,33 @@ class _HeaderSubjectApiClient extends _AnonymousEpisodeApiClient {
 
   @override
   Subject get subject => _headerSubject;
+}
+
+class _StyledCommentsApiClient extends _AnonymousEpisodeApiClient {
+  @override
+  Future<PagedResult<Comment>> getSubjectComments({
+    required int subjectId,
+    int limit = 30,
+    int offset = 0,
+  }) async => PagedResult(
+    total: 1,
+    limit: limit,
+    offset: offset,
+    data: [
+      Comment(
+        id: 1,
+        content: '条目短评',
+        rating: 9,
+        spoiler: 1,
+        state: 0,
+        createdAt: DateTime(2026, 7, 16, 11, 5),
+        updatedAt: DateTime(2026, 7, 17, 12, 6),
+        user: const {'id': '42', 'nickname': '测试用户', 'avatar': ''},
+        usable: 1,
+        replies: 2,
+      ),
+    ],
+  );
 }
 
 class _FailingCommentsApiClient extends _AnonymousEpisodeApiClient {

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'scroll_aware_chrome.dart';
 
@@ -6,6 +7,32 @@ class MonoDetailTab {
   final IconData icon;
 
   const MonoDetailTab({required this.label, required this.icon});
+}
+
+class MonoDetailTabBar extends StatelessWidget implements PreferredSizeWidget {
+  final TabController? controller;
+  final List<Widget> tabs;
+
+  const MonoDetailTabBar({super.key, this.controller, required this.tabs});
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kTextTabBarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final scrollBehavior = ScrollConfiguration.of(context);
+    return ScrollConfiguration(
+      behavior: scrollBehavior.copyWith(
+        dragDevices: {...scrollBehavior.dragDevices, PointerDeviceKind.mouse},
+      ),
+      child: TabBar(
+        controller: controller,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        tabs: tabs,
+      ),
+    );
+  }
 }
 
 class MonoDetailScaffold extends StatelessWidget {
@@ -128,7 +155,7 @@ class MonoDetailScaffold extends StatelessWidget {
                             ),
                           ),
                         ),
-                        child: TabBar(
+                        child: MonoDetailTabBar(
                           controller: tabController,
                           tabs: tabs
                               .map((tab) => Tab(text: tab.label))

@@ -72,6 +72,10 @@ macOS 最低运行版本为 12.0。Runner 和 CocoaPods 的最低部署版本统
 
 普通页面统一使用 `ScrollAwareScaffold`，条目、人物与角色详情通过 `MonoDetailScaffold` 接入同一套 `ScrollAwareChrome`。不要在单个页面另写滚动方向判断或收起动画。
 
+详情页及其加载态的顶部标签统一使用 `MonoDetailTabBar`：标签按文字宽度从左排列，不随窗口宽度等分拉伸；超出可视区域时支持触摸、鼠标拖动和横向滚轮滚动，切换标签会自动滚动到选中项。
+
+条目、角色吐槽复用超展开原有的 `BangumiPostCard` / `BangumiPostBody`，评论数据通过 `BangumiPostData.fromComment` 转换。以超展开原样式为基准：用户名在左、楼层和本地绝对时间在右，主回复与楼中楼保留各自原有字号、行距、头像尺寸和缩进。条目评分保留五颗琥珀色星星，不改成数字评分徽章；评论专属的评分、剧透标记和回复数量仅按需展示，不改变超展开帖子样式。条目保留更新时间语义，角色保留发布时间语义。
+
 向下阅读时，工具栏精简为 48px，分类、标签与筛选区收起；向上轻微滚动或回到顶部时恢复。标题、返回与必要操作保留。首页顶部和底栏共享滚动状态及 200ms 动画，横屏左侧导航栏不隐藏。
 
 正文上方的辅助控件使用 `ScrollChromeCollapse`；工具栏内的辅助选择器使用其横向模式。控件收起时不接收点击、焦点或无障碍操作，但保留自身状态。原生 WebView 通过 `ScrollAwareChrome.maybeOf(context)?.handleNativeScroll(y)` 接入相同规则。

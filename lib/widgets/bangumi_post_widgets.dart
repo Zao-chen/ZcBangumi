@@ -1,6 +1,7 @@
 import 'bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../models/comment.dart';
 import 'bangumi_content_view.dart';
 
 String formatBangumiPostTime({DateTime? dateTime, String rawTime = ''}) {
@@ -55,6 +56,9 @@ class BangumiPostData {
   final String content;
   final String? contentHtml;
   final String? emptyContentLabel;
+  final int rating;
+  final bool spoiler;
+  final int replyCount;
 
   const BangumiPostData({
     required this.id,
@@ -66,7 +70,39 @@ class BangumiPostData {
     required this.content,
     this.contentHtml,
     this.emptyContentLabel,
+    this.rating = 0,
+    this.spoiler = false,
+    this.replyCount = 0,
   });
+
+  factory BangumiPostData.fromComment(
+    Comment comment, {
+    String floorText = '',
+    DateTime? dateTime,
+    String? emptyContentLabel,
+  }) {
+    final rawId = comment.user['id'];
+    final userId = rawId is num
+        ? rawId.toInt()
+        : int.tryParse(rawId?.toString() ?? '') ?? 0;
+    return BangumiPostData(
+      id: comment.id.toString(),
+      authorKey: userId > 0 ? userId.toString() : '',
+      authorName: comment.userName,
+      avatarUrl: comment.userAvatar,
+      metaText: formatBangumiPostMeta(
+        floorText: floorText,
+        dateTime: dateTime ?? comment.createdAt,
+      ),
+      content: comment.content,
+      contentHtml: comment.contentHtml,
+      emptyContentLabel:
+          emptyContentLabel ?? (comment.state == 6 ? '该评论已删除' : null),
+      rating: comment.rating,
+      spoiler: comment.spoiler == 1,
+      replyCount: comment.replyItems.isEmpty ? comment.replies : 0,
+    );
+  }
 }
 
 class BangumiPostAvatar extends StatelessWidget {
@@ -180,6 +216,10 @@ class BangumiPostBody extends StatelessWidget {
             ],
           ],
         ),
+        if (post.rating > 0 || post.spoiler) ...[
+          const SizedBox(height: 2),
+          _BangumiCommentBadges(post: post),
+        ],
         const SizedBox(height: 4),
         if (post.content.trim().isEmpty && emptyLabel?.isNotEmpty == true)
           Text(
@@ -196,6 +236,60 @@ class BangumiPostBody extends StatelessWidget {
             text: post.content,
             html: post.contentHtml,
             style: TextStyle(fontSize: contentFontSize, height: contentHeight),
+          ),
+        if (post.replyCount > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            '${post.replyCount} 条回复',
+            style: TextStyle(
+              fontSize: metaFontSize,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BangumiCommentBadges extends StatelessWidget {
+  final BangumiPostData post;
+
+  const _BangumiCommentBadges({required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (post.rating > 0)
+          Semantics(
+            label: '评分 ${post.rating} 分',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(
+                5,
+                (starIndex) => Icon(
+                  starIndex < post.rating ~/ 2 ? Icons.star : Icons.star_border,
+                  color: Colors.amber,
+                  size: 12,
+                ),
+              ),
+            ),
+          ),
+        if (post.spoiler)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red[100],
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              '剧透',
+              style: TextStyle(color: Colors.red[700], fontSize: 10),
+            ),
           ),
       ],
     );
