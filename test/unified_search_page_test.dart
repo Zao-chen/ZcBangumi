@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zc_bangumi/constants.dart';
 import 'package:zc_bangumi/models/character.dart';
 import 'package:zc_bangumi/models/entity_search.dart';
 import 'package:zc_bangumi/models/person.dart';
@@ -26,7 +27,7 @@ void main() {
       find.byKey(const Key('search_advanced_filter_button')),
       findsNothing,
     );
-    expect(find.text('条目类型'), findsNothing);
+    expect(find.byKey(const Key('search_subject_type_menu')), findsNothing);
 
     await tester.enterText(find.byKey(const Key('search_query_field')), '爱音');
     await tester.testTextInput.receiveAction(TextInputAction.search);
@@ -96,29 +97,175 @@ void main() {
     final api = _UnifiedSearchApiClient();
     await _pumpSearchPage(tester, api);
 
-    expect(find.text('条目类型'), findsNothing);
+    expect(find.byKey(const Key('search_subject_type_menu')), findsNothing);
     expect(
       find.byKey(const Key('search_advanced_filter_button')),
       findsNothing,
     );
 
+    await tester.tap(find.text('角色'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search_subject_type_menu')), findsNothing);
+    expect(find.byKey(const Key('search_add_tag_button')), findsNothing);
+
+    await tester.tap(find.text('人物'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search_subject_type_menu')), findsNothing);
+    expect(find.byKey(const Key('search_add_tag_button')), findsNothing);
+
     await tester.tap(find.text('条目'));
     await tester.pumpAndSettle();
-    expect(find.text('条目类型'), findsOneWidget);
+    expect(find.byKey(const Key('search_subject_type_menu')), findsOneWidget);
+    expect(find.byKey(const Key('search_add_tag_button')), findsOneWidget);
     expect(
       find.byKey(const Key('search_advanced_filter_button')),
       findsOneWidget,
     );
 
+    await tester.tap(find.byKey(const Key('search_subject_type_menu')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('search_subject_type_2')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('综合'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search_add_tag_button')), findsNothing);
     await tester.enterText(find.byKey(const Key('search_query_field')), '测试');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
 
-    expect(find.text('条目类型'), findsNothing);
+    expect(find.byKey(const Key('search_subject_type_menu')), findsNothing);
     expect(api.subjectFilter?.types, isEmpty);
+  });
+
+  testWidgets('subjects can search by one tag without a keyword', (
+    tester,
+  ) async {
+    final api = _UnifiedSearchApiClient();
+    await _pumpSearchPage(
+      tester,
+      api,
+      initialSubjectType: BgmConst.subjectAnime,
+    );
+
+    await tester.tap(find.byKey(const Key('search_add_tag_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search_tag_input')), '治愈');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(api.subjectCalls, 1);
+    expect(api.subjectKeywords.single, isEmpty);
+    expect(api.subjectFilters.single.tags, ['治愈']);
+  });
+
+  testWidgets('mobile scope selector fills the search content width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _UnifiedSearchApiClient();
+    await _pumpSearchPage(tester, api);
+
+    final searchRect = tester.getRect(
+      find.byKey(const Key('search_query_field')),
+    );
+    final scopeRect = tester.getRect(
+      find.byKey(const Key('search_scope_selector')),
+    );
+    expect(scopeRect.left, closeTo(searchRect.left, 1));
+    expect(scopeRect.right, closeTo(searchRect.right, 1));
+  });
+
+  for (final width in [360.0, 1200.0]) {
+    testWidgets('tag shortcuts stay on one line at ${width.toInt()}px', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _UnifiedSearchApiClient();
+      await _pumpSearchPage(
+        tester,
+        api,
+        initialSubjectType: BgmConst.subjectAnime,
+      );
+      await tester.pumpAndSettle();
+
+      final addButton = find.byKey(const Key('search_add_tag_button'));
+      final shortcuts = find.byKey(const Key('search_tag_shortcuts_row'));
+      final typeButton = find.byKey(const Key('search_subject_type_menu'));
+      expect(
+        find.descendant(of: shortcuts, matching: addButton),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: shortcuts, matching: typeButton),
+        findsOneWidget,
+      );
+      expect(
+        tester.getRect(addButton).center.dy,
+        closeTo(tester.getRect(typeButton).center.dy, 1),
+      );
+      expect(find.byKey(const Key('search_tag_input')), findsNothing);
+      expect(api.subjectCalls, 0);
+
+      await tester.tap(find.byKey(const Key('search_add_tag_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('search_tag_input')), findsOneWidget);
+      expect(shortcuts, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('subject tags are submitted one by one and keep commas', (
+    tester,
+  ) async {
+    final api = _UnifiedSearchApiClient();
+    await _pumpSearchPage(
+      tester,
+      api,
+      initialSubjectType: BgmConst.subjectAnime,
+    );
+
+    await tester.tap(find.byKey(const Key('search_add_tag_button')));
+    await tester.pumpAndSettle();
+    final input = find.byKey(const Key('search_tag_input'));
+    await tester.enterText(input, '剧情,恋爱');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(api.subjectFilters.last.tags, ['剧情,恋爱']);
+
+    await tester.enterText(input, '校园');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(api.subjectFilters.last.tags, ['剧情,恋爱', '校园']);
+
+    final callsBeforeDuplicate = api.subjectCalls;
+    await tester.enterText(input, '校园');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(api.subjectCalls, callsBeforeDuplicate);
+    expect(find.byKey(const Key('search_tag_剧情,恋爱')), findsOneWidget);
+  });
+
+  testWidgets('initial tag opens subject search and submits it to the API', (
+    tester,
+  ) async {
+    final api = _UnifiedSearchApiClient();
+    await _pumpSearchPage(
+      tester,
+      api,
+      initialSubjectType: BgmConst.subjectGame,
+      initialTag: '剧情,恋爱',
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('search_subject_type_menu')), findsOneWidget);
+    expect(find.byKey(const Key('search_tag_剧情,恋爱')), findsOneWidget);
+    expect(api.subjectCalls, 1);
+    expect(api.subjectKeywords.single, isEmpty);
+    expect(api.subjectFilters.single.types, [BgmConst.subjectGame]);
+    expect(api.subjectFilters.single.tags, ['剧情,恋爱']);
   });
 
   testWidgets('all scope keeps successful groups when one API fails', (
@@ -160,8 +307,10 @@ void main() {
 
 Future<void> _pumpSearchPage(
   WidgetTester tester,
-  _UnifiedSearchApiClient api,
-) async {
+  _UnifiedSearchApiClient api, {
+  int? initialSubjectType,
+  String? initialTag,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final storage = StorageService();
   await storage.init();
@@ -169,7 +318,12 @@ Future<void> _pumpSearchPage(
   await tester.pumpWidget(
     ChangeNotifierProvider<AuthProvider>.value(
       value: auth,
-      child: const MaterialApp(home: SearchPage()),
+      child: MaterialApp(
+        home: SearchPage(
+          initialSubjectType: initialSubjectType,
+          initialTag: initialTag,
+        ),
+      ),
     ),
   );
 }
@@ -189,6 +343,8 @@ class _UnifiedSearchApiClient extends ApiClient {
   final List<int> subjectLimits = [];
   final List<int> characterLimits = [];
   final List<int> personLimits = [];
+  final List<String> subjectKeywords = [];
+  final List<SubjectSearchFilter> subjectFilters = [];
   SubjectSearchFilter? subjectFilter;
   CharacterSearchFilter? characterFilter;
   PersonSearchFilter? personFilter;
@@ -205,6 +361,8 @@ class _UnifiedSearchApiClient extends ApiClient {
   }) async {
     subjectCalls++;
     subjectLimits.add(limit);
+    subjectKeywords.add(keyword);
+    subjectFilters.add(filter);
     subjectFilter = filter;
     return PagedResult(
       total: 1,

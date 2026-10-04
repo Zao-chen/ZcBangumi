@@ -17,12 +17,19 @@ void main() {
     await storage.init();
   });
 
-  test('splits and deduplicates tags without splitting spaces', () {
-    expect(parseSubjectTags(' 治愈，校园,治愈\n Science Fiction, '), [
-      '治愈',
-      '校园',
-      'Science Fiction',
-    ]);
+  test('normalizes individual tags without splitting spaces or commas', () {
+    expect(
+      normalizeSubjectTags([
+        ' 治愈 ',
+        '校园',
+        '治愈',
+        ' Science Fiction ',
+        '标签,含逗号',
+        '标签，含逗号',
+        ' ',
+      ]),
+      ['治愈', '校园', 'Science Fiction', '标签,含逗号', '标签，含逗号'],
+    );
   });
 
   test('query round-trip retains all API search criteria', () {

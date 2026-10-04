@@ -7,20 +7,27 @@ import '../models/unified_search.dart';
 class SearchFilterSelection {
   final SubjectSearchSort sort;
   final UnifiedSearchOptions options;
+  final String? keyword;
 
-  const SearchFilterSelection({required this.sort, required this.options});
+  const SearchFilterSelection({
+    required this.sort,
+    required this.options,
+    this.keyword,
+  });
 }
 
 class SearchFilterDrawer extends StatefulWidget {
   final SearchScope scope;
   final SubjectSearchSort initialSort;
   final UnifiedSearchOptions initialOptions;
+  final String? initialKeyword;
 
   const SearchFilterDrawer({
     super.key,
     required this.scope,
     required this.initialSort,
     required this.initialOptions,
+    this.initialKeyword,
   });
 
   @override
@@ -39,7 +46,7 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
   ];
 
   late final TextEditingController _metaTagsController;
-  late final TextEditingController _tagsController;
+  late final TextEditingController _keywordController;
   late final TextEditingController _ratingMinController;
   late final TextEditingController _ratingMaxController;
   late final TextEditingController _ratingCountMinController;
@@ -63,10 +70,10 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
   void initState() {
     super.initState();
     final options = widget.initialOptions;
+    _keywordController = TextEditingController(text: widget.initialKeyword);
     _metaTagsController = TextEditingController(
       text: options.metaTags.join(', '),
     );
-    _tagsController = TextEditingController(text: options.tags.join(', '));
     _ratingMinController = TextEditingController(
       text: options.ratingMin == null
           ? ''
@@ -98,8 +105,8 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
 
   @override
   void dispose() {
+    _keywordController.dispose();
     _metaTagsController.dispose();
-    _tagsController.dispose();
     _ratingMinController.dispose();
     _ratingMaxController.dispose();
     _ratingCountMinController.dispose();
@@ -153,6 +160,17 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
                     ),
                     const SizedBox(height: 16),
                   ],
+                  if (widget.initialKeyword != null) ...[
+                    TextField(
+                      key: const Key('search_filter_keyword_field'),
+                      controller: _keywordController,
+                      decoration: const InputDecoration(
+                        labelText: '关键词',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (_showSubjectFilters) ...[
                     _sectionTitle('条目筛选'),
                     DropdownButtonFormField<SubjectSearchSort>(
@@ -180,16 +198,6 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
                       decoration: const InputDecoration(
                         labelText: '公共标签（维基标签）',
                         hintText: '例如：原创, 童年；使用 -科幻 排除标签',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      key: const Key('search_tags_field'),
-                      controller: _tagsController,
-                      decoration: const InputDecoration(
-                        labelText: '用户标签',
-                        hintText: '多个标签用逗号分隔，标签之间为且关系',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -405,8 +413,8 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
 
   void _reset() {
     setState(() {
+      _keywordController.clear();
       _metaTagsController.clear();
-      _tagsController.clear();
       _ratingMinController.clear();
       _ratingMaxController.clear();
       _ratingCountMinController.clear();
@@ -448,12 +456,15 @@ class _SearchFilterDrawerState extends State<SearchFilterDrawer> {
         context,
         SearchFilterSelection(
           sort: _sort,
+          keyword: widget.initialKeyword == null
+              ? null
+              : _keywordController.text.trim(),
           options: UnifiedSearchOptions(
             metaTags: _parseTags(
               _metaTagsController.text,
               widget.initialOptions.metaTags,
             ),
-            tags: _parseTags(_tagsController.text, widget.initialOptions.tags),
+            tags: widget.initialOptions.tags,
             airDateFrom: _airDateFrom,
             airDateTo: _airDateTo,
             ratingMin: ratingMin,

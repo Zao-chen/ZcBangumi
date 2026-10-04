@@ -38,7 +38,7 @@ void main() {
     expect(find.text('筛选与排序'), findsOneWidget);
     expect(find.text('排序'), findsOneWidget);
     expect(find.text('公共标签（维基标签）'), findsOneWidget);
-    expect(find.text('用户标签'), findsOneWidget);
+    expect(find.text('用户标签'), findsNothing);
     expect(find.text('播出／发售日期'), findsOneWidget);
     expect(find.text('评分范围（0–10）'), findsOneWidget);
     expect(find.text('评分人数'), findsOneWidget);
@@ -49,11 +49,16 @@ void main() {
       find.byKey(const Key('search_meta_tags_field')),
       '原创, 童年',
     );
-    await tester.enterText(find.byKey(const Key('search_tags_field')), '科幻');
 
     final applyButton = find.byKey(const Key('search_apply_filters_button'));
     await tester.ensureVisible(applyButton);
     await tester.tap(applyButton);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('search_add_tag_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search_tag_input')), '科幻');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('筛选与排序（已自定义）'), findsOneWidget);
@@ -71,13 +76,9 @@ void main() {
           .text,
       '原创, 童年',
     );
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('search_tags_field')))
-          .controller!
-          .text,
-      '科幻',
-    );
+    expect(find.byKey(const Key('search_tags_field')), findsNothing);
+    expect(find.byKey(const Key('search_tag_input')), findsOneWidget);
+    expect(find.widgetWithText(InputChip, '科幻'), findsOneWidget);
   });
 
   testWidgets('applied advanced filters are sent to the official search API', (
@@ -108,10 +109,15 @@ void main() {
       find.byKey(const Key('search_meta_tags_field')),
       '原创, 童年',
     );
-    await tester.enterText(find.byKey(const Key('search_tags_field')), '科幻');
     final applyButton = find.byKey(const Key('search_apply_filters_button'));
     await tester.ensureVisible(applyButton);
     await tester.tap(applyButton);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('search_add_tag_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('search_tag_input')), '科幻');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('search_query_field')), '星际牛仔');

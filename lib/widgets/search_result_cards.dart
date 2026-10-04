@@ -14,11 +14,13 @@ import '../providers/app_state_provider.dart';
 class SubjectSearchResultCard extends StatelessWidget {
   final SlimSubject subject;
   final bool showSearchDetails;
+  final bool compact;
 
   const SubjectSearchResultCard({
     super.key,
     required this.subject,
     this.showSearchDetails = false,
+    this.compact = false,
   });
 
   @override
@@ -29,11 +31,11 @@ class SubjectSearchResultCard extends StatelessWidget {
         const SizedBox(width: 2),
         Text(subject.score.toStringAsFixed(1)),
       ],
-      if (subject.rank > 0) ...[
+      if (!compact && subject.rank > 0) ...[
         const SizedBox(width: 10),
         Text('#${subject.rank}'),
       ],
-      if (subject.collectionTotal > 0) ...[
+      if (!compact && subject.collectionTotal > 0) ...[
         const Spacer(),
         const Icon(Icons.people_outline, size: 14),
         const SizedBox(width: 2),
@@ -44,15 +46,17 @@ class SubjectSearchResultCard extends StatelessWidget {
       imageUrl: subject.images?.common ?? '',
       fallbackIcon: Icons.movie_outlined,
       title: subject.displayName,
-      subtitle: [
-        if (subject.nameCn.isNotEmpty && subject.name != subject.nameCn)
-          subject.name,
-        if (showSearchDetails) subjectTypeLabel(subject.type),
-        if (showSearchDetails && subject.date.isNotEmpty) subject.date,
-        if (showSearchDetails && subject.ratingTotal > 0)
-          '${subject.ratingTotal} 人评分',
-      ].join(' · '),
-      summary: subject.shortSummary,
+      subtitle: compact
+          ? (showSearchDetails ? subjectTypeLabel(subject.type) : '')
+          : [
+              if (subject.nameCn.isNotEmpty && subject.name != subject.nameCn)
+                subject.name,
+              if (showSearchDetails) subjectTypeLabel(subject.type),
+              if (showSearchDetails && subject.date.isNotEmpty) subject.date,
+              if (showSearchDetails && subject.ratingTotal > 0)
+                '${subject.ratingTotal} 人评分',
+            ].join(' · '),
+      summary: compact ? '' : subject.shortSummary,
       footer: details,
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => SubjectPage(subjectId: subject.id)),
