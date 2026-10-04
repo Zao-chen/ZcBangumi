@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../constants.dart';
 import '../models/bangumi_index.dart';
 import '../models/person.dart';
@@ -285,16 +286,16 @@ class _PersonPageState extends State<PersonPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     if (_loading && _displayPerson == null) {
-      return Scaffold(appBar: AppBar(), body: _buildPageSkeleton());
+      return ScrollAwareScaffold(appBar: AppBar(), body: _buildPageSkeleton());
     }
     if (_error != null && _displayPerson == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(title: const Text('人物')),
         body: _buildErrorState(),
       );
     }
     if (_displayPerson == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: const Center(child: Text('人物不存在')),
       );

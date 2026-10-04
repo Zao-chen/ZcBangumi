@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
+import '../widgets/bangumi_avatar.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:provider/provider.dart';
 import '../models/timeline.dart';
@@ -503,7 +505,7 @@ class _TimelinePageState extends State<TimelinePage> {
       const ButtonSegment(value: _TimelineTab.mine, label: Text('我的')),
     ];
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('动态'),
         centerTitle: false,
@@ -514,17 +516,20 @@ class _TimelinePageState extends State<TimelinePage> {
               onPressed: _refreshCurrentTab,
               icon: const Icon(Icons.refresh_rounded),
             ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: SegmentedButton<_TimelineTab>(
-              segments: tabSegments,
-              selected: {_currentTab},
-              onSelectionChanged: (val) => _onTabChanged(val.first),
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: WidgetStatePropertyAll(
-                  TextStyle(fontSize: 13, color: colorScheme.onSurface),
+          ScrollChromeCollapse(
+            axis: Axis.horizontal,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: SegmentedButton<_TimelineTab>(
+                segments: tabSegments,
+                selected: {_currentTab},
+                onSelectionChanged: (val) => _onTabChanged(val.first),
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: WidgetStatePropertyAll(
+                    TextStyle(fontSize: 13, color: colorScheme.onSurface),
+                  ),
                 ),
               ),
             ),
@@ -689,14 +694,7 @@ class _TimelinePageState extends State<TimelinePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 左侧头像骨架
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-              ),
+              const BangumiAvatar.skeleton(size: 40),
               const SizedBox(width: 12),
               // 右侧内容骨架
               Expanded(
@@ -763,29 +761,10 @@ class _TimelineFeedItem extends StatelessWidget {
             onTap: () => _openUserPage(context, item.username, item.nickname),
             child: Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: item.avatarUrl.isNotEmpty
-                      ? BangumiNetworkImage(
-                          imageUrl: item.avatarUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.person, size: 20),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.person, size: 20),
-                          ),
-                        )
-                      : Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.person, size: 20),
-                        ),
-                ),
+              child: BangumiAvatar(
+                url: item.avatarUrl,
+                size: 40,
+                placeholderIcon: Icons.person,
               ),
             ),
           ),

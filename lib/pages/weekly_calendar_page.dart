@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../models/calendar.dart';
 import '../providers/discovery_provider.dart';
 import '../widgets/subject_cover_card.dart';
@@ -35,7 +36,7 @@ class _WeeklyCalendarPageState extends State<WeeklyCalendarPage> {
     final discovery = context.watch<DiscoveryProvider>();
     final selected = _dayFor(discovery.calendar, _selectedWeekday);
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('本周放送'),
         centerTitle: false,

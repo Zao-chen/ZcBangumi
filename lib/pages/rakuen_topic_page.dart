@@ -1,3 +1,4 @@
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -142,7 +143,7 @@ class _RakuenTopicPageState extends State<RakuenTopicPage> {
     final title = _displayTitle(_detail);
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: _showCollapsedTitle
             ? Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
+import '../widgets/bangumi_avatar.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/collection.dart';
@@ -278,7 +280,7 @@ class _ProfilePageState extends State<ProfilePage> {
           )
         : const _LoginView();
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('我的'),
         centerTitle: false,
@@ -439,14 +441,7 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
+            const BangumiAvatar.skeleton(size: 48),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -716,7 +711,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
     final title = widget.displayName?.trim().isNotEmpty == true
         ? widget.displayName!.trim()
         : '@${widget.username}';
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(title: Text(title)),
       body: _buildBody(),
     );
@@ -1437,29 +1432,10 @@ class _ProfileContentState extends State<_ProfileContent> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: widget.user.avatar.large.isNotEmpty
-                    ? BangumiNetworkImage(
-                        imageUrl: widget.user.avatar.large,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.person, size: 24),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.person, size: 24),
-                        ),
-                      )
-                    : Container(
-                        color: colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.person, size: 24),
-                      ),
-              ),
+            BangumiAvatar(
+              url: widget.user.avatar.large,
+              size: 48,
+              placeholderIcon: Icons.person,
             ),
             const SizedBox(width: 12),
             Expanded(

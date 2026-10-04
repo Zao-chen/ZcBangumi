@@ -1,4 +1,6 @@
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
+import '../widgets/bangumi_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -743,7 +745,7 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
   @override
   Widget build(BuildContext context) {
     final index = _index;
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: Text(index?.title ?? '目录'),
         actions: [
@@ -865,15 +867,7 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 24,
-                        foregroundImage: index.userAvatar.isEmpty
-                            ? null
-                            : bangumiImageProvider(context, index.userAvatar),
-                        child: index.userAvatar.isEmpty
-                            ? const Icon(Icons.person_outline)
-                            : null,
-                      ),
+                      BangumiAvatar(url: index.userAvatar, size: 48),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -1068,22 +1062,29 @@ class _BangumiIndexPageState extends State<BangumiIndexPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  color: colors.surfaceContainerHighest,
-                  child: item.imageUrl.isEmpty
-                      ? Icon(_categoryIcon(item.category))
-                      : BangumiNetworkImage(
-                          imageUrl: item.imageUrl,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, _, _) =>
-                              Icon(_categoryIcon(item.category)),
-                        ),
+              if (item.category == IndexRelatedCategory.blog)
+                BangumiAvatar(
+                  url: item.imageUrl,
+                  size: 48,
+                  placeholderIcon: _categoryIcon(item.category),
+                )
+              else
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    color: colors.surfaceContainerHighest,
+                    child: item.imageUrl.isEmpty
+                        ? Icon(_categoryIcon(item.category))
+                        : BangumiNetworkImage(
+                            imageUrl: item.imageUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, _, _) =>
+                                Icon(_categoryIcon(item.category)),
+                          ),
+                  ),
                 ),
-              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

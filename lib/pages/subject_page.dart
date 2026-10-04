@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
+import '../widgets/bangumi_avatar.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../models/character.dart';
@@ -23,7 +25,7 @@ import '../services/platform_feature_support.dart';
 import '../services/storage_service.dart';
 import '../widgets/progress_grid.dart';
 import '../widgets/subject_action_buttons.dart';
-import '../widgets/bangumi_content_view.dart';
+import '../widgets/bangumi_post_widgets.dart';
 import '../widgets/copyable_text.dart';
 import '../widgets/copyable_chip.dart';
 import '../widgets/mono_detail_scaffold.dart';
@@ -872,7 +874,7 @@ class _SubjectPageState extends State<SubjectPage>
                       bottom: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                   ),
-                  child: TabBar(
+                  child: MonoDetailTabBar(
                     tabs: _visibleTabItems
                         .map((tab) => Tab(text: tab.label))
                         .toList(),
@@ -914,7 +916,7 @@ class _SubjectPageState extends State<SubjectPage>
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     if (_loading && _subject == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         body: DefaultTabController(
           length: _visibleTabIds.length,
           child: _buildSubjectSkeleton(isLandscape: isLandscape),
@@ -923,7 +925,7 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     if (_error != null && _subject == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: Center(
           child: Column(
@@ -941,7 +943,7 @@ class _SubjectPageState extends State<SubjectPage>
     }
 
     if (_subject == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: const Center(child: Text('暂无数据')),
       );
@@ -960,6 +962,7 @@ class _SubjectPageState extends State<SubjectPage>
       title: _subject!.displayName,
       onTitleTap: _showFullTitleDialog,
       header: _buildHeaderCard(colorScheme, isLandscape: isLandscape),
+      contentSizedHeader: true,
       actions: [
         IconButton(
           tooltip: '加入目录',
@@ -1916,14 +1919,7 @@ class _SubjectPageState extends State<SubjectPage>
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colorScheme.surfaceContainerHighest,
-                      ),
-                    ),
+                    const BangumiAvatar.skeleton(size: 40),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -2308,12 +2304,20 @@ class _SubjectPageState extends State<SubjectPage>
                           ),
                         ),
                       ),
-                      const Spacer(),
-                      MikanSubscriptionButton(subject: _subject!),
-                      SubjectActionButtons(
-                        subject: _subject!,
-                        existingCollection: _userCollection,
-                        onCollectionChanged: _loadUserCollection,
+                      Expanded(
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          runSpacing: 4,
+                          children: [
+                            MikanSubscriptionButton(subject: _subject!),
+                            SubjectActionButtons(
+                              subject: _subject!,
+                              existingCollection: _userCollection,
+                              onCollectionChanged: _loadUserCollection,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -2327,6 +2331,7 @@ class _SubjectPageState extends State<SubjectPage>
   }
 
   Widget _buildCommentsTab() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_commentsLoading && _comments.isEmpty) {
       return _buildCommentsSkeletonList();
     }
@@ -2357,7 +2362,11 @@ class _SubjectPageState extends State<SubjectPage>
                   Text(
                     _commentsErrorMessage(_commentsError!),
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
@@ -2387,7 +2396,7 @@ class _SubjectPageState extends State<SubjectPage>
                   Icon(
                     Icons.message_outlined,
                     size: 64,
-                    color: Colors.grey[400],
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 20),
                   Text(
@@ -2399,7 +2408,11 @@ class _SubjectPageState extends State<SubjectPage>
                   const SizedBox(height: 12),
                   Text(
                     '这部作品还没有吐槽',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
                   ),
                 ],
               ),
@@ -2409,7 +2422,6 @@ class _SubjectPageState extends State<SubjectPage>
       );
     }
 
-    final colorScheme = Theme.of(context).colorScheme;
     final showFooter =
         _commentsPageLoading ||
         _commentsError != null ||
@@ -2418,14 +2430,14 @@ class _SubjectPageState extends State<SubjectPage>
     return RefreshIndicator(
       onRefresh: _reloadComments,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         itemCount: _comments.length + (showFooter ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == _comments.length) {
             return _buildCommentsFooter();
           }
           final comment = _comments[index];
-          return _buildCommentItem(comment, colorScheme);
+          return _buildCommentItem(comment);
         },
       ),
     );
@@ -2471,164 +2483,32 @@ class _SubjectPageState extends State<SubjectPage>
     );
   }
 
-  Widget _buildCommentItem(Comment comment, ColorScheme colorScheme) {
-    final userId = comment.user['id'] as int? ?? 0;
-    final isValidUser = userId > 0;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: !isValidUser
-                      ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => OtherUserProfilePage(
-                              userId: userId,
-                              displayName: comment.userName,
-                            ),
-                          ),
-                        ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: comment.userAvatar.isNotEmpty
-                          ? BangumiNetworkImage(
-                              imageUrl: comment.userAvatar,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) =>
-                                  Container(color: Colors.grey[300]),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.person, size: 20),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.person, size: 20),
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: !isValidUser
-                            ? null
-                            : () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => OtherUserProfilePage(
-                                    userId: userId,
-                                    displayName: comment.userName,
-                                  ),
-                                ),
-                              ),
-                        child: Text(
-                          comment.userName,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.primary,
-                              ),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          if (comment.rating > 0)
-                            Row(
-                              children: [
-                                ...List.generate(5, (i) {
-                                  return Icon(
-                                    i < comment.rating ~/ 2
-                                        ? Icons.star
-                                        : Icons.star_border,
-                                    color: Colors.amber,
-                                    size: 12,
-                                  );
-                                }),
-                                const SizedBox(width: 4),
-                              ],
-                            ),
-                          if (comment.spoiler == 1)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red[100],
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: Text(
-                                '剧透',
-                                style: TextStyle(
-                                  color: Colors.red[700],
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+  Widget _buildCommentItem(Comment comment) {
+    return BangumiPostCard(
+      post: BangumiPostData.fromComment(comment, dateTime: comment.updatedAt),
+      replies: comment.replyItems
+          .map(
+            (reply) => BangumiPostData.fromComment(
+              reply,
+              emptyContentLabel: reply.state == 6 ? '该回复已删除' : null,
             ),
-            const SizedBox(height: 12),
-            BangumiContentView(
-              text: comment.content,
-              html: comment.contentHtml,
-              style: TextStyle(color: Colors.grey[700], fontSize: 14),
+          )
+          .toList(growable: false),
+      nestedReplyKeyPrefix: 'subject_comment_reply',
+      nestedRepliesKey: ValueKey('subject_comment_replies_${comment.id}'),
+      onUserTap: (post) {
+        final userId = int.tryParse(post.authorKey) ?? 0;
+        if (userId <= 0) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => OtherUserProfilePage(
+              userId: userId,
+              displayName: post.authorName,
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _formatTime(comment.updatedAt),
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-                if (comment.replies > 0)
-                  Text(
-                    '${comment.replies} 条回复',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return '刚刚';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}分钟前';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}小时前';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}天前';
-    } else {
-      return '${dateTime.month}月${dateTime.day}日';
-    }
   }
 
   String _getSubjectTypeLabel(int type) {

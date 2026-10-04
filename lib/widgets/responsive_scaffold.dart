@@ -10,6 +10,7 @@ import '../services/link_navigator.dart';
 import '../services/bangumi_endpoint_service.dart';
 import 'bangumi_mirror_challenge_banner.dart';
 import '../services/platform_feature_support.dart';
+import 'scroll_aware_chrome.dart';
 
 /// 响应式 Scaffold
 /// 竖屏时底部导航栏，横屏时左侧导航栏
@@ -34,43 +35,70 @@ class ResponsiveScaffold extends StatelessWidget {
         final isLandscape = constraints.maxWidth > constraints.maxHeight;
         final isWide = constraints.maxWidth > 600;
 
-        if (isLandscape || isWide) {
-          return _buildLandscapeLayout(context);
-        } else {
-          return _buildPortraitLayout(context);
-        }
+        final railLayout = isLandscape || isWide;
+        return ScrollAwareChrome(
+          resetKey: (currentIndex, railLayout),
+          listenToScroll: false,
+          builder: (context, chrome) => railLayout
+              ? _buildLandscapeLayout(context, chrome)
+              : _buildPortraitLayout(context, chrome),
+        );
       },
     );
   }
 
   /// 竖屏布局 - 底部导航栏
-  Widget _buildPortraitLayout(BuildContext context) {
+  Widget _buildPortraitLayout(BuildContext context, ScrollChromeData chrome) {
     final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      body: _CacheAwareContent(
-        child: IndexedStack(index: currentIndex, children: pages),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: onIndexChanged,
-        backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primaryContainer,
-        destinations: items
-            .map(
-              (item) => NavigationDestination(
-                icon: Icon(item.icon),
-                selectedIcon: Icon(item.selectedIcon),
-                label: item.label,
-              ),
-            )
-            .toList(),
+      body: _CacheAwareContent(child: _buildPages(chrome)),
+      bottomNavigationBar: chrome.collapse(
+        NavigationBar(
+          selectedIndex: currentIndex,
+          onDestinationSelected: (index) {
+            chrome.expand();
+            onIndexChanged(index);
+          },
+          backgroundColor: colorScheme.surface,
+          indicatorColor: colorScheme.primaryContainer,
+          destinations: items
+              .map(
+                (item) => NavigationDestination(
+                  icon: Icon(item.icon),
+                  selectedIcon: Icon(item.selectedIcon),
+                  label: item.label,
+                ),
+              )
+              .toList(),
+        ),
+        key: const ValueKey('scroll_aware_bottom_navigation'),
+        fromTop: false,
       ),
     );
   }
 
+  Widget _buildPages(ScrollChromeData chrome) {
+    return IndexedStack(
+      index: currentIndex,
+      children: [
+        for (var index = 0; index < pages.length; index++)
+          NotificationListener<ScrollNotification>(
+            onNotification: (notification) => index == currentIndex
+                ? chrome.handleScrollNotification(notification)
+                : false,
+            child: NotificationListener<ScrollMetricsNotification>(
+              onNotification: (notification) => index == currentIndex
+                  ? chrome.handleScrollMetrics(notification)
+                  : false,
+              child: pages[index],
+            ),
+          ),
+      ],
+    );
+  }
+
   /// 横屏布局 - 左侧导航栏
-  Widget _buildLandscapeLayout(BuildContext context) {
+  Widget _buildLandscapeLayout(BuildContext context, ScrollChromeData chrome) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -104,11 +132,7 @@ class ResponsiveScaffold extends StatelessWidget {
                 .toList(),
           ),
           const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: _CacheAwareContent(
-              child: IndexedStack(index: currentIndex, children: pages),
-            ),
-          ),
+          Expanded(child: _CacheAwareContent(child: _buildPages(chrome))),
         ],
       ),
     );

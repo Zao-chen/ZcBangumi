@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../constants.dart';
 import '../models/bangumi_index.dart';
 import '../models/character.dart';
@@ -12,6 +13,7 @@ import '../services/api_client.dart';
 import '../services/link_navigator.dart';
 import '../services/storage_service.dart';
 import '../widgets/bangumi_post_widgets.dart';
+import '../widgets/bangumi_avatar.dart';
 import '../widgets/bangumi_index_actions.dart';
 import '../widgets/bangumi_index_list_view.dart';
 import '../widgets/copyable_text.dart';
@@ -381,11 +383,14 @@ class _CharacterPageState extends State<CharacterPage>
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     if (_loading && _character == null) {
-      return Scaffold(appBar: AppBar(), body: _buildSkeleton(isLandscape));
+      return ScrollAwareScaffold(
+        appBar: AppBar(),
+        body: _buildSkeleton(isLandscape),
+      );
     }
 
     if (_error != null && _character == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(title: const Text('角色')),
         body: Center(
           child: Column(
@@ -411,7 +416,7 @@ class _CharacterPageState extends State<CharacterPage>
     }
 
     if (_character == null) {
-      return Scaffold(
+      return ScrollAwareScaffold(
         appBar: AppBar(),
         body: const Center(child: Text('角色不存在')),
       );
@@ -1092,6 +1097,7 @@ class _CharacterPageState extends State<CharacterPage>
   }
 
   Widget _buildCommentsTab() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_commentsLoading && _comments.isEmpty) {
       return _buildCommentsSkeletonList();
     }
@@ -1125,7 +1131,11 @@ class _CharacterPageState extends State<CharacterPage>
                   Text(
                     _commentsError!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
@@ -1163,7 +1173,7 @@ class _CharacterPageState extends State<CharacterPage>
                   Icon(
                     Icons.message_outlined,
                     size: 64,
-                    color: Colors.grey[400],
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 20),
                   Text(
@@ -1175,7 +1185,11 @@ class _CharacterPageState extends State<CharacterPage>
                   const SizedBox(height: 12),
                   Text(
                     '这个角色还没有吐槽',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
                   ),
                 ],
               ),
@@ -1209,20 +1223,16 @@ class _CharacterPageState extends State<CharacterPage>
         .asMap()
         .entries
         .map(
-          (entry) => _commentToPostData(
+          (entry) => BangumiPostData.fromComment(
             entry.value,
-            '#$floorNumber-${entry.key + 1}',
-            emptyContentLabel: '该回复已删除',
+            floorText: '#$floorNumber-${entry.key + 1}',
+            emptyContentLabel: entry.value.state == 6 ? '该回复已删除' : null,
           ),
         )
         .toList(growable: false);
 
     return BangumiPostCard(
-      post: _commentToPostData(
-        comment,
-        '#$floorNumber',
-        emptyContentLabel: comment.state == 6 ? '该评论已删除' : null,
-      ),
+      post: BangumiPostData.fromComment(comment, floorText: '#$floorNumber'),
       replies: replies,
       nestedReplyKeyPrefix: 'comment_reply',
       nestedRepliesKey: ValueKey('comment_replies_${comment.id}'),
@@ -1239,34 +1249,6 @@ class _CharacterPageState extends State<CharacterPage>
         );
       },
     );
-  }
-
-  BangumiPostData _commentToPostData(
-    Comment comment,
-    String floorText, {
-    String? emptyContentLabel,
-  }) {
-    final userId = _commentUserId(comment);
-    return BangumiPostData(
-      id: comment.id.toString(),
-      authorKey: userId > 0 ? userId.toString() : '',
-      authorName: comment.userName,
-      avatarUrl: comment.userAvatar,
-      metaText: formatBangumiPostMeta(
-        floorText: floorText,
-        dateTime: comment.createdAt,
-      ),
-      content: comment.content,
-      contentHtml: comment.contentHtml,
-      emptyContentLabel: emptyContentLabel,
-    );
-  }
-
-  int _commentUserId(Comment comment) {
-    final rawId = comment.user['id'];
-    if (rawId is int) return rawId;
-    if (rawId is num) return rawId.toInt();
-    return int.tryParse(rawId?.toString() ?? '') ?? 0;
   }
 
   Widget _buildInfoboxContent(Character character) {
@@ -1380,7 +1362,7 @@ class _CharacterPageState extends State<CharacterPage>
                       bottom: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                   ),
-                  child: const TabBar(
+                  child: const MonoDetailTabBar(
                     tabs: [
                       Tab(text: '概述'),
                       Tab(text: '出演'),
@@ -1622,14 +1604,7 @@ class _CharacterPageState extends State<CharacterPage>
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colorScheme.surfaceContainerHighest,
-                      ),
-                    ),
+                    const BangumiAvatar.skeleton(size: 40),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(

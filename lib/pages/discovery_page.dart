@@ -1,3 +1,4 @@
+import '../widgets/scroll_aware_scaffold.dart';
 import '../widgets/bangumi_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -70,7 +71,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
         discovery.calendarLoading ||
         discovery.previewLoading(_previewType, _previewSort);
 
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: const Text('发现'),
         centerTitle: false,

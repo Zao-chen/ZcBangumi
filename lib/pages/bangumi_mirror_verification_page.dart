@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../widgets/scroll_aware_scaffold.dart';
 import '../models/bangumi_mirror_session.dart';
 import '../models/bangumi_mirror_settings.dart';
 import '../models/bangumi_web_session.dart';
@@ -100,7 +101,7 @@ class _BangumiMirrorVerificationPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ScrollAwareScaffold(
       appBar: AppBar(
         title: Text('${widget.kind.label}手动验证'),
         actions: [
@@ -129,34 +130,45 @@ class _BangumiMirrorVerificationPageState
               ),
             ),
           Expanded(
-            child: InAppWebView(
-              initialUrlRequest: URLRequest(url: WebUri.uri(_uri)),
-              initialSettings: InAppWebViewSettings(
-                userAgent: _userAgent,
-                useShouldOverrideUrlLoading: true,
-              ),
-              onWebViewCreated: (controller) => _controller = controller,
-              shouldOverrideUrlLoading: (controller, action) async {
-                final target = action.request.url?.uriValue;
-                if (action.isForMainFrame &&
-                    target != null &&
-                    target.origin != _uri.origin) {
-                  if (mounted) {
-                    setState(() => _error = '已阻止跳转到其他站点，请在当前镜像内完成验证');
+            child: Builder(
+              builder: (chromeContext) => InAppWebView(
+                initialUrlRequest: URLRequest(url: WebUri.uri(_uri)),
+                initialSettings: InAppWebViewSettings(
+                  userAgent: _userAgent,
+                  useShouldOverrideUrlLoading: true,
+                ),
+                onWebViewCreated: (controller) => _controller = controller,
+                shouldOverrideUrlLoading: (controller, action) async {
+                  final target = action.request.url?.uriValue;
+                  if (action.isForMainFrame &&
+                      target != null &&
+                      target.origin != _uri.origin) {
+                    if (mounted) {
+                      setState(() => _error = '已阻止跳转到其他站点，请在当前镜像内完成验证');
+                    }
+                    return NavigationActionPolicy.CANCEL;
                   }
-                  return NavigationActionPolicy.CANCEL;
-                }
-                return NavigationActionPolicy.ALLOW;
-              },
-              onCreateWindow: (controller, action) async => false,
-              onProgressChanged: (controller, progress) {
-                if (mounted) setState(() => _progress = progress.clamp(0, 100));
-              },
-              onReceivedError: (controller, request, error) {
-                if (request.isForMainFrame == true && mounted) {
-                  setState(() => _error = '验证页面加载失败，请检查网络和系统代理');
-                }
-              },
+                  return NavigationActionPolicy.ALLOW;
+                },
+                onCreateWindow: (controller, action) async => false,
+                onProgressChanged: (controller, progress) {
+                  if (mounted) {
+                    setState(() => _progress = progress.clamp(0, 100));
+                  }
+                },
+                onReceivedError: (controller, request, error) {
+                  if (request.isForMainFrame == true && mounted) {
+                    setState(() => _error = '验证页面加载失败，请检查网络和系统代理');
+                  }
+                },
+                onScrollChanged: (_, _, offset) {
+                  if (chromeContext.mounted) {
+                    ScrollAwareChrome.maybeOf(
+                      chromeContext,
+                    )?.handleNativeScroll(offset.toDouble());
+                  }
+                },
+              ),
             ),
           ),
           SafeArea(
