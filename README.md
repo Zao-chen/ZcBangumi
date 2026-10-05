@@ -6,21 +6,6 @@
 
 在线体验：[bgm.greatzaochen.dev](https://bgm.greatzaochen.dev/)  
 > Web 版本受浏览器平台限制，目前仅提供部分基础功能。
-> Web 诊断日志保存在当前页面内存中，可查看、复制、下载和清空；刷新页面后不保留日志。
-> 网页版功能边界与验证说明见 [Web 体验审计](docs/WEB_EXPERIENCE.md)。
-
-## Web 部署与检查
-
-GitHub Pages 工作流会运行客户端测试、Chrome 中的 Web 启动与日志回归测试，再构建并部署 Web 版本。
-
-本地检查：
-
-```sh
-flutter test --platform chrome test/web_startup_test.dart test/web_experience_test.dart
-flutter build web --release --base-href "/"
-```
-
-自定义域名 `bgm.greatzaochen.dev` 的 DNS CNAME 应直接指向 `zao-chen.github.io`。修改后，在仓库 Settings → Pages 中确认 DNS 检查通过、证书签发完成，再开启 Enforce HTTPS。工作流成功不代表域名证书或浏览器运行状态正常。
 
 ## 功能特性
 
