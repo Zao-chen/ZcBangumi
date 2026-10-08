@@ -18,6 +18,46 @@
 
 ## 截图
 
+### 条目关联脑图
+
+![条目关联脑图](img/screenshots/relation-graph.webp)
+
+### 发现首页
+
+![发现首页](img/screenshots/discovery.webp)
+
+### 统一搜索与筛选
+
+![统一搜索与筛选](img/screenshots/search.webp)
+
+### 蜜柑单集资源下载
+
+![蜜柑单集资源下载](img/screenshots/mikan-episode.webp)
+
+### 条目概述与收藏操作
+
+![条目概述与收藏操作](img/screenshots/subject-overview.webp)
+
+### 超展开帖子详情
+
+![超展开帖子详情](img/screenshots/hyper-post.webp)
+
+### 角色列表
+
+![角色列表](img/screenshots/subject-characters.webp)
+
+### 个人收藏界面
+
+![个人收藏界面](img/screenshots/profile.webp)
+
+### 多媒体进度管理
+
+![多媒体进度管理](img/screenshots/progress.webp)
+
+### 动态时间线
+
+![动态时间线](img/screenshots/timeline.webp)
+
 ## 致谢
 
 本项目在开发过程中参考并受益于以下项目：
