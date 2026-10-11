@@ -36,7 +36,7 @@ import '../widgets/mono_relation_graph.dart';
 import 'search_page.dart';
 import 'character_page.dart';
 import 'person_page.dart';
-import 'web_page_viewer.dart';
+import 'moegirl_web_view.dart';
 
 class SubjectPage extends StatefulWidget {
   final int subjectId;
@@ -996,7 +996,9 @@ class _SubjectPageState extends State<SubjectPage>
       nestedScrollPhysics: _shouldLockTabSwipeForMindMap
           ? const NeverScrollableScrollPhysics()
           : null,
-      tabViewPhysics: _shouldLockTabSwipeForMindMap
+      tabViewPhysics:
+          _shouldLockTabSwipeForMindMap ||
+              _selectedTabId == SubjectTabConfig.moegirlId
           ? const NeverScrollableScrollPhysics()
           : null,
     );
@@ -1073,7 +1075,11 @@ class _SubjectPageState extends State<SubjectPage>
       return _buildMoegirlWebOpenTab(uri);
     }
 
-    return EmbeddedWebPageView(initialUri: uri);
+    return MoegirlWebView(
+      subjectId: widget.subjectId,
+      initialUri: uri,
+      isActive: _selectedTabId == SubjectTabConfig.moegirlId,
+    );
   }
 
   Widget _buildMoegirlWebOpenTab(Uri uri) {
