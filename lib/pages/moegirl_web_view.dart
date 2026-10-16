@@ -110,7 +110,7 @@ class _MoegirlWebViewState extends State<MoegirlWebView>
       fullscreenDialog: true,
       builder: (fullscreenContext) {
         _fullscreenContext = fullscreenContext;
-        return Scaffold(
+        return ScrollAwareScaffold(
           appBar: AppBar(
             title: const Text('萌娘百科'),
             leading: IconButton(
